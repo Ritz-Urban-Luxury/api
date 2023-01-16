@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthenticationModule } from './authentication';
 import { LoggerModule } from './logger/logger.module';
 import config from './shared/config';
 
@@ -9,6 +10,7 @@ import config from './shared/config';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [config] }),
     LoggerModule,
+    AuthenticationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
