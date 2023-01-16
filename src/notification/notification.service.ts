@@ -12,6 +12,7 @@ export class NotificationService {
       method: 'POST',
       url: termii.url,
       data: {
+        from: termii.from,
         ...payload,
         api_key: termii.key,
         channel: ['OTPAlert', 'N-Alert'].includes(payload.from)

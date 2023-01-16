@@ -7,6 +7,7 @@ const config = () => ({
   termii: {
     key: process.env.TERMII_API_KEY,
     url: process.env.TERMII_API_URL,
+    from: process.env.TERMII_FROM,
   },
 });
 
