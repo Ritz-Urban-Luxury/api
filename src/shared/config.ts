@@ -4,6 +4,10 @@ const config = () => ({
   database: {
     url: process.env.DATABASE_URL,
   },
+  termii: {
+    key: process.env.TERMII_API_KEY,
+    url: process.env.TERMII_API_URL,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;
