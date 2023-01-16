@@ -5,6 +5,9 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { Logger } from './logger/logger.service';
 import cors from './shared/cors';
+import { AllExceptionsFilter } from './shared/filter/all-exception.filter';
+import { ValidationFilter } from './shared/filter/validation.filter';
+import { ValidationPipe } from './shared/pipes/validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -15,6 +18,9 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<string>('port');
   const logger = app.get(Logger);
+
+  app.useGlobalFilters(new AllExceptionsFilter(logger), new ValidationFilter());
+  app.useGlobalPipes(new ValidationPipe());
 
   app.useLogger(logger);
   app.use(json({ limit: '100mb' }));
