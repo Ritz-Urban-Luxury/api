@@ -6,7 +6,7 @@ import { NotificationService } from 'src/notification';
 import { DB_TABLES } from 'src/shared/constants';
 import { Model } from 'src/shared/types';
 import { Util } from 'src/shared/util';
-import { RequestPhoneOTPDTO } from './authentication.dto';
+import { RequestEmailOTPDTO, RequestPhoneOTPDTO } from './authentication.dto';
 import { AuthTokenDocument } from './schemas';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class AuthenticationService {
       'meta.type': 'phone-otp',
       'meta.phoneNumber': phone,
       createdAt: {
-        $lte: moment().subtract(100, 'seconds').toDate(),
+        $gte: moment().subtract(100, 'seconds').toDate(),
       },
     });
     if (!previousAuthToken) {
@@ -47,6 +47,42 @@ export class AuthenticationService {
         })
         .catch((error) => {
           this.logger.error(`error sending phone otp sms - ${error.message}`);
+        });
+    }
+  }
+
+  async requestEmailOtp(payload: RequestEmailOTPDTO) {
+    const { email, name } = payload;
+    const previousAuthToken = await this.authTokenModel.findOne({
+      'meta.type': 'email-otp',
+      'meta.email': email,
+      createdAt: {
+        $gte: moment().subtract(100, 'seconds').toDate(),
+      },
+    });
+    if (!previousAuthToken) {
+      const token = Math.random().toString().substring(2, 6);
+
+      await this.authTokenModel.create({
+        expiresAt: moment().add(1, 'minute').toDate(),
+        token,
+        meta: {
+          email,
+          type: 'email-otp',
+        },
+      });
+
+      this.notificationService
+        .sendEmail({
+          recipient: { email, name },
+          context: { otp: token },
+          subject: 'Verify your email',
+          template: 'email-otp.template.njk',
+        })
+        .catch((error) => {
+          this.logger.error(
+            `error sending email otp message - ${error.message}`,
+          );
         });
     }
   }
