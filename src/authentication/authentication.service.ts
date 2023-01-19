@@ -110,55 +110,70 @@ export class AuthenticationService {
   }
 
   async validateGoogleIdToken(idToken: string) {
-    const ticket = await this.googleOAuthClient.verifyIdToken({
-      idToken,
-      audience: config().google.oAuthClientID,
-    });
-    const payload = ticket.getPayload();
-    const [firstName, ...lastName] = payload.name?.split(' ') ?? [];
+    try {
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken,
+        audience: config().google.oAuthClientID,
+      });
+      const payload = ticket.getPayload();
+      const [firstName, ...lastName] = payload.name?.split(' ') ?? [];
 
-    return {
-      firstName,
-      lastName: lastName.join(' '),
-      email: payload.email,
-      avatar: payload.picture,
-      oAuthIdentifier: idToken,
-    };
+      return {
+        firstName,
+        lastName: lastName.join(' '),
+        email: payload.email,
+        avatar: payload.picture,
+        oAuthIdentifier: idToken,
+      };
+    } catch (error) {
+      this.logger.error(`error validating google id token - ${error.message}`, {
+        idToken,
+      });
+      throw new BadRequestException('invalid google id token');
+    }
   }
 
   async validateFacebookAccessToken(accessToken: string) {
-    const { appId } = config().facebook;
-    const response = await Http.request<{ data: Record<string, string> }>({
-      method: 'GET',
-      url: 'https://graph.facebook.com/v9.0/debug_token',
-      params: {
-        input_token: accessToken,
-        access_token: appId,
-      },
-    });
-    if (!response?.data?.is_valid) {
-      throw new BadRequestException('Invalid Facebook access token');
+    try {
+      const { appId } = config().facebook;
+      const response = await Http.request<{ data: Record<string, string> }>({
+        method: 'GET',
+        url: 'https://graph.facebook.com/v9.0/debug_token',
+        params: {
+          input_token: accessToken,
+          access_token: appId,
+        },
+      });
+      if (!response?.data?.is_valid) {
+        throw new Error('invalid response');
+      }
+
+      const response0 = await Http.request<Record<string, unknown>>({
+        method: 'GET',
+        url: `https://graph.facebook.com/v9.0/${response.data.user_id}`,
+        params: {
+          fields: 'name,email,picture',
+          access_token: appId,
+        },
+      });
+
+      const [firstName, ...lastName] =
+        (response0.name as string)?.split(' ') ?? [];
+
+      return {
+        firstName,
+        lastName: lastName.join(' '),
+        email: response0.email as string,
+        avatar: (response0.picture as { data: { url: string } }).data.url,
+        oAuthIdentifier: accessToken,
+      };
+    } catch (error) {
+      this.logger.error(
+        `error validating facebook access token - ${error.message}`,
+        { accessToken, response: error.response },
+      );
+      throw new BadRequestException('invalid facebook access token');
     }
-
-    const response0 = await Http.request<Record<string, unknown>>({
-      method: 'GET',
-      url: `https://graph.facebook.com/v9.0/${response.data.user_id}`,
-      params: {
-        fields: 'name,email,picture',
-        access_token: appId,
-      },
-    });
-
-    const [firstName, ...lastName] =
-      (response0.name as string)?.split(' ') ?? [];
-
-    return {
-      firstName,
-      lastName: lastName.join(' '),
-      email: response0.email as string,
-      avatar: (response0.picture as { data: { url: string } }).data.url,
-      oAuthIdentifier: accessToken,
-    };
   }
 
   async validateOAuthIdentifier(identifier: string, provider: OAuthProvider) {
