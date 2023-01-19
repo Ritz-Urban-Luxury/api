@@ -1,10 +1,12 @@
 import {
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsPhoneNumber,
   IsString,
 } from 'class-validator';
+import { OAuthProviders, OAuthProvider } from 'src/user';
 
 export class SignupDTO {
   @IsPhoneNumber('NG')
@@ -13,11 +15,31 @@ export class SignupDTO {
 
   @IsString()
   @IsOptional()
-  socialSignupId?: string;
+  phoneOtp?: string;
 
   @IsString()
   @IsOptional()
-  phoneOtp?: string;
+  oAuthIdentifier?: string;
+
+  @IsIn(OAuthProviders)
+  @IsOptional()
+  oAuthProvider?: OAuthProvider;
+
+  @IsEmail()
+  @IsOptional()
+  email: string;
+
+  @IsString()
+  @IsOptional()
+  emailOtp?: string;
+
+  @IsString()
+  @IsOptional()
+  firstName: string;
+
+  @IsOptional()
+  @IsString()
+  lastName: string;
 }
 
 export class RequestPhoneOTPDTO {

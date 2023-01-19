@@ -16,6 +16,16 @@ const config = () => ({
     },
     apiKey: process.env.SENDGRID_API_KEY,
   },
+  google: {
+    oAuthClientID: process.env.GOOGLE_OAUTH_CLIENT_ID,
+  },
+  facebook: {
+    appId: process.env.FACEBOOK_APP_ID,
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;

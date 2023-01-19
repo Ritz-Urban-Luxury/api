@@ -1,6 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { Response } from 'src/shared/response';
-import { RequestEmailOTPDTO, RequestPhoneOTPDTO } from './authentication.dto';
+import {
+  RequestEmailOTPDTO,
+  RequestPhoneOTPDTO,
+  SignupDTO,
+} from './authentication.dto';
 import { AuthenticationService } from './authentication.service';
 
 @Controller({ path: 'authentication' })
@@ -21,5 +25,12 @@ export class AuthenticationController {
     await this.authenticationService.requestEmailOtp(payload);
 
     return Response.json('otp sent');
+  }
+
+  @Post('signup')
+  async signup(@Body() payload: SignupDTO) {
+    const loggedInUser = await this.authenticationService.signUp(payload);
+
+    return Response.json('sign up successful', loggedInUser);
   }
 }
