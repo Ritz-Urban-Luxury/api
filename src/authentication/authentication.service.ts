@@ -36,7 +36,7 @@ export class AuthenticationService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
   ) {
-    this.googleOAuthClient = new OAuth2Client(config().google.oAuthClientID);
+    this.googleOAuthClient = new OAuth2Client();
   }
 
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {
@@ -109,11 +109,23 @@ export class AuthenticationService {
     }
   }
 
-  async validateGoogleIdToken(idToken: string) {
+  async validateGoogleIdToken(idToken: string, platform: string) {
     try {
+      const { google } = config();
+      let audience = google.androidOAuthClientID;
+      switch (platform) {
+        case 'web':
+          audience = google.webOAuthClientID;
+          break;
+        case 'ios':
+          audience = google.IOSOAuthClientID;
+          break;
+        default:
+      }
+
       const ticket = await this.googleOAuthClient.verifyIdToken({
         idToken,
-        audience: config().google.oAuthClientID,
+        audience,
       });
       const payload = ticket.getPayload();
       const [firstName, ...lastName] = payload.name?.split(' ') ?? [];
@@ -176,12 +188,16 @@ export class AuthenticationService {
     }
   }
 
-  async validateOAuthIdentifier(identifier: string, provider: OAuthProvider) {
+  async validateOAuthIdentifier(
+    identifier: string,
+    provider: OAuthProvider,
+    conf: { platform?: string } = {},
+  ) {
     switch (provider) {
       case OAuthProvider.Facebook:
         return this.validateFacebookAccessToken(identifier);
       case OAuthProvider.Google:
-        return this.validateGoogleIdToken(identifier);
+        return this.validateGoogleIdToken(identifier, conf.platform);
       default:
         throw new BadRequestException('unsupported oauth provider');
     }
@@ -206,13 +222,22 @@ export class AuthenticationService {
         const userObj = await this.validateOAuthIdentifier(
           oAuthIdentifier,
           oAuthProvider,
+          { platform: payload.platform },
         );
 
-        user = await this.userService.createUser({
-          ...userObj,
-          password: Crypto.randomBytes(32).toString('hex'),
-          oAuthProvider,
-        });
+        user = await this.userService.findUserOrCreate(
+          {
+            $or: [
+              { email: userObj.email },
+              { oAuthIdentifier: userObj.oAuthIdentifier },
+            ],
+          },
+          {
+            ...userObj,
+            password: Crypto.randomBytes(32).toString('hex'),
+            oAuthProvider,
+          },
+        );
       }
 
       return this.authorizeUser(user);

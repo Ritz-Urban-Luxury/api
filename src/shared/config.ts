@@ -17,7 +17,9 @@ const config = () => ({
     apiKey: process.env.SENDGRID_API_KEY,
   },
   google: {
-    oAuthClientID: process.env.GOOGLE_OAUTH_CLIENT_ID,
+    IOSOAuthClientID: process.env.GOOGLE_IOS_OAUTH_CLIENT_ID,
+    webOAuthClientID: process.env.GOOGLE_WEB_OAUTH_CLIENT_ID,
+    androidOAuthClientID: process.env.GOOGLE_ANDROID_OAUTH_CLIENT_ID,
   },
   facebook: {
     appId: process.env.FACEBOOK_APP_ID,

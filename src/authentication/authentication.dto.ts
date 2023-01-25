@@ -40,6 +40,10 @@ export class SignupDTO {
   @IsOptional()
   @IsString()
   lastName: string;
+
+  @IsOptional()
+  @IsIn(['android', 'web', 'ios'])
+  platform?: string;
 }
 
 export class RequestPhoneOTPDTO {
