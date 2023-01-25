@@ -246,13 +246,6 @@ export class AuthenticationService {
     const userObj: typeof payload = { ...rest, email: null };
     if (phoneNumber) {
       const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
-      const existingUser = await this.userService.findUser({
-        phoneNumber: _phoneNumber,
-        deleted: { $ne: true },
-      });
-      if (existingUser) {
-        throw new ConflictException('user with phone number already exists');
-      }
 
       const otp = await this.authTokenModel.findOne({
         'meta.phoneNumber': _phoneNumber,
@@ -263,6 +256,14 @@ export class AuthenticationService {
       });
       if (!otp) {
         throw new BadRequestException('invalid phone validation token');
+      }
+
+      const existingUser = await this.userService.findUser({
+        phoneNumber: _phoneNumber,
+        deleted: { $ne: true },
+      });
+      if (existingUser) {
+        return this.authorizeUser(existingUser);
       }
 
       userObj.phoneNumber = _phoneNumber;
