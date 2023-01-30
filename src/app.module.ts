@@ -5,6 +5,7 @@ import * as mongooseDelete from 'mongoose-delete';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
+import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
 import config from './shared/config';
 
@@ -24,6 +25,7 @@ import config from './shared/config';
       useNewUrlParser: true,
       useUnifiedTopology: true,
     }),
+    FileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

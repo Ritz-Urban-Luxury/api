@@ -28,6 +28,11 @@ const config = () => ({
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN,
   },
+  cloudinary: {
+    name: process.env.CLOUDINARY_NAME,
+    key: process.env.CLOUDINARY_KEY,
+    secret: process.env.CLOUDINARY_SECRET,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;
