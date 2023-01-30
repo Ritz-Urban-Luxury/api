@@ -37,11 +37,11 @@ export class Http {
     return this.baseURL + url;
   }
 
-  static async request<T>(config: AxiosRequestConfig): Promise<T> {
+  static async request<T>(config: AxiosRequestConfig) {
     try {
-      const { data } = await axios(config);
+      const { data, ...rest } = await axios(config);
 
-      return data as T;
+      return { data: data as T, ...rest };
     } catch (error) {
       throw HttpError.parse(error as AxiosError);
     }

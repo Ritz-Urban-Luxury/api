@@ -10,6 +10,7 @@ import { hash } from 'bcryptjs';
 import * as Crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as moment from 'moment';
+import { FileService } from 'src/file/file.service';
 import { Logger } from 'src/logger/logger.service';
 import { NotificationService } from 'src/notification';
 import config from 'src/shared/config';
@@ -36,6 +37,7 @@ export class AuthenticationService {
     private readonly logger: Logger,
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
+    private readonly fileService: FileService,
   ) {
     this.googleOAuthClient = new OAuth2Client();
   }
@@ -149,7 +151,9 @@ export class AuthenticationService {
   async validateFacebookAccessToken(accessToken: string) {
     try {
       const { appId } = config().facebook;
-      const response = await Http.request<{ data: Record<string, string> }>({
+      const { data: response } = await Http.request<{
+        data: Record<string, string>;
+      }>({
         method: 'GET',
         url: 'https://graph.facebook.com/v9.0/debug_token',
         params: {
@@ -161,7 +165,7 @@ export class AuthenticationService {
         throw new Error('invalid response');
       }
 
-      const response0 = await Http.request<Record<string, unknown>>({
+      const { data: response0 } = await Http.request<Record<string, unknown>>({
         method: 'GET',
         url: `https://graph.facebook.com/v9.0/${response.data.user_id}`,
         params: {
@@ -225,6 +229,10 @@ export class AuthenticationService {
           oAuthProvider,
           { platform: payload.platform },
         );
+
+        if (userObj.avatar) {
+          userObj.avatar = await this.fileService.uploadUrl(userObj.avatar);
+        }
 
         user = await this.userService.findUserOrCreate(
           {

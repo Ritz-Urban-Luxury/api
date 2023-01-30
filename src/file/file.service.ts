@@ -32,12 +32,14 @@ export class FileService {
   }
 
   async uploadUrl(url: string) {
-    const res = await Http.request<string>({
+    const { data: res, headers } = await Http.request<string>({
       method: 'GET',
       url,
       responseType: 'arraybuffer',
     });
-    const data = Buffer.from(res, 'binary').toString('base64');
+    const base64 = Buffer.from(res, 'binary').toString('base64');
+    const contentType = headers['content-type'];
+    const data = `data:${contentType};base64,${base64}`;
 
     return this.uploadFile({ filename: Math.random().toString(32), data });
   }
