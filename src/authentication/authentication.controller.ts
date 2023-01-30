@@ -1,4 +1,12 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { Response } from 'src/shared/response';
 import {
   RequestEmailOTPDTO,
@@ -32,5 +40,12 @@ export class AuthenticationController {
     const loggedInUser = await this.authenticationService.signUp(payload);
 
     return Response.json('sign up successful', loggedInUser);
+  }
+
+  @Get('check/:key')
+  async getUser(@Param('key') key: string) {
+    const user = await this.authenticationService.getUser(key);
+
+    return Response.json('user found', user);
   }
 }

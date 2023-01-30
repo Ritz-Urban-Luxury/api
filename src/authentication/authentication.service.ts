@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -307,5 +308,24 @@ export class AuthenticationService {
     const token = this.jwtService.sign({ id: user.id, payloadId });
 
     return { user, token };
+  }
+
+  async getUser(key: string) {
+    let phoneNumber = '';
+
+    try {
+      phoneNumber = Util.formatPhoneNumber(key, 'NG');
+    } catch (error) {
+      // ...
+    }
+
+    const user = await this.userService.findUser({
+      $or: [{ email: key.toLowerCase() }, { phoneNumber }],
+    });
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+
+    return key;
   }
 }
