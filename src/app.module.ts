@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
 import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
+import { PaymentModule } from './payments/payment.module';
 import config from './shared/config';
 
 @Module({
@@ -26,6 +27,7 @@ import config from './shared/config';
       useUnifiedTopology: true,
     }),
     FileModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
