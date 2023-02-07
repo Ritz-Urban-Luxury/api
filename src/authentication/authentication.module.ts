@@ -8,6 +8,7 @@ import { UserModule } from 'src/user';
 import { AuthenticationController } from './authentication.controller';
 import { AuthenticationService } from './authentication.service';
 import { AuthTokenSchema } from './schemas';
+import { JwtStrategy } from './strategy/jwt.strategy';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { AuthTokenSchema } from './schemas';
     NotificationModule,
     UserModule,
   ],
-  providers: [AuthenticationService],
+  providers: [AuthenticationService, JwtStrategy],
   controllers: [AuthenticationController],
   exports: [AuthenticationService],
 })
