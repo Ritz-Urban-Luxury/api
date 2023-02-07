@@ -10,7 +10,7 @@ export class AuthToken extends BaseSchema {
   token: string;
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
-  meta: unknown;
+  meta: Record<string, unknown>;
 
   @Prop({ default: false })
   isUsed?: boolean;

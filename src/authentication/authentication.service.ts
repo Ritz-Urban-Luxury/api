@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -20,6 +21,7 @@ import { Model } from 'src/shared/types';
 import { Util } from 'src/shared/util';
 import { OAuthProvider, UserDocument, UserService } from 'src/user';
 import {
+  LoginDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
   SignupDTO,
@@ -208,6 +210,25 @@ export class AuthenticationService {
     }
   }
 
+  async getPhoneOtpOrFail(phoneNumber: string, phoneOtp: string) {
+    const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
+
+    const otp = await this.authTokenModel.findOne({
+      'meta.phoneNumber': _phoneNumber,
+      'meta.type': 'phone-otp',
+      token: phoneOtp,
+      deleted: { $ne: true },
+      isUsed: { $ne: true },
+      expiresAt: { $gte: new Date() },
+    });
+
+    if (!otp) {
+      throw new BadRequestException('invalid phone validation token');
+    }
+
+    return otp;
+  }
+
   async signUp(payload: SignupDTO) {
     const {
       oAuthIdentifier,
@@ -256,21 +277,18 @@ export class AuthenticationService {
     if (phoneNumber) {
       const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
 
-      const otp = await this.authTokenModel.findOne({
-        'meta.phoneNumber': _phoneNumber,
-        'meta.type': 'phone-otp',
-        token: phoneOtp,
-        deleted: { $ne: true },
-        expiresAt: { $gte: new Date() },
-      });
-      if (!otp) {
-        throw new BadRequestException('invalid phone validation token');
-      }
+      const otp = await this.getPhoneOtpOrFail(phoneNumber, phoneOtp);
 
-      const existingUser = await this.userService.findUser({
-        phoneNumber: _phoneNumber,
-        deleted: { $ne: true },
-      });
+      const [existingUser] = await Promise.all([
+        this.userService.findUser({
+          phoneNumber: otp.meta?.phoneNumber as string,
+          deleted: { $ne: true },
+        }),
+        this.authTokenModel.updateOne(
+          { _id: otp.id },
+          { $set: { isUsed: true } },
+        ),
+      ]);
       if (existingUser) {
         return this.authorizeUser(existingUser);
       }
@@ -293,11 +311,17 @@ export class AuthenticationService {
         'meta.type': 'email-otp',
         token: emailOtp,
         deleted: { $ne: true },
+        isUsed: { $ne: true },
         expiresAt: { $gte: new Date() },
       });
       if (!otp) {
         throw new BadRequestException('invalid email validation token');
       }
+
+      await this.authTokenModel.updateOne(
+        { _id: otp.id },
+        { $set: { isUsed: true } },
+      );
 
       userObj.email = _email;
     }
@@ -309,6 +333,28 @@ export class AuthenticationService {
     });
 
     return this.authorizeUser(user);
+  }
+
+  async login(payload: LoginDTO) {
+    const { phoneNumber, otp } = payload;
+    const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
+    const [user, otpDoc] = await Promise.all([
+      this.userService.findUser({ phoneNumber: _phoneNumber }),
+      this.getPhoneOtpOrFail(phoneNumber, otp),
+    ]);
+    if (!user) {
+      throw new UnauthorizedException('invalid credentials');
+    }
+
+    const [authUser] = await Promise.all([
+      this.authorizeUser(user),
+      this.authTokenModel.updateOne(
+        { _id: otpDoc.id },
+        { $set: { isUsed: true } },
+      ),
+    ]);
+
+    return authUser;
   }
 
   async authorizeUser(user: UserDocument) {

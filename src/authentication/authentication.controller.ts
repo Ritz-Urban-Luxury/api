@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'src/shared/response';
 import {
+  LoginDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
   SignupDTO,
@@ -47,5 +48,12 @@ export class AuthenticationController {
     const user = await this.authenticationService.getUser(key);
 
     return Response.json('user found', user);
+  }
+
+  @Post('login')
+  async login(@Body() payload: LoginDTO) {
+    const loggedInUser = await this.authenticationService.login(payload);
+
+    return Response.json('login successful', loggedInUser);
   }
 }

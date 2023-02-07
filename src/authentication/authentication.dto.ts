@@ -61,3 +61,13 @@ export class RequestEmailOTPDTO {
   @IsOptional()
   name?: string;
 }
+
+export class LoginDTO {
+  @IsPhoneNumber('NG')
+  @IsNotEmpty()
+  phoneNumber: string;
+
+  @IsString()
+  @IsNotEmpty()
+  otp: string;
+}
