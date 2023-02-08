@@ -1,4 +1,9 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  CreateAxiosDefaults,
+} from 'axios';
 
 export class HttpError extends Error {
   public isHttpException = true;
@@ -29,12 +34,12 @@ export class HttpError extends Error {
 export class Http {
   private $axios: AxiosInstance;
 
-  constructor($axios: AxiosInstance, protected readonly baseURL = '') {
-    this.$axios = $axios;
+  constructor(config?: CreateAxiosDefaults<unknown>) {
+    this.$axios = axios.create(config);
   }
 
   private getUrl(url: string) {
-    return this.baseURL + url;
+    return url;
   }
 
   static async request<T>(config: AxiosRequestConfig) {
@@ -47,10 +52,7 @@ export class Http {
     }
   }
 
-  protected async $get<T>(
-    url: string,
-    config?: AxiosRequestConfig,
-  ): Promise<T> {
+  async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     try {
       const { data } = await this.$axios.get(this.getUrl(url), config);
 
@@ -60,7 +62,7 @@ export class Http {
     }
   }
 
-  protected async $put<T>(
+  async put<T>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig,
@@ -74,7 +76,7 @@ export class Http {
     }
   }
 
-  protected async $post<T>(
+  async post<T>(
     url: string,
     body?: unknown,
     config?: AxiosRequestConfig,
@@ -88,7 +90,7 @@ export class Http {
     }
   }
 
-  protected async $delete<T>(
+  async delete<T>(
     url: string,
     data?: unknown,
     config?: AxiosRequestConfig,

@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { CacheModule, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import * as redisStore from 'cache-manager-redis-store';
 import * as mongooseDelete from 'mongoose-delete';
+import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
@@ -28,6 +30,23 @@ import config from './shared/config';
     }),
     FileModule,
     PaymentModule,
+    CacheModule.registerAsync<RedisClientOptions>({
+      isGlobal: true,
+      useFactory() {
+        const { cache, redis } = config();
+
+        if (redis.url) {
+          return {
+            ttl: cache.ttl,
+            url: redis.url,
+            password: redis.password,
+            store: redisStore as unknown as string,
+          };
+        }
+
+        return { ttl: cache.ttl };
+      },
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],

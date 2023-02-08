@@ -33,6 +33,19 @@ const config = () => ({
     key: process.env.CLOUDINARY_KEY,
     secret: process.env.CLOUDINARY_SECRET,
   },
+  redis: {
+    url: process.env.REDIS_URL,
+    password: process.env.REDIS_PASSWORD,
+  },
+  cache: {
+    ttl: Number.parseInt(process.env.CACHE_TTL, 10) || 0,
+  },
+  monnify: {
+    apiKey: process.env.MONNIFY_API_KEY,
+    secret: process.env.MONNIFY_SECRET,
+    contractCode: process.env.MONNIFY_CONTRACT_CODE,
+    apiUrl: process.env.MONNIFY_API_URL,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;
