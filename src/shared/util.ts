@@ -53,4 +53,8 @@ export class Util {
       throw new BadRequestException('invalid phonumber');
     }
   }
+
+  static isPriObj(payload: unknown): payload is Record<string, unknown> {
+    return payload !== null && typeof payload === 'object';
+  }
 }

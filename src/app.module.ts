@@ -7,10 +7,13 @@ import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
+import { DatabaseModule } from './database/database.module';
 import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
 import { PaymentModule } from './payments/payment.module';
+import { RidesModule } from './rides/rides.module';
 import config from './shared/config';
+import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -47,6 +50,9 @@ import config from './shared/config';
         return { ttl: cache.ttl };
       },
     }),
+    RidesModule,
+    WebsocketModule,
+    DatabaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

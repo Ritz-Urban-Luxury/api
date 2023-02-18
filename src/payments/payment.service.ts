@@ -1,22 +1,34 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { DB_TABLES } from 'src/shared/constants';
-import { Model } from 'src/shared/types';
-import { UserDocument } from 'src/user';
-import { BalanceDocument } from './schemas/balance.schema';
+import { DatabaseService } from 'src/database/database.service';
+import { UserDocument } from 'src/database/schemas/user.schema';
+import { Util } from 'src/shared/util';
+import { RequestReferenceDTO } from './dto/payment.dto';
 
 @Injectable()
 export class PaymentService {
-  constructor(
-    @InjectModel(DB_TABLES.BALANCES)
-    private readonly balanceModel: Model<BalanceDocument>,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async getUserBalance(user: UserDocument) {
-    return this.balanceModel.findOneAndUpdate(
+    return this.db.balances.findOneAndUpdate(
       { user: user.id },
       { user: user.id, deleted: false },
       { new: true, upsert: true },
     );
+  }
+
+  async generateReference(user: UserDocument, payload: RequestReferenceDTO) {
+    let meta = { type: 'payment-reference', user: user.id };
+    if (Util.isPriObj(payload.meta)) {
+      meta = { ...payload.meta, ...meta };
+    }
+
+    const token = Math.random().toString(32).substring(2);
+
+    await this.db.authTokens.create({
+      token,
+      meta,
+    });
+
+    return token;
   }
 }

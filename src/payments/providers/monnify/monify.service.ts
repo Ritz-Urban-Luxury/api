@@ -1,18 +1,32 @@
 import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { Cache } from 'cache-manager';
+import * as Crypto from 'crypto';
+import { DatabaseService } from 'src/database/database.service';
 import { Logger } from 'src/logger/logger.service';
 import config from 'src/shared/config';
 import { Http } from 'src/shared/http';
+import { Util } from 'src/shared/util';
+import { WebhookPayload } from './types';
 
 @Injectable()
 export class MonnifyService {
   private readonly client: Http;
 
+  private readonly webhookHandlers: Record<
+    string,
+    (payload: WebhookPayload) => unknown
+  >;
+
   constructor(
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly logger: Logger,
+    private readonly db: DatabaseService,
   ) {
     this.client = new Http({ baseURL: `${config().monnify.apiUrl}/api/v1` });
+
+    this.webhookHandlers = {
+      SUCCESSFUL_TRANSACTION: this.handleSuccessfulTransaction,
+    };
   }
 
   async getAccessToken() {
@@ -55,9 +69,12 @@ export class MonnifyService {
       {
         ...payload,
         bankCode: '058',
-        paymentReference: Math.random().toString(36).substring(2),
+        paymentReference: Math.random().toString(32).substring(2),
         currencyCode: 'NGN',
         contractCode: config().monnify.contractCode,
+        metaData: {
+          hawayu: 'hello',
+        },
       },
       option,
     );
@@ -73,5 +90,52 @@ export class MonnifyService {
     );
 
     return res.responseBody;
+  }
+
+  async handleWebhook(payload: unknown, monnifySignature: string) {
+    if (this.isWebhookPayload(payload)) {
+      const hash = Crypto.createHmac('sha512', config().monnify.secret)
+        .update(JSON.stringify(payload))
+        .digest('hex');
+      if (hash === monnifySignature) {
+        const handler = this.webhookHandlers[payload.eventType];
+        if (handler) {
+          return handler.bind(this)(payload);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  isWebhookPayload(payload: unknown): payload is WebhookPayload {
+    return Util.isPriObj(payload) && !!payload.eventData && !!payload.eventType;
+  }
+
+  private async handleSuccessfulTransaction(payload: WebhookPayload) {
+    const data = payload.eventData as {
+      amountPaid: number;
+      paymentReference: string;
+    };
+    const token = await this.db.authTokens.findOne({
+      'meta.type': 'payment-reference',
+      token: data.paymentReference,
+      isUsed: { $ne: true },
+    });
+    if (token) {
+      await Promise.all([
+        this.db.authTokens.updateOne(
+          { _id: token.id },
+          { $set: { isUsed: true } },
+        ),
+        this.db.balances.updateOne(
+          {
+            user: token.meta.user,
+            deleted: { $ne: true },
+          },
+          { $inc: { amount: data.amountPaid } },
+        ),
+      ]);
+    }
   }
 }

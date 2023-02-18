@@ -41,6 +41,9 @@ export class FileService {
     const contentType = headers['content-type'];
     const data = `data:${contentType};base64,${base64}`;
 
-    return this.uploadFile({ filename: Math.random().toString(32), data });
+    return this.uploadFile({
+      filename: Math.random().toString(32).substring(2),
+      data,
+    });
   }
 }

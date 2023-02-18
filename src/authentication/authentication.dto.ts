@@ -6,7 +6,10 @@ import {
   IsPhoneNumber,
   IsString,
 } from 'class-validator';
-import { OAuthProviders, OAuthProvider } from 'src/user';
+import {
+  OAuthProvider,
+  OAuthProviders,
+} from 'src/database/schemas/user.schema';
 
 export class SignupDTO {
   @IsPhoneNumber('NG')

@@ -6,40 +6,37 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectModel } from '@nestjs/mongoose';
-import { hash } from 'bcryptjs';
+import { WsException } from '@nestjs/websockets';
+import { compare, hash } from 'bcryptjs';
 import * as Crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as moment from 'moment';
+import { Socket } from 'socket.io';
+import { DatabaseService } from 'src/database/database.service';
+import { OAuthProvider, UserDocument } from 'src/database/schemas/user.schema';
 import { FileService } from 'src/file/file.service';
 import { Logger } from 'src/logger/logger.service';
 import { NotificationService } from 'src/notification';
 import config from 'src/shared/config';
-import { DB_TABLES } from 'src/shared/constants';
 import { Http } from 'src/shared/http';
-import { Model } from 'src/shared/types';
 import { Util } from 'src/shared/util';
-import { OAuthProvider, UserDocument, UserService } from 'src/user';
 import {
   LoginDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
   SignupDTO,
 } from './authentication.dto';
-import { AuthTokenDocument } from './schemas';
 
 @Injectable()
 export class AuthenticationService {
   private readonly googleOAuthClient: OAuth2Client;
 
   constructor(
-    @InjectModel(DB_TABLES.AUTH_TOKENS)
-    private readonly authTokenModel: Model<AuthTokenDocument>,
     private readonly notificationService: NotificationService,
     private readonly logger: Logger,
-    private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly fileService: FileService,
+    private readonly db: DatabaseService,
   ) {
     this.googleOAuthClient = new OAuth2Client();
   }
@@ -47,7 +44,7 @@ export class AuthenticationService {
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {
     const { phoneNumber } = payload;
     const phone = Util.formatPhoneNumber(phoneNumber, 'NG');
-    const previousAuthToken = await this.authTokenModel.findOne({
+    const previousAuthToken = await this.db.authTokens.findOne({
       'meta.type': 'phone-otp',
       'meta.phoneNumber': phone,
       createdAt: {
@@ -57,7 +54,7 @@ export class AuthenticationService {
     if (!previousAuthToken) {
       const token = Math.random().toString().substring(2, 6);
 
-      await this.authTokenModel.create({
+      await this.db.authTokens.create({
         expiresAt: moment().add(10, 'minute').toDate(),
         token,
         meta: {
@@ -80,7 +77,7 @@ export class AuthenticationService {
   async requestEmailOtp(payload: RequestEmailOTPDTO) {
     const { email: _email, name } = payload;
     const email = _email.toLowerCase();
-    const previousAuthToken = await this.authTokenModel.findOne({
+    const previousAuthToken = await this.db.authTokens.findOne({
       'meta.type': 'email-otp',
       'meta.email': email,
       createdAt: {
@@ -90,7 +87,7 @@ export class AuthenticationService {
     if (!previousAuthToken) {
       const token = Math.random().toString().substring(2, 6);
 
-      await this.authTokenModel.create({
+      await this.db.authTokens.create({
         expiresAt: moment().add(10, 'minute').toDate(),
         token,
         meta: {
@@ -213,7 +210,7 @@ export class AuthenticationService {
   async getPhoneOtpOrFail(phoneNumber: string, phoneOtp: string) {
     const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
 
-    const otp = await this.authTokenModel.findOne({
+    const otp = await this.db.authTokens.findOne({
       'meta.phoneNumber': _phoneNumber,
       'meta.type': 'phone-otp',
       token: phoneOtp,
@@ -240,7 +237,7 @@ export class AuthenticationService {
       ...rest
     } = payload;
     if (oAuthIdentifier) {
-      let user = await this.userService.findUser({
+      let user = await this.db.users.findOne({
         oAuthIdentifier,
         deleted: { $ne: true },
       });
@@ -255,7 +252,7 @@ export class AuthenticationService {
           userObj.avatar = await this.fileService.uploadUrl(userObj.avatar);
         }
 
-        user = await this.userService.findUserOrCreate(
+        user = await this.db.users.findOneAndUpdate(
           {
             $or: [
               { email: userObj.email },
@@ -267,6 +264,7 @@ export class AuthenticationService {
             password: Crypto.randomBytes(32).toString('hex'),
             oAuthProvider,
           },
+          { upsert: true, new: true },
         );
       }
 
@@ -280,11 +278,11 @@ export class AuthenticationService {
       const otp = await this.getPhoneOtpOrFail(phoneNumber, phoneOtp);
 
       const [existingUser] = await Promise.all([
-        this.userService.findUser({
+        this.db.users.findOne({
           phoneNumber: otp.meta?.phoneNumber as string,
           deleted: { $ne: true },
         }),
-        this.authTokenModel.updateOne(
+        this.db.authTokens.updateOne(
           { _id: otp.id },
           { $set: { isUsed: true } },
         ),
@@ -298,7 +296,7 @@ export class AuthenticationService {
 
     if (email) {
       const _email = email.toLowerCase();
-      const existingUser = await this.userService.findUser({
+      const existingUser = await this.db.users.findOne({
         email: _email,
         deleted: { $ne: true },
       });
@@ -306,7 +304,7 @@ export class AuthenticationService {
         throw new ConflictException('user with email already exists');
       }
 
-      const otp = await this.authTokenModel.findOne({
+      const otp = await this.db.authTokens.findOne({
         'meta.email': _email,
         'meta.type': 'email-otp',
         token: emailOtp,
@@ -318,7 +316,7 @@ export class AuthenticationService {
         throw new BadRequestException('invalid email validation token');
       }
 
-      await this.authTokenModel.updateOne(
+      await this.db.authTokens.updateOne(
         { _id: otp.id },
         { $set: { isUsed: true } },
       );
@@ -326,7 +324,7 @@ export class AuthenticationService {
       userObj.email = _email;
     }
 
-    const user = await this.userService.createUser({
+    const user = await this.db.users.create({
       ...userObj,
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
@@ -339,7 +337,7 @@ export class AuthenticationService {
     const { phoneNumber, otp } = payload;
     const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
     const [user, otpDoc] = await Promise.all([
-      this.userService.findUser({ phoneNumber: _phoneNumber }),
+      this.db.users.findOne({ phoneNumber: _phoneNumber }),
       this.getPhoneOtpOrFail(phoneNumber, otp),
     ]);
     if (!user) {
@@ -348,7 +346,7 @@ export class AuthenticationService {
 
     const [authUser] = await Promise.all([
       this.authorizeUser(user),
-      this.authTokenModel.updateOne(
+      this.db.authTokens.updateOne(
         { _id: otpDoc.id },
         { $set: { isUsed: true } },
       ),
@@ -373,7 +371,7 @@ export class AuthenticationService {
       // ...
     }
 
-    const user = await this.userService.findUser({
+    const user = await this.db.users.findOne({
       $or: [{ email: key.toLowerCase() }, { phoneNumber }],
     });
     if (!user) {
@@ -381,5 +379,63 @@ export class AuthenticationService {
     }
 
     return key;
+  }
+
+  async getUserFromAuthToken(token: string, secret?: string) {
+    const jwtPayload = this.jwtService.verify<{
+      id: string;
+      payloadId: string;
+    }>(token, secret ? { secret } : null);
+    const { id: _id, payloadId = '' } = jwtPayload;
+
+    const user = await this.db.users.findOne({ _id });
+    if (!user) {
+      return null;
+    }
+
+    const isValid = await compare(
+      `${user.phoneNumber}${user.password}`,
+      payloadId,
+    );
+    if (!isValid) {
+      return null;
+    }
+
+    return user;
+  }
+
+  async validateWebsocketClient(client: Socket) {
+    try {
+      const authorization =
+        client.handshake.headers.authorization ||
+        `${client.handshake.query.authorization}`;
+
+      const token = authorization?.replace(/bearer /gi, '');
+      const user = await this.getUserFromAuthToken(token);
+      if (!user) {
+        throw new Error();
+      }
+
+      return user;
+    } catch (error) {
+      throw new WsException('Unauthorized');
+    }
+  }
+
+  async validateJwtPayload({ id: _id, payloadId = '' }) {
+    const user = await this.db.users.findOne({
+      _id,
+    });
+    if (user) {
+      const isValid = await compare(
+        `${user.phoneNumber}${user.password}`,
+        payloadId,
+      );
+      if (isValid) {
+        return user;
+      }
+    }
+
+    return null;
   }
 }
