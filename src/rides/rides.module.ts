@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module } from '@nestjs/common';
+import { TripMiddleware } from 'src/shared/middlewares/trip.middleware';
 import { RidesController } from './rides.controller';
 import { RidesService } from './rides.service';
 
@@ -7,4 +8,8 @@ import { RidesService } from './rides.service';
   exports: [RidesService],
   controllers: [RidesController],
 })
-export class RidesModule {}
+export class RidesModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TripMiddleware).forRoutes('rides/trips/:trip');
+  }
+}

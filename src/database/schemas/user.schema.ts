@@ -29,6 +29,8 @@ export type UserDocument = User &
       delete ret._id;
       delete ret.__v;
       delete ret.password;
+      delete ret.oAuthIdentifier;
+      delete ret.oAuthProvider;
     },
   },
 })

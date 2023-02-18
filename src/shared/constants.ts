@@ -4,4 +4,5 @@ export const DB_TABLES = {
   BALANCES: 'balances',
   RIDES: 'rides',
   TRIPS: 'trips',
+  MESSAGES: 'messages',
 };

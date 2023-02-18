@@ -3,18 +3,18 @@ import {
   CACHE_MANAGER,
   Inject,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { DatabaseService } from 'src/database/database.service';
 import { RidesDocument, RideStatus } from 'src/database/schemas/rides.schema';
-import { TripStatus } from 'src/database/schemas/trips.schema';
+import { TripDocument, TripStatus } from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { WebsocketGateway } from 'src/websocket/websocket.gateway';
 import {
   AcceptRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
+  MessageDTO,
   RequestRideDTO,
 } from './dto/rides.dto';
 
@@ -129,7 +129,12 @@ export class RidesService {
 
       const accepted = await this.cache.get<boolean>(trackingId);
       if (accepted) {
-        const trip = await this.db.trips.create({ user, ride, driver });
+        const trip = await this.db.trips.create({
+          user,
+          ride,
+          driver,
+          amount: 0,
+        });
 
         this.websocket.emitToUser(user, 'TripStarted', trip);
         this.websocket.emitToUser(driver, 'TripStarted', trip);
@@ -145,16 +150,8 @@ export class RidesService {
     );
   }
 
-  async cancelTrip(user: UserDocument, id: string, reason: string) {
-    let trip = await this.db.trips.findOne({
-      _id: id,
-      $or: [{ user: user.id }, { driver: user.id }],
-    });
-    if (!trip) {
-      throw new NotFoundException('trip not found');
-    }
-
-    trip = await this.db.trips
+  async cancelTrip(user: UserDocument, trip: TripDocument, reason: string) {
+    const _trip = await this.db.trips
       .findOneAndUpdate(
         { _id: trip.id },
         { $set: { status: TripStatus.Cancelled, cancellationReason: reason } },
@@ -162,13 +159,42 @@ export class RidesService {
       )
       .populate({ path: 'user driver' });
 
-    this.websocket.emitToUser(trip.user as UserDocument, 'TripCancelled', trip);
+    this.websocket.emitToUser(
+      trip.user as UserDocument,
+      'TripCancelled',
+      _trip,
+    );
     this.websocket.emitToUser(
       trip.driver as UserDocument,
       'TripCancelled',
-      trip,
+      _trip,
     );
 
-    return trip;
+    return _trip;
+  }
+
+  async sendMessage(
+    _user: UserDocument,
+    trip: TripDocument,
+    payload: MessageDTO,
+  ) {
+    const message = await this.db.messages.create({
+      sender: _user.id,
+      trip,
+      text: payload.text,
+    });
+
+    const { driver, user } = await trip.populate('driver user');
+
+    this.websocket.emitToUser(driver as UserDocument, 'NewMessage', message);
+    this.websocket.emitToUser(user as UserDocument, 'NewMessage', message);
+
+    return message;
+  }
+
+  async getMessages(trip: TripDocument) {
+    return this.db.messages.find({
+      trip: trip.id,
+    });
   }
 }

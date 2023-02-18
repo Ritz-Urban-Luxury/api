@@ -6,7 +6,7 @@ import {
   IsNumber,
   IsString,
 } from 'class-validator';
-import { RideType, RideTypes } from '../schemas/rides.schema';
+import { RideType, RideTypes } from 'src/database/schemas/rides.schema';
 
 export class GetRidesDTO {
   @IsLatitude()
@@ -42,4 +42,10 @@ export class AcceptRideDTO {
   @IsString()
   @IsNotEmpty()
   trackingId: string;
+}
+
+export class MessageDTO {
+  @IsString()
+  @IsNotEmpty()
+  text: string;
 }

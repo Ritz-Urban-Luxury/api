@@ -4,6 +4,7 @@ import { BalanceSchema } from 'src/authentication/balance.schema';
 import { DB_TABLES } from 'src/shared/constants';
 import { DatabaseService } from './database.service';
 import { AuthTokenSchema } from './schemas/auth-tokens.schema';
+import { MessageSchema } from './schemas/messages.schema';
 import { RideSchema } from './schemas/rides.schema';
 import { TripSchema } from './schemas/trips.schema';
 import { UserSchema } from './schemas/user.schema';
@@ -17,6 +18,7 @@ import { UserSchema } from './schemas/user.schema';
       { name: DB_TABLES.RIDES, schema: RideSchema },
       { name: DB_TABLES.TRIPS, schema: TripSchema },
       { name: DB_TABLES.BALANCES, schema: BalanceSchema },
+      { name: DB_TABLES.MESSAGES, schema: MessageSchema },
     ]),
   ],
   providers: [DatabaseService],

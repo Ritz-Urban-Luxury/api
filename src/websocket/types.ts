@@ -4,6 +4,7 @@ export enum WebsocketEvent {
   ConnectingToDriver = 'ConnectingToDriver',
   TripStarted = 'TripStarted',
   TripCancelled = 'TripCancelled',
+  NewMessage = 'NewMessage',
 }
 
 export type WebsocketEventType = WebsocketEvent | keyof typeof WebsocketEvent;
