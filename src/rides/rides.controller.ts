@@ -3,15 +3,14 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Post,
   Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtGuard } from 'src/authentication/guards/jwt.guard';
-import { TripDocument } from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
-import { CurrentTrip } from 'src/shared/decorators/current-trip.decorator';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
 import { Response } from 'src/shared/response';
 import {
@@ -71,10 +70,18 @@ export class RidesController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('trips/ongoing')
+  async getOngoingTrip(@CurrentUser() user: UserDocument) {
+    const ongoingTrip = await this.ridesService.getOngoingTrip(user);
+
+    return Response.json('ongoing trip', ongoingTrip);
+  }
+
+  @UseGuards(JwtGuard)
   @Delete('trips/:trip')
   async cancelTrip(
     @CurrentUser() user: UserDocument,
-    @CurrentTrip() trip: TripDocument,
+    @Param('trip') trip: string,
     @Query('reason') reason: string,
   ) {
     const _trip = await this.ridesService.cancelTrip(user, trip, reason);
@@ -86,7 +93,7 @@ export class RidesController {
   @Post('trips/:trip/messages')
   async sendMessage(
     @CurrentUser() user: UserDocument,
-    @CurrentTrip() trip: TripDocument,
+    @Param('trip') trip: string,
     @Body() payload: MessageDTO,
   ) {
     const message = await this.ridesService.sendMessage(user, trip, payload);
@@ -96,8 +103,11 @@ export class RidesController {
 
   @UseGuards(JwtGuard)
   @Get('trips/:trip/messages')
-  async getMessages(@CurrentTrip() trip: TripDocument) {
-    const messages = await this.ridesService.getMessages(trip);
+  async getMessages(
+    @CurrentUser() user: UserDocument,
+    @Param('trip') trip: string,
+  ) {
+    const messages = await this.ridesService.getMessages(user, trip);
 
     return Response.json('Trip messages', messages);
   }

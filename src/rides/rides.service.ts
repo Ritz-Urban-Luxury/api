@@ -3,6 +3,7 @@ import {
   CACHE_MANAGER,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { DatabaseService } from 'src/database/database.service';
@@ -17,9 +18,12 @@ import {
   MessageDTO,
   RequestRideDTO,
 } from './dto/rides.dto';
+import { GeolocationService } from './geolocation.service';
 
 @Injectable()
 export class RidesService {
+  private readonly WAIT_TIME = 10 * 1000;
+
   constructor(
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly websocket: WebsocketGateway,
@@ -53,8 +57,25 @@ export class RidesService {
     };
   }
 
+  async getOngoingTrip(user: UserDocument) {
+    return this.db.trips.findOne({
+      user: user.id,
+      status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+      deleted: { $ne: true },
+    });
+  }
+
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
-    const { lat, lon, type } = payload;
+    const { fromLat, fromLon, type } = payload;
+    const ongoingTrip = await this.db.trips.findOne({
+      user: user.id,
+      status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+      deleted: { $ne: true },
+    });
+    if (ongoingTrip) {
+      throw new BadRequestException('another trip currently ongoing');
+    }
+
     const trackingId = Math.random().toString(32).substring(2);
     let available = await this.db.rides
       .find({
@@ -62,7 +83,7 @@ export class RidesService {
         type,
         location: {
           $near: {
-            $geometry: { type: 'Point', coordinates: [lat, lon] },
+            $geometry: { type: 'Point', coordinates: [fromLat, fromLon] },
             $maxDistance: 5000,
           },
         },
@@ -76,8 +97,8 @@ export class RidesService {
       throw new BadRequestException('All drivers are busy at this time');
     }
 
-    await this.cache.set(trackingId, true, 10 * 1000 * available.length);
-    this.connectToDriver(user, available, trackingId);
+    await this.cache.set(trackingId, true, this.WAIT_TIME * available.length);
+    this.connectToDriver(user, available, trackingId, payload);
 
     return { ride: available[0], trackingId };
   }
@@ -89,7 +110,7 @@ export class RidesService {
       throw new BadRequestException('invalid tracking id');
     }
 
-    await this.cache.set(payload.trackingId, false, 10 * 1000);
+    await this.cache.set(payload.trackingId, false, this.WAIT_TIME);
   }
 
   async acceptRide(payload: AcceptRideDTO) {
@@ -99,21 +120,17 @@ export class RidesService {
       throw new BadRequestException('invalid tracking id');
     }
 
-    await this.cache.set(payload.trackingId, true, 10 * 1000);
+    await this.cache.set(payload.trackingId, true, this.WAIT_TIME);
   }
 
   async connectToDriver(
     user: UserDocument,
     available: RidesDocument[],
     connectionId: string,
+    payload: RequestRideDTO,
   ) {
-    const WAIT_TIME = 10 * 1000;
     let trackingId: string;
     for (let i = 0; i < available.length; i += 1) {
-      const waiting = await this.cache.get<boolean>(connectionId);
-      if (!waiting) {
-        return;
-      }
       const ride = available[i];
       const driver = ride.driver as UserDocument;
 
@@ -122,19 +139,51 @@ export class RidesService {
       this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
       this.websocket.emitToUser(driver, 'RideRequest', { trackingId });
 
-      await this.cache.set(trackingId, false, WAIT_TIME);
+      await this.cache.set(trackingId, false, this.WAIT_TIME);
       await new Promise((resolve) => {
-        setTimeout(resolve, WAIT_TIME);
+        setTimeout(resolve, this.WAIT_TIME);
       });
 
-      const accepted = await this.cache.get<boolean>(trackingId);
-      if (accepted) {
-        const trip = await this.db.trips.create({
-          user,
-          ride,
-          driver,
-          amount: 0,
+      const [accepted, waiting] = await Promise.all([
+        this.cache.get<boolean>(trackingId),
+        this.cache.get<boolean>(connectionId),
+      ]);
+      if (!waiting) {
+        this.websocket.emitToUser(user, 'RideRequestCancelled', {
+          trackingId: connectionId,
         });
+        this.websocket.emitToUser(driver, 'RideRequestCancelled', {
+          trackingId,
+        });
+        return;
+      }
+
+      if (accepted) {
+        const distance = await GeolocationService.getDistance(
+          [payload.fromLat, payload.fromLon],
+          [payload.toLat, payload.toLon],
+        );
+        const quotes = await this.getRideQuotes({ distance });
+        const amount = quotes[payload.type.toLowerCase()];
+        const [trip] = await Promise.all([
+          this.db.trips.create({
+            ...payload,
+            to: {
+              type: 'Point',
+              coordinates: [payload.toLat, payload.toLon],
+            },
+            from: {
+              type: 'Point',
+              coordinates: [payload.fromLat, payload.fromLon],
+            },
+            user,
+            ride,
+            driver,
+            distance,
+            amount,
+          }),
+          this.cache.del(connectionId),
+        ]);
 
         this.websocket.emitToUser(user, 'TripStarted', trip);
         this.websocket.emitToUser(driver, 'TripStarted', trip);
@@ -150,49 +199,69 @@ export class RidesService {
     );
   }
 
-  async cancelTrip(user: UserDocument, trip: TripDocument, reason: string) {
-    const _trip = await this.db.trips
-      .findOneAndUpdate(
-        { _id: trip.id },
-        { $set: { status: TripStatus.Cancelled, cancellationReason: reason } },
-        { upsert: true, new: true },
-      )
-      .populate({ path: 'user driver' });
-
-    this.websocket.emitToUser(
-      trip.user as UserDocument,
-      'TripCancelled',
-      _trip,
+  async cancelTrip(user: UserDocument, tripId: string, reason: string) {
+    const trip = await this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        status: { $ne: TripStatus.Cancelled },
+        $or: [{ user: user.id }, { driver: user.id }],
+      },
+      { $set: { status: TripStatus.Cancelled, cancellationReason: reason } },
+      {
+        populate: { path: 'user driver' },
+        options: { upsert: false, new: true },
+        error: new NotFoundException('trip not found'),
+      },
     );
+
+    this.websocket.emitToUser(trip.user as UserDocument, 'TripCancelled', trip);
     this.websocket.emitToUser(
       trip.driver as UserDocument,
       'TripCancelled',
-      _trip,
+      trip,
     );
 
-    return _trip;
+    return trip;
   }
 
-  async sendMessage(
-    _user: UserDocument,
-    trip: TripDocument,
-    payload: MessageDTO,
-  ) {
+  async sendMessage(_user: UserDocument, tripId: string, payload: MessageDTO) {
+    const trip = await this.db.findOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        $or: [{ user: _user.id }, { driver: _user.id }],
+      },
+      {
+        error: new NotFoundException('trip not found'),
+        populate: [{ path: 'user' }, { path: 'driver' }],
+      },
+    );
     const message = await this.db.messages.create({
       sender: _user.id,
       trip,
       text: payload.text,
     });
 
-    const { driver, user } = await trip.populate('driver user');
+    const driver = trip.driver as UserDocument;
+    const user = trip.user as UserDocument;
 
-    this.websocket.emitToUser(driver as UserDocument, 'NewMessage', message);
-    this.websocket.emitToUser(user as UserDocument, 'NewMessage', message);
+    this.websocket.emitToUser(driver, 'NewMessage', message);
+    this.websocket.emitToUser(user, 'NewMessage', message);
 
     return message;
   }
 
-  async getMessages(trip: TripDocument) {
+  async getMessages(user: UserDocument, tripId: string) {
+    const trip = await this.db.findOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        $or: [{ user: user.id }, { driver: user.id }],
+      },
+      { error: new NotFoundException('trip not found') },
+    );
+
     return this.db.messages.find({
       trip: trip.id,
     });

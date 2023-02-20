@@ -1,4 +1,5 @@
 export enum WebsocketEvent {
+  RideRequestCancelled = 'RideRequestCancelled',
   RideRequest = 'RideRequest',
   DriversBusy = 'DriversBusy',
   ConnectingToDriver = 'ConnectingToDriver',

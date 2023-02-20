@@ -31,11 +31,27 @@ export class RequestRideDTO {
 
   @IsLatitude()
   @IsNotEmpty()
-  lat: number;
+  fromLat: number;
 
   @IsLongitude()
   @IsNotEmpty()
-  lon: number;
+  fromLon: number;
+
+  @IsLatitude()
+  @IsNotEmpty()
+  toLat: number;
+
+  @IsLongitude()
+  @IsNotEmpty()
+  toLon: number;
+
+  @IsString()
+  @IsNotEmpty()
+  fromAddress: string;
+
+  @IsString()
+  @IsNotEmpty()
+  toAddress: string;
 }
 
 export class AcceptRideDTO {

@@ -1,7 +1,7 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
 import { SchemaTypes } from 'mongoose';
 import { UserDocument } from 'src/database/schemas/user.schema';
-import { Schema } from 'src/shared/base.schema';
+import { BaseSchema, Schema } from 'src/shared/base.schema';
 import { DB_TABLES } from 'src/shared/constants';
 import { Document } from 'src/shared/types';
 
@@ -22,8 +22,17 @@ export enum RideType {
 export const RideStatuses = Object.values(RideStatus);
 export const RideTypes = Object.values(RideType);
 
-@Schema({ _id: false, timestamps: false })
-export class Location {
+@Schema({
+  _id: false,
+  timestamps: false,
+  toJSON: {
+    virtuals: true,
+    transform(_doc: unknown, ret: Location): void {
+      delete ret.deleted;
+    },
+  },
+})
+export class Location extends BaseSchema {
   @Prop({ required: true })
   type: 'Point';
 
@@ -34,7 +43,7 @@ export class Location {
 export const LocationSchema = SchemaFactory.createForClass(Location);
 
 @Schema()
-export class Ride {
+export class Ride extends BaseSchema {
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS, required: true })
   driver: UserDocument | string;
 
