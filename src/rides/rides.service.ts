@@ -17,6 +17,7 @@ import {
   GetRidesDTO,
   MessageDTO,
   RequestRideDTO,
+  UpdateTripDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 
@@ -204,7 +205,7 @@ export class RidesService {
       this.db.trips,
       {
         _id: tripId,
-        status: { $ne: TripStatus.Cancelled },
+        status: { $in: [TripStatus.Started, TripStatus.DriverArrived] },
         $or: [{ user: user.id }, { driver: user.id }],
       },
       { $set: { status: TripStatus.Cancelled, cancellationReason: reason } },
@@ -265,5 +266,49 @@ export class RidesService {
     return this.db.messages.find({
       trip: trip.id,
     });
+  }
+
+  async updateTrip(user: UserDocument, tripId: string, payload: UpdateTripDTO) {
+    let trip: TripDocument;
+    if (payload.status) {
+      switch (payload.status) {
+        case TripStatus.DriverArrived:
+          trip = await this.annouceArrival(user, tripId);
+          break;
+        default:
+        // do nothing
+      }
+    }
+    if (!trip) {
+      throw new BadRequestException('trip not updated');
+    }
+
+    return trip;
+  }
+
+  async annouceArrival(user: UserDocument, tripId: string) {
+    const trip = await this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        status: TripStatus.Started,
+        driver: user.id,
+      },
+      { $set: { status: TripStatus.DriverArrived } },
+      {
+        populate: { path: 'user driver' },
+        options: { upsert: false, new: true },
+        error: new NotFoundException('trip not found'),
+      },
+    );
+
+    this.websocket.emitToUser(trip.user as UserDocument, 'DriverArrival', trip);
+    this.websocket.emitToUser(
+      trip.driver as UserDocument,
+      'DriverArrival',
+      trip,
+    );
+
+    return trip;
   }
 }

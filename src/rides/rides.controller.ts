@@ -19,6 +19,7 @@ import {
   GetRidesDTO,
   MessageDTO,
   RequestRideDTO,
+  UpdateTripDTO,
 } from './dto/rides.dto';
 import { RidesService } from './rides.service';
 
@@ -110,5 +111,17 @@ export class RidesController {
     const messages = await this.ridesService.getMessages(user, trip);
 
     return Response.json('Trip messages', messages);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('trips/:trip')
+  async updateTrip(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: UpdateTripDTO,
+    @Param('trip') tripId: string,
+  ) {
+    const trip = await this.ridesService.updateTrip(user, tripId, payload);
+
+    return Response.json('trip updated', trip);
   }
 }
