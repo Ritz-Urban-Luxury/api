@@ -64,8 +64,11 @@ export class RidesController {
 
   @UseGuards(JwtGuard)
   @Delete('trips')
-  async cancelRideRequest(@Query() payload: AcceptRideDTO) {
-    await this.ridesService.cancelConnection(payload);
+  async cancelRideRequest(
+    @CurrentUser() user: UserDocument,
+    @Query() payload: AcceptRideDTO,
+  ) {
+    await this.ridesService.cancelConnection(user, payload);
 
     return Response.json('Cancelling ride request');
   }

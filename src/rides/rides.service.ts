@@ -63,6 +63,11 @@ export class RidesService {
   }
 
   async getOngoingTrip(user: UserDocument) {
+    const trackingId = await this.cache.get(`${user.id}`);
+    if (trackingId) {
+      return { trackingId };
+    }
+
     return this.db.trips.findOne({
       user: user.id,
       status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
@@ -72,13 +77,19 @@ export class RidesService {
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
     const { fromLat, fromLon, type, paymentMethod } = payload;
-    const ongoingTrip = await this.db.trips.findOne({
-      user: user.id,
-      status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
-      deleted: { $ne: true },
-    });
+    const [ongoingTrip, ongoingRequest] = await Promise.all([
+      this.db.trips.findOne({
+        user: user.id,
+        status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+        deleted: { $ne: true },
+      }),
+      this.cache.get(`${user.id}`),
+    ]);
     if (ongoingTrip) {
       throw new BadRequestException('another trip currently ongoing');
+    }
+    if (ongoingRequest) {
+      throw new BadRequestException('previous request still pending');
     }
 
     const trackingId = Math.random().toString(32).substring(2);
@@ -131,6 +142,11 @@ export class RidesService {
     }
 
     await this.cache.set(trackingId, true, this.WAIT_TIME * available.length);
+    await this.cache.set(
+      `${user.id}`,
+      trackingId,
+      this.WAIT_TIME * available.length,
+    );
     this.connectToDriver(user, available, trackingId, {
       ...payload,
       amount,
@@ -140,13 +156,14 @@ export class RidesService {
     return { ride: available[0], trackingId };
   }
 
-  async cancelConnection(payload: AcceptRideDTO) {
+  async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
     const { trackingId } = payload;
     const value = await this.cache.get<boolean>(trackingId);
     if (typeof value !== 'boolean') {
       throw new BadRequestException('invalid tracking id');
     }
 
+    await this.cache.del(`${user.id}`);
     await this.cache.set(payload.trackingId, false, this.WAIT_TIME);
   }
 
@@ -212,6 +229,7 @@ export class RidesService {
             driver,
           }),
           this.cache.del(connectionId),
+          this.cache.del(`${user.id}`),
         ]);
 
         this.websocket.emitToUser(user, 'TripStarted', trip);
