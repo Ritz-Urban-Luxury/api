@@ -275,6 +275,9 @@ export class RidesService {
         case TripStatus.DriverArrived:
           trip = await this.annouceArrival(user, tripId);
           break;
+        case TripStatus.InProgress:
+          trip = await this.startTrip(user, tripId);
+          break;
         default:
         // do nothing
       }
@@ -306,6 +309,36 @@ export class RidesService {
     this.websocket.emitToUser(
       trip.driver as UserDocument,
       'DriverArrival',
+      trip,
+    );
+
+    return trip;
+  }
+
+  async startTrip(user: UserDocument, tripId: string) {
+    const trip = await this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        status: TripStatus.DriverArrived,
+        driver: user.id,
+      },
+      { $set: { status: TripStatus.InProgress } },
+      {
+        populate: { path: 'user driver' },
+        options: { upsert: false, new: true },
+        error: new NotFoundException('trip not found'),
+      },
+    );
+
+    this.websocket.emitToUser(
+      trip.user as UserDocument,
+      'TripInProgress',
+      trip,
+    );
+    this.websocket.emitToUser(
+      trip.driver as UserDocument,
+      'TripInProgress',
       trip,
     );
 

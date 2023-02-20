@@ -69,7 +69,7 @@ export class MessageDTO {
 }
 
 export class UpdateTripDTO {
-  @IsIn([TripStatus.DriverArrived])
+  @IsIn([TripStatus.DriverArrived, TripStatus.InProgress])
   @IsOptional()
   status?: TripStatus;
 }
