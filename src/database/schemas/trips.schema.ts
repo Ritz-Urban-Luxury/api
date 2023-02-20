@@ -16,7 +16,14 @@ export enum TripStatus {
   DriverArrived = 'DriverArrived',
 }
 
+export enum PaymentMethod {
+  Cash = 'Cash',
+  RULBalance = 'RULBalance',
+  Card = 'Card',
+}
+
 export const TripStatuses = Object.values(TripStatus);
+export const PaymentMethods = Object.values(PaymentMethod);
 
 @Schema()
 export class Trip {
@@ -52,6 +59,9 @@ export class Trip {
 
   @Prop()
   cancellationReason?: string;
+
+  @Prop({ type: String, enum: PaymentMethods, required: true })
+  paymentMethod: PaymentMethod;
 }
 
 export const TripSchema = SchemaFactory.createForClass(Trip);

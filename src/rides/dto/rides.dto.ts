@@ -8,7 +8,11 @@ import {
   IsString,
 } from 'class-validator';
 import { RideType, RideTypes } from 'src/database/schemas/rides.schema';
-import { TripStatus } from 'src/database/schemas/trips.schema';
+import {
+  PaymentMethod,
+  PaymentMethods,
+  TripStatus,
+} from 'src/database/schemas/trips.schema';
 
 export class GetRidesDTO {
   @IsLatitude()
@@ -54,6 +58,10 @@ export class RequestRideDTO {
   @IsString()
   @IsNotEmpty()
   toAddress: string;
+
+  @IsIn(PaymentMethods)
+  @IsNotEmpty()
+  paymentMethod: PaymentMethod;
 }
 
 export class AcceptRideDTO {

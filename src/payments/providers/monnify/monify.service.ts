@@ -128,12 +128,13 @@ export class MonnifyService {
           { _id: token.id },
           { $set: { isUsed: true } },
         ),
-        this.db.balances.updateOne(
+        this.db.balances.findOneAndUpdate(
           {
             user: token.meta.user,
             deleted: { $ne: true },
           },
           { $inc: { amount: data.amountPaid } },
+          { upsert: true },
         ),
       ]);
     }

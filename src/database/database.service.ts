@@ -10,6 +10,7 @@ import { BalanceDocument } from 'src/authentication/balance.schema';
 import { DB_TABLES } from 'src/shared/constants';
 import { Document, Model } from 'src/shared/types';
 import { AuthTokenDocument } from './schemas/auth-tokens.schema';
+import { CardDocument } from './schemas/card.schema';
 import { MessageDocument } from './schemas/messages.schema';
 import { RidesDocument } from './schemas/rides.schema';
 import { TripDocument } from './schemas/trips.schema';
@@ -30,6 +31,8 @@ export class DatabaseService {
     public readonly balances: Model<BalanceDocument>,
     @InjectModel(DB_TABLES.MESSAGES)
     public readonly messages: Model<MessageDocument>,
+    @InjectModel(DB_TABLES.CARDS)
+    public readonly cards: Model<CardDocument>,
   ) {}
 
   async findOrFail<

@@ -8,7 +8,11 @@ import {
 import { Cache } from 'cache-manager';
 import { DatabaseService } from 'src/database/database.service';
 import { RidesDocument, RideStatus } from 'src/database/schemas/rides.schema';
-import { TripDocument, TripStatus } from 'src/database/schemas/trips.schema';
+import {
+  PaymentMethod,
+  TripDocument,
+  TripStatus,
+} from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { WebsocketGateway } from 'src/websocket/websocket.gateway';
 import {
@@ -67,7 +71,7 @@ export class RidesService {
   }
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
-    const { fromLat, fromLon, type } = payload;
+    const { fromLat, fromLon, type, paymentMethod } = payload;
     const ongoingTrip = await this.db.trips.findOne({
       user: user.id,
       status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
@@ -78,20 +82,48 @@ export class RidesService {
     }
 
     const trackingId = Math.random().toString(32).substring(2);
-    let available = await this.db.rides
-      .find({
-        status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
-        type,
-        location: {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [fromLat, fromLon] },
-            $maxDistance: 5000,
+    const [_available, distance] = await Promise.all([
+      this.db.rides
+        .find({
+          status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+          type,
+          location: {
+            $near: {
+              $geometry: { type: 'Point', coordinates: [fromLat, fromLon] },
+              $maxDistance: 5000,
+            },
           },
-        },
-      })
-      .populate('driver');
+        })
+        .populate('driver'),
+      GeolocationService.getDistance(
+        [payload.fromLat, payload.fromLon],
+        [payload.toLat, payload.toLon],
+      ),
+    ]);
+    const quotes = await this.getRideQuotes({ distance });
+    const amount: number = quotes[type.toLowerCase()];
+    if (paymentMethod === PaymentMethod.RULBalance) {
+      const balance = await this.db.balances.findOne({
+        user: user.id,
+        deleted: { $ne: true },
+      });
+      if ((balance?.amount || 0) < amount) {
+        throw new BadRequestException('insufficient RUL balance');
+      }
+    }
 
-    available = available.sort((a) =>
+    if (paymentMethod === PaymentMethod.Card) {
+      const card = await this.db.cards.findOne({
+        user: user.id,
+        isDefault: true,
+        deleted: { $ne: true },
+      });
+      if (!card) {
+        throw new BadRequestException('no/invalid card setup');
+      }
+    }
+
+    const available = _available.sort((a) =>
       a.status === RideStatus.Online ? -1 : 1,
     );
     if (!available.length) {
@@ -99,7 +131,11 @@ export class RidesService {
     }
 
     await this.cache.set(trackingId, true, this.WAIT_TIME * available.length);
-    this.connectToDriver(user, available, trackingId, payload);
+    this.connectToDriver(user, available, trackingId, {
+      ...payload,
+      amount,
+      distance,
+    });
 
     return { ride: available[0], trackingId };
   }
@@ -128,7 +164,7 @@ export class RidesService {
     user: UserDocument,
     available: RidesDocument[],
     connectionId: string,
-    payload: RequestRideDTO,
+    payload: RequestRideDTO & { distance: number; amount: number },
   ) {
     let trackingId: string;
     for (let i = 0; i < available.length; i += 1) {
@@ -160,12 +196,6 @@ export class RidesService {
       }
 
       if (accepted) {
-        const distance = await GeolocationService.getDistance(
-          [payload.fromLat, payload.fromLon],
-          [payload.toLat, payload.toLon],
-        );
-        const quotes = await this.getRideQuotes({ distance });
-        const amount = quotes[payload.type.toLowerCase()];
         const [trip] = await Promise.all([
           this.db.trips.create({
             ...payload,
@@ -180,8 +210,6 @@ export class RidesService {
             user,
             ride,
             driver,
-            distance,
-            amount,
           }),
           this.cache.del(connectionId),
         ]);
