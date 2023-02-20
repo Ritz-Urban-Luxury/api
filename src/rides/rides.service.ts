@@ -141,11 +141,15 @@ export class RidesService {
       throw new BadRequestException('All drivers are busy at this time');
     }
 
-    await this.cache.set(trackingId, true, this.WAIT_TIME * available.length);
+    await this.cache.set(
+      trackingId,
+      true,
+      this.WAIT_TIME * available.length * 2,
+    );
     await this.cache.set(
       `${user.id}`,
       trackingId,
-      this.WAIT_TIME * available.length,
+      this.WAIT_TIME * available.length * 2,
     );
     this.connectToDriver(user, available, trackingId, {
       ...payload,
@@ -209,6 +213,11 @@ export class RidesService {
         this.websocket.emitToUser(driver, 'RideRequestCancelled', {
           trackingId,
         });
+
+        await Promise.all([
+          this.cache.del(connectionId),
+          this.cache.del(`${user.id}`),
+        ]);
         return;
       }
 
@@ -239,6 +248,10 @@ export class RidesService {
       }
     }
 
+    await Promise.all([
+      this.cache.del(connectionId),
+      this.cache.del(`${user.id}`),
+    ]);
     this.websocket.emitToUser(
       user,
       'DriversBusy',
