@@ -13,6 +13,7 @@ export enum TripStatus {
   Started = 'Started',
   Cancelled = 'Cancelled',
   Completed = 'Completed',
+  DriverArrived = 'DriverArrived',
 }
 
 export const TripStatuses = Object.values(TripStatus);

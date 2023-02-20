@@ -8,6 +8,7 @@ export enum WebsocketEvent {
   NewMessage = 'NewMessage',
   RideLocation = 'RideLocation',
   UnprocessableEntity = 'UnprocessableEntity',
+  RideETA = 'RideETA',
 }
 
 export type WebsocketEventType = WebsocketEvent | keyof typeof WebsocketEvent;

@@ -9,8 +9,11 @@ import { Server, Socket } from 'socket.io';
 import { AuthenticationService } from 'src/authentication';
 import { WSJwtGuard } from 'src/authentication/guards/ws-jwt.guard';
 import { DatabaseService } from 'src/database/database.service';
+import { RidesDocument } from 'src/database/schemas/rides.schema';
+import { TripStatus } from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { Logger } from 'src/logger/logger.service';
+import { GeolocationService } from 'src/rides/geolocation.service';
 import { CurrentClientUser } from 'src/shared/decorators/current-client-user.decorator';
 import { WSValidationFilter } from 'src/shared/filter/ws-validation-filter';
 import { ValidationPipe } from 'src/shared/pipes/validation.pipe';
@@ -62,5 +65,31 @@ export class WebsocketGateway {
       { _id: payload.ride, driver: user.id },
       { $set: { 'location.coordinates': [payload.lat, payload.lon] } },
     );
+  }
+
+  @UseGuards(WSJwtGuard)
+  @SubscribeMessage(WebsocketEvent.RideETA)
+  async getDriverETA(@CurrentClientUser() user: UserDocument) {
+    const trip = await this.db.trips
+      .findOne({
+        user: user.id,
+        status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+        deleted: { $ne: true },
+      })
+      .populate('ride');
+
+    if (trip) {
+      const ride = trip.ride as RidesDocument;
+      const coordinates =
+        trip.status === TripStatus.Started
+          ? trip.from.coordinates
+          : trip.to.coordinates;
+      const eta = await GeolocationService.getETA(
+        ride.location.coordinates,
+        coordinates,
+      );
+
+      this.emitToUser(user, WebsocketEvent.RideETA, { eta });
+    }
   }
 }
