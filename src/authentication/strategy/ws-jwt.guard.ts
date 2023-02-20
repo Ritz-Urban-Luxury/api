@@ -8,9 +8,14 @@ import { AuthenticationService } from '../authentication.service';
 export class WSJWTStrategy extends PassportStrategy(Strategy, 'ws-jwt') {
   constructor(private authenticationService: AuthenticationService) {
     super({
-      jwtFromRequest: (request) =>
-        request.handshake.headers.authorization ||
-        request.handshake.query.authorization,
+      jwtFromRequest: (request) => {
+        const token: string =
+          request.handshake.headers.authorization ||
+          request.handshake.query.authorization ||
+          '';
+
+        return typeof token === 'string' ? token.replace('Bearer ', '') : '';
+      },
       ignoreExpiration: true,
       secretOrKey: config().jwt.secret,
     });

@@ -6,6 +6,8 @@ export enum WebsocketEvent {
   TripStarted = 'TripStarted',
   TripCancelled = 'TripCancelled',
   NewMessage = 'NewMessage',
+  RideLocation = 'RideLocation',
+  UnprocessableEntity = 'UnprocessableEntity',
 }
 
 export type WebsocketEventType = WebsocketEvent | keyof typeof WebsocketEvent;
