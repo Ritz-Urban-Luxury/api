@@ -11,6 +11,7 @@ import { RidesDocument, RideStatus } from 'src/database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   PaymentMethod,
+  Rating,
   TripDocument,
   TripStatus,
 } from 'src/database/schemas/trips.schema';
@@ -348,6 +349,9 @@ export class RidesService {
         // do nothing
       }
     }
+    if (payload.rating) {
+      trip = await this.rateTrip(user, tripId, payload.rating);
+    }
     if (!trip) {
       throw new BadRequestException('trip not updated');
     }
@@ -466,6 +470,23 @@ export class RidesService {
         deleted: { $ne: true },
       },
       { page, limit },
+    );
+  }
+
+  async rateTrip(user: UserDocument, tripId: string, rating: Rating) {
+    return this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        user: user.id,
+        status: { $in: [TripStatus.Completed, TripStatus.PaymentFailed] },
+        rating: { $exists: false },
+      },
+      { $set: { rating } },
+      {
+        error: new NotFoundException('trip not found'),
+        options: { upsert: false, new: true },
+      },
     );
   }
 }

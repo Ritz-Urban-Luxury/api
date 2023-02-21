@@ -6,11 +6,13 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator';
 import { RideType, RideTypes } from 'src/database/schemas/rides.schema';
 import {
   PaymentMethod,
   PaymentMethods,
+  Rating,
   TripStatus,
 } from 'src/database/schemas/trips.schema';
 
@@ -80,4 +82,8 @@ export class UpdateTripDTO {
   @IsIn([TripStatus.DriverArrived, TripStatus.InProgress, TripStatus.Completed])
   @IsOptional()
   status?: TripStatus;
+
+  @ValidateNested()
+  @IsOptional()
+  rating?: Rating;
 }

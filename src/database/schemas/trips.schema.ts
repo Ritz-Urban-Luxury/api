@@ -1,6 +1,14 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { SchemaTypes } from 'mongoose';
-import { Schema } from 'src/shared/base.schema';
+import { BaseSchema, Schema } from 'src/shared/base.schema';
 import { DB_TABLES } from 'src/shared/constants';
 import { Document } from 'src/shared/types';
 import { Location, LocationSchema, RidesDocument } from './rides.schema';
@@ -31,8 +39,34 @@ export const InactiveTripStatuses = [
 ];
 export const PaymentMethods = Object.values(PaymentMethod);
 
+@Schema({
+  _id: false,
+  timestamps: false,
+  toJSON: {
+    virtuals: true,
+    transform(_doc: unknown, ret: Rating): void {
+      delete ret.deleted;
+    },
+  },
+})
+export class Rating extends BaseSchema {
+  @Prop()
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  @IsNotEmpty()
+  rating: number;
+
+  @Prop()
+  @IsString()
+  @IsOptional()
+  comment: string;
+}
+
+export const RatingSchema = SchemaFactory.createForClass(Rating);
+
 @Schema()
-export class Trip {
+export class Trip extends BaseSchema {
   @Prop({ required: true })
   amount: number;
 
@@ -71,6 +105,9 @@ export class Trip {
 
   @Prop({ type: SchemaTypes.Mixed })
   meta?: Record<string, unknown>;
+
+  @Prop({ type: RatingSchema })
+  rating: Rating;
 }
 
 export const TripSchema = SchemaFactory.createForClass(Trip);
