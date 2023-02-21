@@ -25,10 +25,11 @@ export class NotificationService {
 
     return Http.request({
       method: 'POST',
-      url: termii.url,
+      baseURL: termii.url,
+      url: '/api/sms/send',
       data: {
-        ...payload,
         from: termii.from,
+        ...payload,
         api_key: termii.key,
         channel: ['OTPAlert', 'N-Alert'].includes(payload.from)
           ? 'dnd'
