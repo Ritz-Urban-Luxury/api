@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { UserDocument } from 'src/database/schemas/user.schema';
+import { Util } from 'src/shared/util';
 import { UpdateUserDTO } from './dto/user.dto';
 
 @Injectable()
@@ -31,5 +32,22 @@ export class UserService {
       { $set: update },
       { new: true, upsert: false },
     );
+  }
+
+  async updatePreference(
+    user: UserDocument,
+    preferences: Record<string, unknown>,
+  ) {
+    if (!Util.isPriObj(preferences)) {
+      throw new BadRequestException('invalid payload');
+    }
+
+    const _user = await this.db.users.findOneAndUpdate(
+      { _id: user.id },
+      { $set: { preferences } },
+      { new: true, upsert: false },
+    );
+
+    return _user.preferences;
   }
 }

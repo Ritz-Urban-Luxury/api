@@ -26,4 +26,21 @@ export class UserController {
   getUser(@CurrentUser() user: UserDocument) {
     return Response.json('profile', user);
   }
+
+  @UseGuards(JwtGuard)
+  @Get('/preferences')
+  getPrefences(@CurrentUser() user: UserDocument) {
+    return Response.json('preferences', user.preferences || {});
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('/preferences')
+  async updatePrefences(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: Record<string, unknown>,
+  ) {
+    const preferences = await this.userService.updatePreference(user, payload);
+
+    return Response.json('preferences updated', preferences);
+  }
 }

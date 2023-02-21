@@ -8,6 +8,7 @@ import {
   IsString,
   IsUrl,
 } from 'class-validator';
+import { SchemaTypes } from 'mongoose';
 import { BaseSchema, Schema } from 'src/shared/base.schema';
 import { Document } from 'src/shared/types';
 
@@ -32,6 +33,7 @@ export type UserDocument = User &
       delete ret.password;
       delete ret.oAuthIdentifier;
       delete ret.oAuthProvider;
+      delete ret.preferences;
     },
   },
 })
@@ -75,6 +77,9 @@ export class User extends BaseSchema {
   @IsIn(OAuthProviders)
   @IsOptional()
   oAuthProvider?: OAuthProvider;
+
+  @Prop({ type: SchemaTypes.Mixed, default: {} })
+  preferences: Record<string, unknown>;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
