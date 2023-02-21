@@ -14,6 +14,7 @@ export enum TripStatus {
   Cancelled = 'Cancelled',
   Completed = 'Completed',
   DriverArrived = 'DriverArrived',
+  PaymentFailed = 'PaymentFailed',
 }
 
 export enum PaymentMethod {
@@ -23,6 +24,11 @@ export enum PaymentMethod {
 }
 
 export const TripStatuses = Object.values(TripStatus);
+export const InactiveTripStatuses = [
+  TripStatus.Cancelled,
+  TripStatus.Completed,
+  TripStatus.PaymentFailed,
+];
 export const PaymentMethods = Object.values(PaymentMethod);
 
 @Schema()
@@ -62,6 +68,9 @@ export class Trip {
 
   @Prop({ type: String, enum: PaymentMethods, required: true })
   paymentMethod: PaymentMethod;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  meta?: Record<string, unknown>;
 }
 
 export const TripSchema = SchemaFactory.createForClass(Trip);

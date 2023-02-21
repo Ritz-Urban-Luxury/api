@@ -10,7 +10,10 @@ import { AuthenticationService } from 'src/authentication';
 import { WSJwtGuard } from 'src/authentication/guards/ws-jwt.guard';
 import { DatabaseService } from 'src/database/database.service';
 import { RidesDocument } from 'src/database/schemas/rides.schema';
-import { TripStatus } from 'src/database/schemas/trips.schema';
+import {
+  InactiveTripStatuses,
+  TripStatus,
+} from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { Logger } from 'src/logger/logger.service';
 import { GeolocationService } from 'src/rides/geolocation.service';
@@ -73,7 +76,7 @@ export class WebsocketGateway {
     const trip = await this.db.trips
       .findOne({
         user: user.id,
-        status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+        status: { $nin: InactiveTripStatuses },
         deleted: { $ne: true },
       })
       .populate('ride');

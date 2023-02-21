@@ -2,14 +2,20 @@ import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import * as Crypto from 'crypto';
 import { DatabaseService } from 'src/database/database.service';
+import { CardDocument } from 'src/database/schemas/card.schema';
+import { UserDocument } from 'src/database/schemas/user.schema';
 import { Logger } from 'src/logger/logger.service';
+import { PaymentService } from 'src/payments/payment.service';
+import { PaymentProvider } from 'src/payments/types';
 import config from 'src/shared/config';
 import { Http } from 'src/shared/http';
 import { Util } from 'src/shared/util';
 import { WebhookPayload } from './types';
 
 @Injectable()
-export class MonnifyService {
+export class MonnifyService implements PaymentProvider {
+  private readonly name = 'Monnify';
+
   private readonly client: Http;
 
   private readonly webhookHandlers: Record<
@@ -21,12 +27,23 @@ export class MonnifyService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly logger: Logger,
     private readonly db: DatabaseService,
+    private readonly paymentService: PaymentService,
   ) {
     this.client = new Http({ baseURL: `${config().monnify.apiUrl}/api/v1` });
 
     this.webhookHandlers = {
       SUCCESSFUL_TRANSACTION: this.handleSuccessfulTransaction,
     };
+
+    this.paymentService.registerPaymentProvider(this.name, this);
+  }
+
+  chargeCard(_payload: {
+    user: UserDocument;
+    card: CardDocument;
+    amount: number;
+  }): Promise<unknown> {
+    throw new Error('Method not implemented.');
   }
 
   async getAccessToken() {

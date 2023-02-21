@@ -9,11 +9,13 @@ import { Cache } from 'cache-manager';
 import { DatabaseService } from 'src/database/database.service';
 import { RidesDocument, RideStatus } from 'src/database/schemas/rides.schema';
 import {
+  InactiveTripStatuses,
   PaymentMethod,
   TripDocument,
   TripStatus,
 } from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
+import { PaymentService } from 'src/payments/payment.service';
 import { WebsocketGateway } from 'src/websocket/websocket.gateway';
 import {
   AcceptRideDTO,
@@ -33,6 +35,7 @@ export class RidesService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly websocket: WebsocketGateway,
     private readonly db: DatabaseService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   async getAvailableRides(payload: GetRidesDTO) {
@@ -70,7 +73,7 @@ export class RidesService {
 
     return this.db.trips.findOne({
       user: user.id,
-      status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+      status: { $nin: InactiveTripStatuses },
       deleted: { $ne: true },
     });
   }
@@ -80,7 +83,7 @@ export class RidesService {
     const [ongoingTrip, ongoingRequest] = await Promise.all([
       this.db.trips.findOne({
         user: user.id,
-        status: { $nin: [TripStatus.Cancelled, TripStatus.Completed] },
+        status: { $nin: InactiveTripStatuses },
         deleted: { $ne: true },
       }),
       this.cache.get(`${user.id}`),
@@ -337,6 +340,9 @@ export class RidesService {
         case TripStatus.InProgress:
           trip = await this.startTrip(user, tripId);
           break;
+        case TripStatus.Completed:
+          trip = await this.endTrip(user, tripId);
+          break;
         default:
         // do nothing
       }
@@ -400,6 +406,52 @@ export class RidesService {
       'TripInProgress',
       trip,
     );
+
+    return trip;
+  }
+
+  async endTrip(driver: UserDocument, tripId: string) {
+    let trip = await this.db.findOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        status: TripStatus.InProgress,
+        driver: driver.id,
+      },
+      {
+        populate: { path: 'user' },
+        error: new NotFoundException('trip not found'),
+      },
+    );
+    const user = trip.user as UserDocument;
+    let status = TripStatus.Completed;
+    let paymentResponse: unknown;
+    let paymentError: string;
+
+    await this.paymentService
+      .chargeUser(user, {
+        amount: trip.amount,
+        method: trip.paymentMethod,
+      })
+      .then((response) => {
+        paymentResponse = response;
+      })
+      .catch((error) => {
+        paymentError = error.message;
+        status = TripStatus.PaymentFailed;
+      });
+
+    trip = await this.db.trips.findOneAndUpdate(
+      { _id: trip.id },
+      { $set: { status, meta: { paymentResponse, paymentError } } },
+      { new: true, upsert: false },
+    );
+
+    const event =
+      status === TripStatus.Completed ? 'TripEnded' : 'PaymentFailed';
+
+    this.websocket.emitToUser(user, event, trip);
+    this.websocket.emitToUser(driver, event, trip);
 
     return trip;
   }

@@ -13,6 +13,9 @@ export class Card extends BaseSchema {
 
   @Prop({ default: false })
   isDefault: boolean;
+
+  @Prop({ required: true })
+  provider: string;
 }
 
 export const CardSchema = SchemaFactory.createForClass(Card);
