@@ -10,7 +10,7 @@ import { WsException } from '@nestjs/websockets';
 import { compare, hash } from 'bcryptjs';
 import * as Crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
-import * as moment from 'moment';
+// import moment from 'moment';
 import { Socket } from 'socket.io';
 import { DatabaseService } from 'src/database/database.service';
 import { OAuthProvider, UserDocument } from 'src/database/schemas/user.schema';
@@ -26,6 +26,9 @@ import {
   RequestPhoneOTPDTO,
   SignupDTO,
 } from './authentication.dto';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const moment = require('moment');
 
 @Injectable()
 export class AuthenticationService {
