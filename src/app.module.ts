@@ -23,14 +23,14 @@ import config from './shared/config';
     LoggerModule,
     // AuthenticationModule,
     MongooseModule.forRoot(config().database.url, {
-      // connectionFactory(connection) {
-      //   connection.plugin(mongoosePaginate);
-      //   connection.plugin(mongooseDelete, {
-      //     overrideMethods: true,
-      //     deletedAt: true,
-      //   });
-      //   return connection;
-      // },
+      connectionFactory(connection) {
+        //   connection.plugin(mongoosePaginate);
+        //   connection.plugin(mongooseDelete, {
+        //     overrideMethods: true,
+        //     deletedAt: true,
+        //   });
+        return connection;
+      },
       useNewUrlParser: true,
       useUnifiedTopology: true,
     }),
