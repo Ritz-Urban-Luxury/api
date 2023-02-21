@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import * as redisStore from 'cache-manager-redis-store';
 import * as mongooseDelete from 'mongoose-delete';
+import * as mongoosePaginate from 'mongoose-paginate-v2';
 import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -23,6 +24,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     AuthenticationModule,
     MongooseModule.forRoot(config().database.url, {
       connectionFactory(connection) {
+        connection.plugin(mongoosePaginate);
         connection.plugin(mongooseDelete, {
           overrideMethods: true,
           deletedAt: true,

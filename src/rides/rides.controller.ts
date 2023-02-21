@@ -12,6 +12,7 @@ import {
 import { JwtGuard } from 'src/authentication/guards/jwt.guard';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
+import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import { Response } from 'src/shared/response';
 import {
   AcceptRideDTO,
@@ -41,6 +42,20 @@ export class RidesController {
     const quotes = await this.ridesService.getRideQuotes(payload);
 
     return Response.json('ride quotes', quotes);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('/trips')
+  async getTrips(
+    @CurrentUser() user: UserDocument,
+    @Query() payload: PaginationRequestDTO,
+  ) {
+    const { docs: data, ...meta } = await this.ridesService.getTripHistory(
+      user,
+      payload,
+    );
+
+    return Response.json('trips', data, meta);
   }
 
   @UseGuards(JwtGuard)

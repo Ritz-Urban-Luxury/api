@@ -16,6 +16,7 @@ import {
 } from 'src/database/schemas/trips.schema';
 import { UserDocument } from 'src/database/schemas/user.schema';
 import { PaymentService } from 'src/payments/payment.service';
+import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import { WebsocketGateway } from 'src/websocket/websocket.gateway';
 import {
   AcceptRideDTO,
@@ -454,5 +455,17 @@ export class RidesService {
     this.websocket.emitToUser(driver, event, trip);
 
     return trip;
+  }
+
+  async getTripHistory(user: UserDocument, payload: PaginationRequestDTO) {
+    const { page = 1, limit = 100 } = payload;
+
+    return this.db.trips.paginate(
+      {
+        user: user.id,
+        deleted: { $ne: true },
+      },
+      { page, limit },
+    );
   }
 }
