@@ -1,10 +1,10 @@
 // import { ConfigService } from '@nestjs/config';
-// import { NestFactory } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 // import { json, urlencoded } from 'express';
 // import helmet from 'helmet';
-// import { AppModule } from './app.module';
+import { AppModule } from './app.module';
 // import { Logger } from './logger/logger.service';
-// import cors from './shared/cors';
+import cors from './shared/cors';
 // import { AllExceptionsFilter } from './shared/filter/all-exception.filter';
 // import { ValidationFilter } from './shared/filter/validation.filter';
 // import { ValidationPipe } from './shared/pipes/validation.pipe';
@@ -31,11 +31,14 @@
 //   logger.log(`Running on port ${port}`);
 // }
 // bootstrap();
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    cors,
+    bodyParser: true,
+  });
+
   await app.listen(3000);
 }
 bootstrap();
