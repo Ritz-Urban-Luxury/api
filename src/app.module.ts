@@ -10,7 +10,7 @@ import { AppService } from './app.service';
 // import { AuthenticationModule } from './authentication';
 // import { DatabaseModule } from './database/database.module';
 // import { FileModule } from './file/file.module';
-// import { LoggerModule } from './logger/logger.module';
+import { LoggerModule } from './logger/logger.module';
 // import { PaymentModule } from './payments/payment.module';
 // import { RidesModule } from './rides/rides.module';
 import config from './shared/config';
@@ -20,7 +20,7 @@ import config from './shared/config';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [config] }),
-    //     LoggerModule,
+    LoggerModule,
     //     AuthenticationModule,
     //     MongooseModule.forRoot(config().database.url, {
     //       connectionFactory(connection) {

@@ -1,9 +1,9 @@
-// import { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 // import { json, urlencoded } from 'express';
 // import helmet from 'helmet';
 import { AppModule } from './app.module';
-// import { Logger } from './logger/logger.service';
+import { Logger } from './logger/logger.service';
 import cors from './shared/cors';
 // import { AllExceptionsFilter } from './shared/filter/all-exception.filter';
 // import { ValidationFilter } from './shared/filter/validation.filter';
@@ -17,7 +17,7 @@ import cors from './shared/cors';
 //   });
 //   const configService = app.get(ConfigService);
 //   const port = configService.get<string>('port');
-//   const logger = app.get(Logger);
+// const logger = app.get(Logger);
 
 //   app.useGlobalFilters(new AllExceptionsFilter(logger), new ValidationFilter());
 //   app.useGlobalPipes(new ValidationPipe());
@@ -38,7 +38,11 @@ async function bootstrap() {
     cors,
     bodyParser: true,
   });
+  const configService = app.get(ConfigService);
+  const port = configService.get<string>('port');
+  const logger = app.get(Logger);
 
-  await app.listen(3000);
+  await app.listen(port);
+  logger.log(`Running on port ${port}`);
 }
 bootstrap();
