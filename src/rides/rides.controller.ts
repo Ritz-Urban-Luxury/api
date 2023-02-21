@@ -9,11 +9,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { JwtGuard } from 'src/authentication/guards/jwt.guard';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
-import { PaginationRequestDTO } from 'src/shared/pagination.dto';
-import { Response } from 'src/shared/response';
+import { JwtGuard } from '../authentication/guards/jwt.guard';
+import { UserDocument } from '../database/schemas/user.schema';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
+import { PaginationRequestDTO } from '../shared/pagination.dto';
+import { Response } from '../shared/response';
 import {
   AcceptRideDTO,
   GetRideQuoteDTO,

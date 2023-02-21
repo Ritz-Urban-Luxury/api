@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import * as SendGrid from '@sendgrid/mail';
 import { configure, Environment } from 'nunjucks';
 import * as Path from 'path';
-import config from 'src/shared/config';
-import { Http } from 'src/shared/http';
+import config from '../shared/config';
+import { Http } from '../shared/http';
 import { EmailPayload, SMSPayload } from './types';
 
 @Injectable()

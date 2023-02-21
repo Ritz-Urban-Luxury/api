@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { NotificationModule } from 'src/notification';
-import config from 'src/shared/config';
+import { NotificationModule } from '../notification';
+import config from '../shared/config';
 import { AuthenticationController } from './authentication.controller';
 import { AuthenticationService } from './authentication.service';
 import { JwtStrategy } from './strategy/jwt.strategy';

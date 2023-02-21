@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { AuthenticationModule } from 'src/authentication';
+import { AuthenticationModule } from '../authentication';
 import { WebsocketGateway } from './websocket.gateway';
 
 @Global()

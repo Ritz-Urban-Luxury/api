@@ -1,15 +1,15 @@
 import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import * as Crypto from 'crypto';
-import { DatabaseService } from 'src/database/database.service';
-import { CardDocument } from 'src/database/schemas/card.schema';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { Logger } from 'src/logger/logger.service';
-import { PaymentService } from 'src/payments/payment.service';
-import { PaymentProvider } from 'src/payments/types';
-import config from 'src/shared/config';
-import { Http } from 'src/shared/http';
-import { Util } from 'src/shared/util';
+import { DatabaseService } from '../../../database/database.service';
+import { CardDocument } from '../../../database/schemas/card.schema';
+import { UserDocument } from '../../../database/schemas/user.schema';
+import { Logger } from '../../../logger/logger.service';
+import { PaymentService } from '../../payment.service';
+import { PaymentProvider } from '../../types';
+import config from '../../../shared/config';
+import { Http } from '../../../shared/http';
+import { Util } from '../../../shared/util';
 import { WebhookPayload } from './types';
 
 @Injectable()

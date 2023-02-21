@@ -8,10 +8,10 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { JwtGuard } from 'src/authentication/guards/jwt.guard';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
-import { Response } from 'src/shared/response';
+import { JwtGuard } from '../authentication/guards/jwt.guard';
+import { UserDocument } from '../database/schemas/user.schema';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
+import { Response } from '../shared/response';
 import { RequestReferenceDTO } from './dto/payment.dto';
 import { PaymentService } from './payment.service';
 import { MonnifyService } from './providers/monnify/monify.service';

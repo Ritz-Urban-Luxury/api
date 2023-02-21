@@ -6,20 +6,20 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { AuthenticationService } from 'src/authentication';
-import { WSJwtGuard } from 'src/authentication/guards/ws-jwt.guard';
-import { DatabaseService } from 'src/database/database.service';
-import { RidesDocument } from 'src/database/schemas/rides.schema';
+import { AuthenticationService } from '../authentication';
+import { WSJwtGuard } from '../authentication/guards/ws-jwt.guard';
+import { DatabaseService } from '../database/database.service';
+import { RidesDocument } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   TripStatus,
-} from 'src/database/schemas/trips.schema';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { Logger } from 'src/logger/logger.service';
-import { GeolocationService } from 'src/rides/geolocation.service';
-import { CurrentClientUser } from 'src/shared/decorators/current-client-user.decorator';
-import { WSValidationFilter } from 'src/shared/filter/ws-validation-filter';
-import { ValidationPipe } from 'src/shared/pipes/validation.pipe';
+} from '../database/schemas/trips.schema';
+import { UserDocument } from '../database/schemas/user.schema';
+import { Logger } from '../logger/logger.service';
+import { GeolocationService } from '../rides/geolocation.service';
+import { CurrentClientUser } from '../shared/decorators/current-client-user.decorator';
+import { WSValidationFilter } from '../shared/filter/ws-validation-filter';
+import { ValidationPipe } from '../shared/pipes/validation.pipe';
 import { RideLocationDTO } from './dto/websocket.dto';
 import { WebsocketEvent, WebsocketEventType } from './types';
 

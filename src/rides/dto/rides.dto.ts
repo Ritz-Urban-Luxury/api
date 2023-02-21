@@ -8,13 +8,13 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { RideType, RideTypes } from 'src/database/schemas/rides.schema';
+import { RideType, RideTypes } from '../../database/schemas/rides.schema';
 import {
   PaymentMethod,
   PaymentMethods,
   Rating,
   TripStatus,
-} from 'src/database/schemas/trips.schema';
+} from '../../database/schemas/trips.schema';
 
 export class GetRidesDTO {
   @IsLatitude()

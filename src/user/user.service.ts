@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { DatabaseService } from 'src/database/database.service';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { Util } from 'src/shared/util';
+import { DatabaseService } from '../database/database.service';
+import { UserDocument } from '../database/schemas/user.schema';
+import { Util } from '../shared/util';
 import { UpdateUserDTO } from './dto/user.dto';
 
 @Injectable()

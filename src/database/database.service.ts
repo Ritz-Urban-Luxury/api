@@ -6,9 +6,9 @@ import {
   QueryOptions,
   UpdateQuery,
 } from 'mongoose';
-import { BalanceDocument } from 'src/authentication/balance.schema';
-import { DB_TABLES } from 'src/shared/constants';
-import { Document, Model } from 'src/shared/types';
+import { BalanceDocument } from '../authentication/balance.schema';
+import { DB_TABLES } from '../shared/constants';
+import { Document, Model } from '../shared/types';
 import { AuthTokenDocument } from './schemas/auth-tokens.schema';
 import { CardDocument } from './schemas/card.schema';
 import { MessageDocument } from './schemas/messages.schema';

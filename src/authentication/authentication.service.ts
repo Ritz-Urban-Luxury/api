@@ -12,14 +12,14 @@ import * as Crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 // import moment from 'moment';
 import { Socket } from 'socket.io';
-import { DatabaseService } from 'src/database/database.service';
-import { OAuthProvider, UserDocument } from 'src/database/schemas/user.schema';
-import { FileService } from 'src/file/file.service';
-import { Logger } from 'src/logger/logger.service';
-import { NotificationService } from 'src/notification';
-import config from 'src/shared/config';
-import { Http } from 'src/shared/http';
-import { Util } from 'src/shared/util';
+import { DatabaseService } from '../database/database.service';
+import { OAuthProvider, UserDocument } from '../database/schemas/user.schema';
+import { FileService } from '../file/file.service';
+import { Logger } from '../logger/logger.service';
+import { NotificationService } from '../notification';
+import config from '../shared/config';
+import { Http } from '../shared/http';
+import { Util } from '../shared/util';
 import {
   LoginDTO,
   RequestEmailOTPDTO,

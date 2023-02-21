@@ -9,8 +9,8 @@ import {
   IsUrl,
 } from 'class-validator';
 import { SchemaTypes } from 'mongoose';
-import { BaseSchema, Schema } from 'src/shared/base.schema';
-import { Document } from 'src/shared/types';
+import { BaseSchema, Schema } from '../../shared/base.schema';
+import { Document } from '../../shared/types';
 
 export enum OAuthProvider {
   Google = 'Google',

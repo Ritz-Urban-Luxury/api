@@ -5,7 +5,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Socket } from 'socket.io';
-import { WebsocketEvent } from 'src/websocket/types';
+import { WebsocketEvent } from '../../websocket/types';
 
 import { ValidationException } from '../exceptions/validation.exception';
 

@@ -7,7 +7,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { Response } from 'src/shared/response';
+import { Response } from '../shared/response';
 import {
   LoginDTO,
   RequestEmailOTPDTO,

@@ -1,5 +1,5 @@
-import { CardDocument } from 'src/database/schemas/card.schema';
-import { UserDocument } from 'src/database/schemas/user.schema';
+import { CardDocument } from '../database/schemas/card.schema';
+import { UserDocument } from '../database/schemas/user.schema';
 
 export interface PaymentProvider {
   chargeCard(payload: {

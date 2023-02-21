@@ -1,9 +1,9 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
 import { SchemaTypes } from 'mongoose';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { BaseSchema, Schema } from 'src/shared/base.schema';
-import { DB_TABLES } from 'src/shared/constants';
-import { Document } from 'src/shared/types';
+import { UserDocument } from '../database/schemas/user.schema';
+import { BaseSchema, Schema } from '../shared/base.schema';
+import { DB_TABLES } from '../shared/constants';
+import { Document } from '../shared/types';
 
 export type BalanceDocument = Balance & Document;
 

@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { BalanceSchema } from 'src/authentication/balance.schema';
-import { DB_TABLES } from 'src/shared/constants';
+import { BalanceSchema } from '../authentication/balance.schema';
+import { DB_TABLES } from '../shared/constants';
 import { DatabaseService } from './database.service';
 import { AuthTokenSchema } from './schemas/auth-tokens.schema';
 import { CardSchema } from './schemas/card.schema';

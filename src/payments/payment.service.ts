@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from 'src/database/database.service';
-import { CardDocument } from 'src/database/schemas/card.schema';
-import { PaymentMethod } from 'src/database/schemas/trips.schema';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { Util } from 'src/shared/util';
+import { DatabaseService } from '../database/database.service';
+import { CardDocument } from '../database/schemas/card.schema';
+import { PaymentMethod } from '../database/schemas/trips.schema';
+import { UserDocument } from '../database/schemas/user.schema';
+import { Util } from '../shared/util';
 import { RequestReferenceDTO } from './dto/payment.dto';
 import { PaymentProvider } from './types';
 

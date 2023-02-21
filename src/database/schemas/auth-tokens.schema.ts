@@ -1,8 +1,8 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
 // import * as moment from 'moment';
 import { SchemaTypes } from 'mongoose';
-import { BaseSchema, Schema } from 'src/shared/base.schema';
-import { Document } from 'src/shared/types';
+import { BaseSchema, Schema } from '../../shared/base.schema';
+import { Document } from '../../shared/types';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const moment = require('moment');

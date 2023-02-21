@@ -6,19 +6,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { DatabaseService } from 'src/database/database.service';
-import { RidesDocument, RideStatus } from 'src/database/schemas/rides.schema';
+import { DatabaseService } from '../database/database.service';
+import { RidesDocument, RideStatus } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   PaymentMethod,
   Rating,
   TripDocument,
   TripStatus,
-} from 'src/database/schemas/trips.schema';
-import { UserDocument } from 'src/database/schemas/user.schema';
-import { PaymentService } from 'src/payments/payment.service';
-import { PaginationRequestDTO } from 'src/shared/pagination.dto';
-import { WebsocketGateway } from 'src/websocket/websocket.gateway';
+} from '../database/schemas/trips.schema';
+import { UserDocument } from '../database/schemas/user.schema';
+import { PaymentService } from '../payments/payment.service';
+import { PaginationRequestDTO } from '../shared/pagination.dto';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
 import {
   AcceptRideDTO,
   GetRideQuoteDTO,

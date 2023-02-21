@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as cloudinary from 'cloudinary';
-import config from 'src/shared/config';
-import { Http } from 'src/shared/http';
+import config from '../shared/config';
+import { Http } from '../shared/http';
 import { FileUploadDTO } from './dto/file-upload.dto';
 
 @Injectable()
