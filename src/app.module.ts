@@ -7,7 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 // import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-// import { AuthenticationModule } from './authentication';
+import { AuthenticationModule } from './authentication';
 // import { DatabaseModule } from './database/database.module';
 // import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
@@ -21,7 +21,7 @@ import config from './shared/config';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [config] }),
     LoggerModule,
-    //     AuthenticationModule,
+    AuthenticationModule,
     //     MongooseModule.forRoot(config().database.url, {
     //       connectionFactory(connection) {
     //         connection.plugin(mongoosePaginate);
