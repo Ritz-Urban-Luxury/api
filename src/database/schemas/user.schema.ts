@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
 } from 'class-validator';
 import { BaseSchema, Schema } from 'src/shared/base.schema';
 import { Document } from 'src/shared/types';
@@ -61,7 +62,7 @@ export class User extends BaseSchema {
   password?: string;
 
   @Prop()
-  @IsString()
+  @IsUrl()
   @IsOptional()
   avatar?: string;
 
