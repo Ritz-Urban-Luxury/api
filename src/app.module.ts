@@ -13,6 +13,7 @@ import { LoggerModule } from './logger/logger.module';
 import { PaymentModule } from './payments/payment.module';
 import { RidesModule } from './rides/rides.module';
 import config from './shared/config';
+import { UserModule } from './user/user.module';
 import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
@@ -53,6 +54,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     RidesModule,
     WebsocketModule,
     DatabaseModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],
