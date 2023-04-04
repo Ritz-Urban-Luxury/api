@@ -1,9 +1,9 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
 import { SchemaTypes } from 'mongoose';
-import { UserDocument } from '../../database/schemas/user.schema';
 import { BaseSchema, Schema } from '../../shared/base.schema';
 import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
+import { UserDocument } from './user.schema';
 
 export type RidesDocument = Ride & Document;
 
@@ -17,6 +17,7 @@ export enum RideStatus {
 export enum RideType {
   Classic = 'Classic',
   Luxury = 'Luxury',
+  Hire = 'Hire',
 }
 
 export const RideStatuses = Object.values(RideStatus);

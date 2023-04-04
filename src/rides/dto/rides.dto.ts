@@ -24,6 +24,10 @@ export class GetRidesDTO {
   @IsLongitude()
   @IsNotEmpty()
   lon: number;
+
+  @IsIn(RideTypes, { each: true })
+  @IsOptional()
+  type?: RideType;
 }
 
 export class GetRideQuoteDTO {

@@ -6,8 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
+import { FilterQuery } from 'mongoose';
 import { DatabaseService } from '../database/database.service';
-import { RidesDocument, RideStatus } from '../database/schemas/rides.schema';
+import {
+  RidesDocument,
+  RideStatus,
+  RideType,
+} from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   PaymentMethod,
@@ -41,17 +46,24 @@ export class RidesService {
   ) {}
 
   async getAvailableRides(payload: GetRidesDTO) {
-    const { lat, lon } = payload;
-
-    return this.db.rides.find({
+    const { lat, lon, type } = payload;
+    const query: FilterQuery<RidesDocument> = {
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+      type: { $ne: RideType.Hire },
       location: {
         $near: {
           $geometry: { type: 'Point', coordinates: [lat, lon] },
           $maxDistance: 5000,
         },
       },
-    });
+    };
+    if (type) {
+      query.type = { $in: Array.isArray(type) ? type : [type] };
+    }
+
+    return this.db.rides
+      .find(query)
+      .populate({ path: 'driver', select: 'avatar' });
   }
 
   async getRideQuotes(payload: GetRideQuoteDTO) {
