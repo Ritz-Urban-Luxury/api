@@ -142,4 +142,12 @@ export class RidesController {
 
     return Response.json('trip updated', trip);
   }
+
+  @UseGuards(JwtGuard)
+  @Get(':id')
+  async getSingleRide(@Param('id') rideId: string) {
+    const ride = await this.ridesService.getSingleRide(rideId);
+
+    return Response.json('ride found successfully', ride);
+  }
 }

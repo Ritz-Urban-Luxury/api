@@ -501,4 +501,37 @@ export class RidesService {
       },
     );
   }
+
+  async getSingleRide(rideId: string) {
+    const ride = await this.db.rides
+      .findOne({
+        _id: rideId,
+        deleted: { $ne: true },
+      })
+      .populate('driver');
+
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+
+    const trips = await this.db.trips
+      .find({
+        driver: (ride.driver as UserDocument).id,
+        deleted: { $ne: true },
+        rating: { $exists: true },
+      })
+      .select('rating');
+
+    let totalReviews = 0;
+    let sum = 0;
+
+    trips.forEach((trip) => {
+      if (trip.rating) {
+        sum += Math.abs(trip.rating.rating);
+        totalReviews += 1;
+      }
+    });
+
+    return { ride, totalReviews, rating: sum / Math.min(1, totalReviews) };
+  }
 }
