@@ -68,6 +68,9 @@ export class User extends BaseSchema {
   @IsOptional()
   avatar?: string;
 
+  @Prop([{ type: String }])
+  languages: string[];
+
   @Prop()
   @IsString()
   @IsOptional()

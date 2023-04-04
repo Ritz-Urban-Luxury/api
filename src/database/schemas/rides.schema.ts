@@ -63,6 +63,12 @@ export class Ride extends BaseSchema {
   @Prop({ type: String, enum: RideType, required: true })
   type: RideType;
 
+  @Prop([{ type: String }])
+  images: string[];
+
+  @Prop({ type: SchemaTypes.Mixed })
+  specs: Record<string, unknown>;
+
   @Prop({ type: String, enum: RideStatuses, default: RideStatus.Offline })
   status?: RideStatus;
 }
