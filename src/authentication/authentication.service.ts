@@ -114,6 +114,15 @@ export class AuthenticationService {
     }
   }
 
+  async checkOtp(otp: string) {
+    const token = await this.db.authTokens.findOne({
+      $or: [{ 'meta.type': 'email-otp' }, { 'meta.type': 'phone-otp' }],
+      token: otp,
+    });
+
+    return !!token;
+  }
+
   async validateGoogleIdToken(idToken: string, platform: string) {
     try {
       const { google } = config();

@@ -16,7 +16,7 @@ export class Response {
     code?: string,
   ): ResponseObject<T> {
     const responseObj: ResponseObject<T> = { message };
-    if (data) {
+    if (data !== undefined) {
       responseObj.data = data;
     }
     if (meta) {

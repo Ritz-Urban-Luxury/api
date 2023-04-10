@@ -56,4 +56,11 @@ export class AuthenticationController {
 
     return Response.json('login successful', loggedInUser);
   }
+
+  @Get('check-otp/:otp')
+  async checkOtp(@Param('otp') otp: string) {
+    const res = await this.authenticationService.checkOtp(otp);
+
+    return Response.json('otp check successfull', res);
+  }
 }

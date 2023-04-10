@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as SendGrid from '@sendgrid/mail';
 import { configure, Environment } from 'nunjucks';
 import * as Path from 'path';
+import { Logger } from 'src/logger/logger.service';
 import config from '../shared/config';
 import { Http } from '../shared/http';
 import { EmailPayload, SMSPayload } from './types';
@@ -12,6 +13,8 @@ export class NotificationService {
 
   private client: typeof SendGrid = SendGrid;
 
+  constructor(private readonly logger: Logger) {}
+
   onModuleInit(): void {
     const { sendGrid } = config();
     const path = Path.join(__dirname, '../../', 'templates');
@@ -21,7 +24,25 @@ export class NotificationService {
   }
 
   sendSMS(payload: SMSPayload) {
-    const { termii } = config();
+    this.logger.log('new sms', payload);
+    const { termii, turnOffSMS } = config();
+
+    const channel = ['OTPAlert', 'N-Alert'].includes(payload.from)
+      ? 'dnd'
+      : 'generic';
+
+    if (channel === 'dnd' || turnOffSMS) {
+      return Http.request({
+        method: 'POST',
+        baseURL: 'https://api.bento.africa',
+        url: '/notifications/sms',
+        data: {
+          sender: 'N-Alert',
+          recipient: payload.to,
+          message: payload.sms,
+        },
+      });
+    }
 
     return Http.request({
       method: 'POST',
@@ -31,9 +52,7 @@ export class NotificationService {
         from: termii.from,
         ...payload,
         api_key: termii.key,
-        channel: ['OTPAlert', 'N-Alert'].includes(payload.from)
-          ? 'dnd'
-          : 'generic',
+        channel,
         type: 'plain',
       },
     });
