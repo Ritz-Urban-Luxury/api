@@ -161,7 +161,7 @@ export class AuthenticationService {
 
   async validateFacebookAccessToken(accessToken: string) {
     try {
-      const { appId } = config().facebook;
+      const { accessToken: appAccesstoken } = config().facebook;
       const { data: response } = await Http.request<{
         data: Record<string, string>;
       }>({
@@ -169,9 +169,12 @@ export class AuthenticationService {
         url: 'https://graph.facebook.com/v9.0/debug_token',
         params: {
           input_token: accessToken,
-          access_token: appId,
+          access_token: appAccesstoken,
         },
       });
+
+      this.logger.log('facebook authentication response', response);
+
       if (!response?.data?.is_valid) {
         throw new Error('invalid response');
       }
@@ -181,19 +184,21 @@ export class AuthenticationService {
         url: `https://graph.facebook.com/v9.0/${response.data.user_id}`,
         params: {
           fields: 'name,email,picture',
-          access_token: appId,
+          access_token: accessToken,
         },
       });
 
       const [firstName, ...lastName] =
         (response0.name as string)?.split(' ') ?? [];
 
+      this.logger.log('facebook authentication data', response0);
+
       return {
         firstName,
         lastName: lastName.join(' '),
         email: response0.email as string,
         avatar: (response0.picture as { data: { url: string } }).data.url,
-        oAuthIdentifier: accessToken,
+        oAuthIdentifier: response0.id,
       };
     } catch (error) {
       this.logger.error(

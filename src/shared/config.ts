@@ -23,6 +23,7 @@ const config = () => ({
   },
   facebook: {
     appId: process.env.FACEBOOK_APP_ID,
+    accessToken: process.env.FACEBOOK_ACCESS_TOKEN,
   },
   jwt: {
     secret: process.env.JWT_SECRET,
