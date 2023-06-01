@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsIn,
   IsLatitude,
   IsLongitude,
@@ -36,6 +37,20 @@ export class GetRideQuoteDTO {
   distance: number;
 }
 
+export class RideStopsDTO {
+  @IsLatitude()
+  @IsNotEmpty()
+  toLat: number;
+
+  @IsLongitude()
+  @IsNotEmpty()
+  toLon: number;
+
+  @IsString()
+  @IsNotEmpty()
+  toAddress: string;
+}
+
 export class RequestRideDTO {
   @IsIn(RideTypes)
   @IsNotEmpty()
@@ -68,6 +83,11 @@ export class RequestRideDTO {
   @IsIn(PaymentMethods)
   @IsNotEmpty()
   paymentMethod: PaymentMethod;
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  stops: RideStopsDTO[];
 }
 
 export class AcceptRideDTO {
@@ -90,4 +110,8 @@ export class UpdateTripDTO {
   @ValidateNested()
   @IsOptional()
   rating?: Rating;
+
+  @ValidateNested({ each: true })
+  @IsOptional()
+  stops?: RideStopsDTO[];
 }

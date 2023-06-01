@@ -19,6 +19,7 @@ import {
   Rating,
   TripDocument,
   TripStatus,
+  TripStopStatus,
 } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 import { PaymentService } from '../payments/payment.service';
@@ -30,6 +31,7 @@ import {
   GetRidesDTO,
   MessageDTO,
   RequestRideDTO,
+  RideStopsDTO,
   UpdateTripDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
@@ -253,6 +255,10 @@ export class RidesService {
             user,
             ride,
             driver,
+            stops: payload.stops.map((stop) => ({
+              to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
+              toAddress: stop.toAddress,
+            })),
           }),
           this.cache.del(connectionId),
           this.cache.del(`${user.id}`),
@@ -364,6 +370,10 @@ export class RidesService {
     if (payload.rating) {
       trip = await this.rateTrip(user, tripId, payload.rating);
     }
+    if (payload.stops) {
+      trip = await this.updateTripStops(user, tripId, payload.stops);
+    }
+
     if (!trip) {
       throw new BadRequestException('trip not updated');
     }
@@ -436,18 +446,27 @@ export class RidesService {
         driver: driver.id,
       },
       {
-        populate: { path: 'user' },
+        populate: [{ path: 'user' }, { path: 'ride', select: 'type' }],
         error: new NotFoundException('trip not found'),
       },
     );
     const user = trip.user as UserDocument;
+    const ride = trip.ride as RidesDocument;
     let status = TripStatus.Completed;
     let paymentResponse: unknown;
     let paymentError: string;
+    let { distance } = trip;
+
+    trip.tripStops.forEach((stop) => {
+      distance += stop?.distance || 0;
+    });
+
+    const quotes = await this.getRideQuotes({ distance });
+    const amount = quotes[ride.type.toLocaleLowerCase()] || 0;
 
     await this.paymentService
       .chargeUser(user, {
-        amount: trip.amount,
+        amount,
         method: trip.paymentMethod,
       })
       .then((response) => {
@@ -460,7 +479,12 @@ export class RidesService {
 
     trip = await this.db.trips.findOneAndUpdate(
       { _id: trip.id },
-      { $set: { status, meta: { paymentResponse, paymentError } } },
+      {
+        $set: {
+          status,
+          meta: { paymentResponse, paymentError, amount, distance },
+        },
+      },
       { new: true, upsert: false },
     );
 
@@ -495,6 +519,47 @@ export class RidesService {
         rating: { $exists: false },
       },
       { $set: { rating } },
+      {
+        error: new NotFoundException('trip not found'),
+        options: { upsert: false, new: true },
+      },
+    );
+  }
+
+  async updateTripStops(
+    user: UserDocument,
+    tripId: string,
+    stops: RideStopsDTO[],
+  ) {
+    const trip = await this.db.findOrFail<TripDocument>(this.db.trips, {
+      _id: tripId,
+      user: user.id,
+      status: {
+        $in: [
+          TripStatus.InProgress,
+          TripStatus.Started,
+          TripStatus.DriverArrived,
+        ],
+      },
+    });
+
+    const completedTripStops = trip.tripStops.filter(
+      (stop) => stop.status === TripStopStatus.Completed,
+    );
+
+    return this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      { _id: trip.id },
+      {
+        $set: {
+          tripStops: completedTripStops.concat(
+            stops.map((stop) => ({
+              to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
+              toAddress: stop.toAddress,
+            })),
+          ),
+        },
+      },
       {
         error: new NotFoundException('trip not found'),
         options: { upsert: false, new: true },

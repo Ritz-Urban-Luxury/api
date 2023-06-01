@@ -29,3 +29,18 @@ export const Schema = (options?: SchemaOptions) =>
       ...options,
     }),
   );
+
+export const EmbeddedSchema = (options?: SchemaOptions) =>
+  applyDecorators(
+    Schema({
+      _id: false,
+      timestamps: false,
+      toJSON: {
+        virtuals: true,
+        transform(_doc: unknown, ret): void {
+          delete ret.deleted;
+        },
+      },
+      ...options,
+    }),
+  );

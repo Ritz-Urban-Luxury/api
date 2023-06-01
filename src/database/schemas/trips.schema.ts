@@ -8,7 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { SchemaTypes } from 'mongoose';
-import { BaseSchema, Schema } from '../../shared/base.schema';
+import { BaseSchema, EmbeddedSchema, Schema } from '../../shared/base.schema';
 import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
 import { Location, LocationSchema, RidesDocument } from './rides.schema';
@@ -25,6 +25,12 @@ export enum TripStatus {
   PaymentFailed = 'PaymentFailed',
 }
 
+export enum TripStopStatus {
+  Pending = 'Pending',
+  InProgress = 'InProgress',
+  Completed = 'Completed',
+}
+
 export enum PaymentMethod {
   Cash = 'Cash',
   RULBalance = 'RULBalance',
@@ -32,6 +38,7 @@ export enum PaymentMethod {
 }
 
 export const TripStatuses = Object.values(TripStatus);
+export const TripStopStatuses = Object.values(TripStopStatus);
 export const InactiveTripStatuses = [
   TripStatus.Cancelled,
   TripStatus.Completed,
@@ -39,17 +46,8 @@ export const InactiveTripStatuses = [
 ];
 export const PaymentMethods = Object.values(PaymentMethod);
 
-@Schema({
-  _id: false,
-  timestamps: false,
-  toJSON: {
-    virtuals: true,
-    transform(_doc: unknown, ret: Rating): void {
-      delete ret.deleted;
-    },
-  },
-})
-export class Rating extends BaseSchema {
+@EmbeddedSchema()
+export class Rating {
   @Prop()
   @IsNumber()
   @Min(1)
@@ -64,6 +62,27 @@ export class Rating extends BaseSchema {
 }
 
 export const RatingSchema = SchemaFactory.createForClass(Rating);
+
+@EmbeddedSchema()
+export class TripStop {
+  @Prop({ type: LocationSchema, required: true })
+  to: Location;
+
+  @Prop({ required: true })
+  toAddress: string;
+
+  @Prop({
+    type: String,
+    enum: TripStopStatuses,
+    default: TripStopStatus.Pending,
+  })
+  status?: TripStopStatus;
+
+  @Prop()
+  distance?: number;
+}
+
+export const TripStopSchema = SchemaFactory.createForClass(TripStop);
 
 @Schema()
 export class Trip extends BaseSchema {
@@ -81,6 +100,9 @@ export class Trip extends BaseSchema {
 
   @Prop({ required: true })
   toAddress: string;
+
+  @Prop([{ type: TripStopSchema }])
+  tripStops: TripStop[];
 
   @Prop({ required: true })
   distance: number;
@@ -108,6 +130,16 @@ export class Trip extends BaseSchema {
 
   @Prop({ type: RatingSchema })
   rating: Rating;
+
+  nextDestination?: { to: Location; toAddress: string };
 }
 
 export const TripSchema = SchemaFactory.createForClass(Trip);
+
+TripSchema.virtual('nextDestination').get(function getNextDestination() {
+  const res = this.tripStops.find(
+    (stop) => stop.status === TripStopStatus.InProgress,
+  ) || { to: this.to, toAddress: this.toAddress };
+
+  return res;
+});

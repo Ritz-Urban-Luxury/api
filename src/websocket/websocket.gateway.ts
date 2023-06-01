@@ -91,7 +91,7 @@ export class WebsocketGateway {
       const coordinates =
         trip.status === TripStatus.Started
           ? trip.from.coordinates
-          : trip.to.coordinates;
+          : trip.nextDestination?.to?.coordinates;
       const eta = await GeolocationService.getETA(
         ride.location.coordinates,
         coordinates,
