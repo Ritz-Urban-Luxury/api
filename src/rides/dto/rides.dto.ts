@@ -29,6 +29,10 @@ export class GetRidesDTO {
   @IsIn(RideTypes, { each: true })
   @IsOptional()
   type?: RideType;
+
+  @IsNumber()
+  @IsOptional()
+  radius?: number;
 }
 
 export class GetRideQuoteDTO {

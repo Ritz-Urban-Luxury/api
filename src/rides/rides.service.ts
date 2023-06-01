@@ -55,7 +55,7 @@ export class RidesService {
       location: {
         $near: {
           $geometry: { type: 'Point', coordinates: [lat, lon] },
-          $maxDistance: 5000,
+          $maxDistance: payload.radius || 5000,
         },
       },
     };
