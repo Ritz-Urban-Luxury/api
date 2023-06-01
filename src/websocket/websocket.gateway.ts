@@ -6,10 +6,11 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { Util } from 'src/shared/util';
 import { AuthenticationService } from '../authentication';
 import { WSJwtGuard } from '../authentication/guards/ws-jwt.guard';
 import { DatabaseService } from '../database/database.service';
-import { RidesDocument } from '../database/schemas/rides.schema';
+import { RideStatus, RidesDocument } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   TripStatus,
@@ -20,7 +21,7 @@ import { GeolocationService } from '../rides/geolocation.service';
 import { CurrentClientUser } from '../shared/decorators/current-client-user.decorator';
 import { WSValidationFilter } from '../shared/filter/ws-validation-filter';
 import { ValidationPipe } from '../shared/pipes/validation.pipe';
-import { RideLocationDTO } from './dto/websocket.dto';
+import { DriverETADTO, RideLocationDTO } from './dto/websocket.dto';
 import { WebsocketEvent, WebsocketEventType } from './types';
 
 @WebSocketGateway({ transports: ['websocket'] })
@@ -57,6 +58,31 @@ export class WebsocketGateway {
     this.server.to(user.id).emit(event, data);
   }
 
+  async updateRideStatus(
+    user: UserDocument,
+    ride: string,
+    coords: [number, number],
+  ) {
+    const trip = await this.db.trips.findOne({
+      driver: user.id,
+      ride,
+      status: TripStatus.InProgress,
+    });
+    if (trip) {
+      const distance = Util.calculateDistance(
+        coords,
+        trip.nextDestination.to.coordinates,
+      );
+
+      if (distance <= 1000) {
+        await this.db.rides.updateOne(
+          { _id: ride },
+          { $set: { status: RideStatus.FinishingTrip } },
+        );
+      }
+    }
+  }
+
   // Subscriptions
   @UseGuards(WSJwtGuard)
   @SubscribeMessage(WebsocketEvent.RideLocation)
@@ -64,6 +90,8 @@ export class WebsocketGateway {
     @CurrentClientUser() user: UserDocument,
     @MessageBody() payload: RideLocationDTO,
   ) {
+    this.updateRideStatus(user, payload.ride, [payload.lat, payload.lon]);
+
     await this.db.rides.updateOne(
       { _id: payload.ride, driver: user.id },
       {
@@ -77,7 +105,10 @@ export class WebsocketGateway {
 
   @UseGuards(WSJwtGuard)
   @SubscribeMessage(WebsocketEvent.RideETA)
-  async getDriverETA(@CurrentClientUser() user: UserDocument) {
+  async getDriverETA(
+    @CurrentClientUser() user: UserDocument,
+    @MessageBody() payload: DriverETADTO,
+  ) {
     const trip = await this.db.trips
       .findOne({
         user: user.id,
@@ -92,10 +123,12 @@ export class WebsocketGateway {
         trip.status === TripStatus.Started
           ? trip.from.coordinates
           : trip.nextDestination?.to?.coordinates;
-      const eta = await GeolocationService.getETA(
-        ride.location.coordinates,
-        coordinates,
-      );
+      const eta = payload.ignoreETA
+        ? null
+        : await GeolocationService.getETA(
+            ride.location.coordinates,
+            coordinates,
+          );
 
       this.emitToUser(user, WebsocketEvent.RideETA, {
         eta,

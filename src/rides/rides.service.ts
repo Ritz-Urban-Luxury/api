@@ -260,6 +260,10 @@ export class RidesService {
               toAddress: stop.toAddress,
             })),
           }),
+          this.db.rides.updateOne(
+            { _id: driver.id },
+            { status: RideStatus.Busy },
+          ),
           this.cache.del(connectionId),
           this.cache.del(`${user.id}`),
         ]);
@@ -296,6 +300,11 @@ export class RidesService {
         options: { upsert: false, new: true },
         error: new NotFoundException('trip not found'),
       },
+    );
+
+    await this.db.rides.updateOne(
+      { _id: trip.ride },
+      { $set: { status: RideStatus.Online } },
     );
 
     this.websocket.emitToUser(trip.user as UserDocument, 'TripCancelled', trip);
@@ -477,16 +486,22 @@ export class RidesService {
         status = TripStatus.PaymentFailed;
       });
 
-    trip = await this.db.trips.findOneAndUpdate(
-      { _id: trip.id },
-      {
-        $set: {
-          status,
-          meta: { paymentResponse, paymentError, amount, distance },
+    [trip] = await Promise.all([
+      this.db.trips.findOneAndUpdate(
+        { _id: trip.id },
+        {
+          $set: {
+            status,
+            meta: { paymentResponse, paymentError, amount, distance },
+          },
         },
-      },
-      { new: true, upsert: false },
-    );
+        { new: true, upsert: false },
+      ),
+      this.db.rides.updateOne(
+        { _id: trip.ride },
+        { $set: { status: RideStatus.Online } },
+      ),
+    ]);
 
     const event =
       status === TripStatus.Completed ? 'TripEnded' : 'PaymentFailed';

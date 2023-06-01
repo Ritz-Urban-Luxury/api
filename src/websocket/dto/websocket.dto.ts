@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsLatitude,
   IsLongitude,
   IsMongoId,
@@ -27,4 +28,10 @@ export class RideLocationDTO {
   @Min(0)
   @IsOptional()
   heading?: number;
+}
+
+export class DriverETADTO {
+  @IsBoolean()
+  @IsOptional()
+  ignoreETA?: boolean;
 }
