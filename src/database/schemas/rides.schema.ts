@@ -46,6 +46,9 @@ export class Ride extends BaseSchema {
   model: string;
 
   @Prop({ required: true })
+  brand: string;
+
+  @Prop({ required: true })
   color: string;
 
   @Prop({ required: true })

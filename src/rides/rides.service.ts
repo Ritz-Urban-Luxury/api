@@ -614,4 +614,65 @@ export class RidesService {
 
     return { ride, totalReviews, rating: sum / Math.min(1, totalReviews) };
   }
+
+  async getCarBrands(payload: PaginationRequestDTO) {
+    const { page = 1, limit = 100 } = payload;
+    const $skip = (page - 1) * limit;
+    const all = [
+      {
+        $match: {
+          deleted: { $ne: true },
+          status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+          type: RideType.Hire,
+        },
+      },
+      {
+        $project: {
+          brand: '$brand',
+          createdAt: 1,
+        },
+      },
+      {
+        $group: {
+          _id: '$brand',
+          brand: { $first: '$brand' },
+          count: { $sum: 1 },
+          createdAt: { $last: '$createdAt' },
+        },
+      },
+    ];
+
+    const [data, totalBrands] = await Promise.all([
+      this.db.rides.aggregate([
+        ...all,
+        { $sort: { createdAt: -1 } },
+        { $skip },
+        { $limit: limit },
+      ]),
+      this.db.rides.aggregate([...all]),
+    ]);
+
+    const totalDocs = totalBrands.length;
+    const totalPages = Math.round(totalDocs / limit);
+    const pagingCounter = $skip + 1;
+    const hasPrevPage = page > 1 && page < totalPages;
+    const hasNextPage = page < totalPages;
+    const prevPage = hasPrevPage ? page - 1 : null;
+    const nextPage = hasNextPage ? page + 1 : null;
+
+    return {
+      data,
+      meta: {
+        totalDocs,
+        totalPages,
+        pagingCounter,
+        hasPrevPage,
+        hasNextPage,
+        prevPage,
+        nextPage,
+        limit,
+        page,
+      },
+    };
+  }
 }

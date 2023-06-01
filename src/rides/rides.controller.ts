@@ -37,6 +37,14 @@ export class RidesController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('brands')
+  async getCarBrands(@Query() payload: PaginationRequestDTO) {
+    const { data, meta } = await this.getCarBrands(payload);
+
+    return Response.json('car brands', data, meta);
+  }
+
+  @UseGuards(JwtGuard)
   @Get('quotes')
   async getRideQuote(@Query() payload: GetRideQuoteDTO) {
     const quotes = await this.ridesService.getRideQuotes(payload);
