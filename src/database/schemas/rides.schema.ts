@@ -39,6 +39,9 @@ export class Location extends BaseSchema {
 
   @Prop([{ type: Number, maxlength: 2 }])
   coordinates: [number, number];
+
+  @Prop()
+  heading?: number;
 }
 
 export const LocationSchema = SchemaFactory.createForClass(Location);

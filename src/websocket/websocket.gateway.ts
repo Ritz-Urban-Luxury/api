@@ -66,7 +66,12 @@ export class WebsocketGateway {
   ) {
     await this.db.rides.updateOne(
       { _id: payload.ride, driver: user.id },
-      { $set: { 'location.coordinates': [payload.lat, payload.lon] } },
+      {
+        $set: {
+          'location.coordinates': [payload.lat, payload.lon],
+          'location.heading': payload.heading,
+        },
+      },
     );
   }
 
@@ -92,7 +97,10 @@ export class WebsocketGateway {
         coordinates,
       );
 
-      this.emitToUser(user, WebsocketEvent.RideETA, { eta });
+      this.emitToUser(user, WebsocketEvent.RideETA, {
+        eta,
+        location: ride.location,
+      });
     }
   }
 }

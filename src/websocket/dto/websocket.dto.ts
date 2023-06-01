@@ -3,6 +3,10 @@ import {
   IsLongitude,
   IsMongoId,
   IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class RideLocationDTO {
@@ -17,4 +21,10 @@ export class RideLocationDTO {
   @IsMongoId()
   @IsNotEmpty()
   ride: string;
+
+  @IsNumber()
+  @Max(360)
+  @Min(0)
+  @IsOptional()
+  heading?: number;
 }

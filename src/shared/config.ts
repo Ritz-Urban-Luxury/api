@@ -20,6 +20,8 @@ const config = () => ({
     IOSOAuthClientID: process.env.GOOGLE_IOS_OAUTH_CLIENT_ID,
     webOAuthClientID: process.env.GOOGLE_WEB_OAUTH_CLIENT_ID,
     androidOAuthClientID: process.env.GOOGLE_ANDROID_OAUTH_CLIENT_ID,
+    mapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+    mapsApiUrl: process.env.GOOGLE_MAPS_API,
   },
   facebook: {
     appId: process.env.FACEBOOK_APP_ID,
