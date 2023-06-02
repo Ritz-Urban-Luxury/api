@@ -1,14 +1,20 @@
 import {
   IsArray,
+  IsDate,
   IsIn,
   IsLatitude,
   IsLongitude,
+  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
+import {
+  RentalBillingType,
+  RentalBillingTypes,
+} from 'src/database/schemas/rentals.schema';
 import { RideType, RideTypes } from '../../database/schemas/rides.schema';
 import {
   PaymentMethod,
@@ -118,4 +124,26 @@ export class UpdateTripDTO {
   @ValidateNested({ each: true })
   @IsOptional()
   stops?: RideStopsDTO[];
+}
+
+export class HireRideDTO {
+  @IsMongoId()
+  @IsNotEmpty()
+  ride: string;
+
+  @IsIn(RentalBillingTypes)
+  @IsNotEmpty()
+  billingType: RentalBillingType;
+
+  @IsDate()
+  @IsOptional()
+  checkInAt?: Date;
+
+  @IsDate()
+  @IsOptional()
+  checkOutAt?: Date;
+
+  @IsIn(PaymentMethods)
+  @IsNotEmpty()
+  paymentMethod: PaymentMethod;
 }

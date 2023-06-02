@@ -9,6 +9,7 @@ import { MessageSchema } from './schemas/messages.schema';
 import { RideSchema } from './schemas/rides.schema';
 import { TripSchema } from './schemas/trips.schema';
 import { UserSchema } from './schemas/user.schema';
+import { RentalSchema } from './schemas/rentals.schema';
 
 @Global()
 @Module({
@@ -21,6 +22,7 @@ import { UserSchema } from './schemas/user.schema';
       { name: DB_TABLES.BALANCES, schema: BalanceSchema },
       { name: DB_TABLES.MESSAGES, schema: MessageSchema },
       { name: DB_TABLES.CARDS, schema: CardSchema },
+      { name: DB_TABLES.RENTALS, schema: RentalSchema },
     ]),
   ],
   providers: [DatabaseService],

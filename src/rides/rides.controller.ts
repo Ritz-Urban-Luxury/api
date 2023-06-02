@@ -18,6 +18,7 @@ import {
   AcceptRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
+  HireRideDTO,
   MessageDTO,
   RequestRideDTO,
   UpdateTripDTO,
@@ -149,6 +150,25 @@ export class RidesController {
     const trip = await this.ridesService.updateTrip(user, tripId, payload);
 
     return Response.json('trip updated', trip);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('rentals')
+  async hireARide(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: HireRideDTO,
+  ) {
+    const rental = await this.ridesService.hireARide(user, payload);
+
+    return Response.json('car rented', rental);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('rentals/ongoing')
+  async getOngoingRental(@CurrentUser() user: UserDocument) {
+    const ongoingRental = await this.ridesService.getOngoingRental(user, {});
+
+    return Response.json('ongoing trip', ongoingRental);
   }
 
   @UseGuards(JwtGuard)

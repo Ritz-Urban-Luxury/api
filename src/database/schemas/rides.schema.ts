@@ -68,6 +68,18 @@ export class Ride extends BaseSchema {
 
   @Prop({ type: String, enum: RideStatuses, default: RideStatus.Offline })
   status?: RideStatus;
+
+  @Prop({ default: 0 })
+  hourlyRate: number;
+
+  @Prop({ default: 0 })
+  dailyRate: number;
+
+  @Prop({ default: 0 })
+  insuranceFee: number;
+
+  @Prop({ default: 0 })
+  cautionDeposit: number;
 }
 
 export const RideSchema = SchemaFactory.createForClass(Ride);

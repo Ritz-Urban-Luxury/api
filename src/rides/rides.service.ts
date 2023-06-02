@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { FilterQuery } from 'mongoose';
+import {
+  RentalBillingType,
+  RentalDocument,
+  RentalStatus,
+} from 'src/database/schemas/rentals.schema';
 import { DatabaseService } from '../database/database.service';
 import {
   RidesDocument,
@@ -29,6 +34,7 @@ import {
   AcceptRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
+  HireRideDTO,
   MessageDTO,
   RequestRideDTO,
   RideStopsDTO,
@@ -38,7 +44,7 @@ import { GeolocationService } from './geolocation.service';
 
 @Injectable()
 export class RidesService {
-  private readonly WAIT_TIME = 10 * 1000;
+  private readonly WAIT_TIME = 20 * 1000;
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
@@ -255,13 +261,13 @@ export class RidesService {
             user,
             ride,
             driver,
-            stops: payload.stops.map((stop) => ({
+            stops: (payload.stops || []).map((stop) => ({
               to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
               toAddress: stop.toAddress,
             })),
           }),
           this.db.rides.updateOne(
-            { _id: driver.id },
+            { _id: ride.id },
             { status: RideStatus.Busy },
           ),
           this.cache.del(connectionId),
@@ -674,5 +680,86 @@ export class RidesService {
         page,
       },
     };
+  }
+
+  async getOngoingRental(
+    user: UserDocument,
+    payload: Pick<HireRideDTO, 'checkInAt' | 'checkOutAt'>,
+  ) {
+    const { checkInAt, checkOutAt } = payload;
+
+    return this.db.rentals.findOne({
+      user: user.id,
+      status: {
+        $in: [
+          RentalStatus.Pending,
+          RentalStatus.Accepted,
+          RentalStatus.InProgress,
+        ],
+      },
+      $or: [
+        { checkInAt: { $lte: checkInAt }, checkOutAt: { $gte: checkInAt } },
+        { checkInAt: { $lte: checkOutAt }, checkOutAt: { $gte: checkOutAt } },
+        { billingType: RentalBillingType.Daily },
+      ],
+    });
+  }
+
+  async hireARide(user: UserDocument, payload: HireRideDTO) {
+    const { ride: rideId, checkInAt, checkOutAt, billingType } = payload;
+    const ongoingRental = await this.getOngoingRental(user, payload);
+    if (ongoingRental) {
+      return ongoingRental;
+    }
+
+    const ride = await this.db.rides.findOne({
+      _id: rideId,
+      status: { $nin: [RideStatus.Busy, RideStatus.Offline] },
+    });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+
+    const isDailyBilling = billingType === RentalBillingType.Daily;
+
+    if (isDailyBilling && (!checkInAt || !checkOutAt)) {
+      throw new BadRequestException(
+        'Provide check in and out dates for daily rentals',
+      );
+    }
+
+    const query: FilterQuery<RentalDocument> = {
+      ride: ride.id,
+      status: { $nin: [RentalStatus.Cancelled, RentalStatus.Completed] },
+    };
+    if (checkInAt && checkOutAt) {
+      query.$or = [
+        { checkInAt: { $lte: checkInAt }, checkOutAt: { $gte: checkInAt } },
+        { checkInAt: { $lte: checkOutAt }, checkOutAt: { $gte: checkOutAt } },
+      ];
+    }
+
+    const rideRented = await this.db.rentals.exists(query);
+    if (rideRented) {
+      throw new BadRequestException(
+        'Ride is unavailable for selected check in and out period',
+      );
+    }
+
+    const price = isDailyBilling ? ride.dailyRate : ride.hourlyRate;
+
+    const paymentResponse = await this.paymentService.chargeUser(user, {
+      amount: price,
+      method: payload.paymentMethod,
+    });
+
+    return this.db.rentals.create({
+      ...payload,
+      ride,
+      user: user.id,
+      driver: ride.driver,
+      price,
+      meta: { paymentResponse },
+    });
   }
 }
