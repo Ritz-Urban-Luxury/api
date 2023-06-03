@@ -4,7 +4,10 @@ import { Http } from 'src/shared/http';
 
 export class GeolocationService {
   static async getDistance(from: [number, number], to: [number, number]) {
-    return 3000;
+    if (config().turnOffGeolaction) {
+      return 3000;
+    }
+
     const { mapsApiKey, mapsApiUrl } = config().google;
 
     return Http.request({
@@ -37,7 +40,10 @@ export class GeolocationService {
   }
 
   static async getETA(from: [number, number], to: [number, number]) {
-    return 5;
+    if (config().turnOffGeolaction) {
+      return 5;
+    }
+
     const { mapsApiKey, mapsApiUrl } = config().google;
 
     return Http.request({

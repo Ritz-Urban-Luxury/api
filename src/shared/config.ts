@@ -49,7 +49,9 @@ const config = () => ({
     contractCode: process.env.MONNIFY_CONTRACT_CODE,
     apiUrl: process.env.MONNIFY_API_URL,
   },
-  turnOffSMS: process.env.TURN_OFF_SMS === 'true',
+  turnOffSMS: process.env.TURN_OFF_SMS?.toLocaleLowerCase() === 'true',
+  turnOffGeolaction:
+    process.env.TURN_OFF_GEOLOCATOIN?.toLocaleLowerCase() === 'true',
 });
 
 export type Configuration = ReturnType<typeof config>;
