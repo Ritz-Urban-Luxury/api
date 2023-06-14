@@ -1,13 +1,5 @@
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
 import { compare, hash } from 'bcryptjs';
-import {
-  IsEmail,
-  IsIn,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUrl,
-} from 'class-validator';
 import { SchemaTypes } from 'mongoose';
 import { BaseSchema, Schema } from '../../shared/base.schema';
 import { Document } from '../../shared/types';
@@ -38,47 +30,34 @@ export type UserDocument = User &
   },
 })
 export class User extends BaseSchema {
-  @IsString()
-  @IsNotEmpty()
   @Prop({ required: true })
   firstName: string;
 
-  @IsString()
-  @IsNotEmpty()
   @Prop({ required: true })
   lastName: string;
 
-  @IsString()
-  @IsOptional()
   @Prop()
   phoneNumber?: string;
 
-  @IsEmail()
-  @IsOptional()
   @Prop()
   email: string;
 
-  @IsString()
-  @IsOptional()
   @Prop({ required: true })
   password?: string;
 
   @Prop()
-  @IsUrl()
-  @IsOptional()
   avatar?: string;
+
+  @Prop()
+  license?: string;
 
   @Prop([{ type: String }])
   languages: string[];
 
   @Prop()
-  @IsString()
-  @IsOptional()
   oAuthIdentifier?: string;
 
   @Prop({ type: String, enum: OAuthProviders })
-  @IsIn(OAuthProviders)
-  @IsOptional()
   oAuthProvider?: OAuthProvider;
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
@@ -89,6 +68,12 @@ export class User extends BaseSchema {
 
   @Prop()
   vehiclesInFleet?: string;
+
+  @Prop()
+  licenseNumber?: string;
+
+  @Prop()
+  licenseExpiry?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

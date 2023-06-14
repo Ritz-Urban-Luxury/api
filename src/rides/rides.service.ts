@@ -32,12 +32,14 @@ import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import {
   AcceptRideDTO,
+  CreateRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
   HireRideDTO,
   MessageDTO,
   RequestRideDTO,
   RideStopsDTO,
+  UpdateRideDTO,
   UpdateTripDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
@@ -761,5 +763,30 @@ export class RidesService {
       price,
       meta: { paymentResponse },
     });
+  }
+
+  async createRide(user: UserDocument, payload: CreateRideDTO) {
+    return this.db.rides.findOneAndUpdate(
+      { driver: user.id, registration: payload.registration },
+      { ...payload, driver: user.id },
+      { new: true, upsert: true },
+    );
+  }
+
+  async updateRide(user: UserDocument, rideId: string, payload: UpdateRideDTO) {
+    const ride = await this.db.rides.findOne({
+      _id: rideId,
+      deleted: { $ne: true },
+      driver: user.id,
+    });
+    if (!ride) {
+      throw new BadRequestException('Ride not found');
+    }
+
+    return this.db.rides.findOneAndUpdate(
+      { _id: ride.id },
+      { $set: payload },
+      { new: true },
+    );
   }
 }

@@ -16,11 +16,13 @@ import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { Response } from '../shared/response';
 import {
   AcceptRideDTO,
+  CreateRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
   HireRideDTO,
   MessageDTO,
   RequestRideDTO,
+  UpdateRideDTO,
   UpdateTripDTO,
 } from './dto/rides.dto';
 import { RidesService } from './rides.service';
@@ -35,6 +37,29 @@ export class RidesController {
     const rides = await this.ridesService.getAvailableRides(payload);
 
     return Response.json('available rides', rides);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post()
+  async createRide(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: CreateRideDTO,
+  ) {
+    const ride = await this.ridesService.createRide(user, payload);
+
+    return Response.json('Ride created', ride);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put(':rideId')
+  async updateRide(
+    @CurrentUser() user: UserDocument,
+    @Param('rideId') rideid: string,
+    @Body() payload: UpdateRideDTO,
+  ) {
+    const ride = await this.ridesService.updateRide(user, rideid, payload);
+
+    return Response.json('Ride updated', ride);
   }
 
   @UseGuards(JwtGuard)

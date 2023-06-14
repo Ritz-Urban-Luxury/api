@@ -12,6 +12,7 @@ export enum RideStatus {
   Offline = 'Offline',
   Online = 'Online',
   FinishingTrip = 'FinishingTrip',
+  Pending = 'Pending',
 }
 
 export enum RideType {
@@ -66,7 +67,7 @@ export class Ride extends BaseSchema {
   @Prop({ type: SchemaTypes.Mixed })
   specs: Record<string, unknown>;
 
-  @Prop({ type: String, enum: RideStatuses, default: RideStatus.Offline })
+  @Prop({ type: String, enum: RideStatuses, default: RideStatus.Pending })
   status?: RideStatus;
 
   @Prop({ default: 0 })

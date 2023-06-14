@@ -147,3 +147,31 @@ export class HireRideDTO {
   @IsNotEmpty()
   paymentMethod: PaymentMethod;
 }
+
+export class CreateRideDTO {
+  @IsString()
+  @IsNotEmpty()
+  model: string;
+
+  @IsString()
+  @IsNotEmpty()
+  brand: string;
+
+  @IsString()
+  @IsNotEmpty()
+  registration: string;
+
+  @IsString()
+  @IsNotEmpty()
+  color: string;
+
+  @IsString({ each: true })
+  @IsOptional()
+  images?: string[];
+}
+
+export class UpdateRideDTO {
+  @IsString({ each: true })
+  @IsOptional()
+  images?: string[];
+}

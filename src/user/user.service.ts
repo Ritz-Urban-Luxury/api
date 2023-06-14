@@ -25,6 +25,12 @@ export class UserService {
       }
     }
 
+    ['licenseNumber', 'license', 'licenseExpiry'].forEach((key) => {
+      if (user[key]) {
+        delete update[key];
+      }
+    });
+
     update.email = update.email?.toLowerCase();
 
     return this.db.users.findOneAndUpdate(
