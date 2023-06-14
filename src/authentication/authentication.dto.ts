@@ -72,10 +72,18 @@ export class RequestEmailOTPDTO {
 
 export class LoginDTO {
   @IsPhoneNumber('NG')
-  @IsNotEmpty()
-  phoneNumber: string;
+  @IsOptional()
+  phoneNumber?: string;
 
   @IsString()
-  @IsNotEmpty()
-  otp: string;
+  @IsOptional()
+  otp?: string;
+
+  @IsString()
+  @IsOptional()
+  identifier?: string;
+
+  @IsString()
+  @IsOptional()
+  password?: string;
 }

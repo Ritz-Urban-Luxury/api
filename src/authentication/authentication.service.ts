@@ -364,25 +364,50 @@ export class AuthenticationService {
   }
 
   async login(payload: LoginDTO) {
-    const { phoneNumber, otp } = payload;
-    const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
-    const [user, otpDoc] = await Promise.all([
-      this.db.users.findOne({ phoneNumber: _phoneNumber }),
-      this.getPhoneOtpOrFail(phoneNumber, otp),
-    ]);
-    if (!user) {
-      throw new UnauthorizedException('invalid credentials');
+    const { phoneNumber, otp, identifier, password } = payload;
+    if (phoneNumber && otp) {
+      const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
+      const [user, otpDoc] = await Promise.all([
+        this.db.users.findOne({ phoneNumber: _phoneNumber }),
+        this.getPhoneOtpOrFail(phoneNumber, otp),
+      ]);
+      if (user) {
+        const [authUser] = await Promise.all([
+          this.authorizeUser(user),
+          this.db.authTokens.updateOne(
+            { _id: otpDoc.id },
+            { $set: { isUsed: true } },
+          ),
+        ]);
+
+        return authUser;
+      }
     }
 
-    const [authUser] = await Promise.all([
-      this.authorizeUser(user),
-      this.db.authTokens.updateOne(
-        { _id: otpDoc.id },
-        { $set: { isUsed: true } },
-      ),
-    ]);
+    if (identifier && password) {
+      let _phoneNumber = 'invalid';
+      try {
+        _phoneNumber = Util.formatPhoneNumber(identifier, 'NG');
+      } catch (error) {
+        // phone invalid
+      }
 
-    return authUser;
+      const user = await this.db.users.findOne({
+        $or: [
+          { phoneNumber: _phoneNumber },
+          { email: identifier?.toLowerCase() },
+        ],
+        isVerified: true,
+      });
+      if (user) {
+        const passwordIsValid = await user.isValidPassword(password);
+        if (passwordIsValid) {
+          return this.authorizeUser(user);
+        }
+      }
+    }
+
+    throw new UnauthorizedException('invalid credentials');
   }
 
   async authorizeUser(user: UserDocument) {

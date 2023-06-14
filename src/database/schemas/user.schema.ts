@@ -74,6 +74,9 @@ export class User extends BaseSchema {
 
   @Prop()
   licenseExpiry?: Date;
+
+  @Prop()
+  isVerified?: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
