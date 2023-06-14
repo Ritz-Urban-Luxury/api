@@ -44,6 +44,14 @@ export class SignupDTO {
   @IsOptional()
   @IsIn(['android', 'web', 'ios'])
   platform?: string;
+
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @IsString()
+  @IsOptional()
+  vehiclesInFleet?: string;
 }
 
 export class RequestPhoneOTPDTO {

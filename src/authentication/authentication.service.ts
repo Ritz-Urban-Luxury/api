@@ -292,20 +292,31 @@ export class AuthenticationService {
     if (phoneNumber) {
       const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
 
-      const otp = await this.getPhoneOtpOrFail(phoneNumber, phoneOtp);
+      if (phoneOtp) {
+        const otp = await this.getPhoneOtpOrFail(phoneNumber, phoneOtp);
 
-      const [existingUser] = await Promise.all([
-        this.db.users.findOne({
-          phoneNumber: otp.meta?.phoneNumber as string,
+        const [existingUser] = await Promise.all([
+          this.db.users.findOne({
+            phoneNumber: otp.meta?.phoneNumber as string,
+            deleted: { $ne: true },
+          }),
+          this.db.authTokens.updateOne(
+            { _id: otp.id },
+            { $set: { isUsed: true } },
+          ),
+        ]);
+        if (existingUser) {
+          return this.authorizeUser(existingUser);
+        }
+      } else {
+        const existingUser = await this.db.users.findOne({
+          phoneNumber: _phoneNumber,
           deleted: { $ne: true },
-        }),
-        this.db.authTokens.updateOne(
-          { _id: otp.id },
-          { $set: { isUsed: true } },
-        ),
-      ]);
-      if (existingUser) {
-        return this.authorizeUser(existingUser);
+        });
+
+        if (existingUser) {
+          throw new ConflictException('user with phone number already exists');
+        }
       }
 
       userObj.phoneNumber = _phoneNumber;
@@ -321,22 +332,24 @@ export class AuthenticationService {
         throw new ConflictException('user with email already exists');
       }
 
-      const otp = await this.db.authTokens.findOne({
-        'meta.email': _email,
-        'meta.type': 'email-otp',
-        token: emailOtp,
-        deleted: { $ne: true },
-        isUsed: { $ne: true },
-        expiresAt: { $gte: new Date() },
-      });
-      if (!otp) {
-        throw new BadRequestException('invalid email validation token');
-      }
+      if (emailOtp) {
+        const otp = await this.db.authTokens.findOne({
+          'meta.email': _email,
+          'meta.type': 'email-otp',
+          token: emailOtp,
+          deleted: { $ne: true },
+          isUsed: { $ne: true },
+          expiresAt: { $gte: new Date() },
+        });
+        if (!otp) {
+          throw new BadRequestException('invalid email validation token');
+        }
 
-      await this.db.authTokens.updateOne(
-        { _id: otp.id },
-        { $set: { isUsed: true } },
-      );
+        await this.db.authTokens.updateOne(
+          { _id: otp.id },
+          { $set: { isUsed: true } },
+        );
+      }
 
       userObj.email = _email;
     }

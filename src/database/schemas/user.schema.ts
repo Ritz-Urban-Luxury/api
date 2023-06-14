@@ -83,6 +83,12 @@ export class User extends BaseSchema {
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   preferences: Record<string, unknown>;
+
+  @Prop()
+  city?: string;
+
+  @Prop()
+  vehiclesInFleet?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
