@@ -40,29 +40,6 @@ export class RidesController {
   }
 
   @UseGuards(JwtGuard)
-  @Post()
-  async createRide(
-    @CurrentUser() user: UserDocument,
-    @Body() payload: CreateRideDTO,
-  ) {
-    const ride = await this.ridesService.createRide(user, payload);
-
-    return Response.json('Ride created', ride);
-  }
-
-  @UseGuards(JwtGuard)
-  @Put(':rideId')
-  async updateRide(
-    @CurrentUser() user: UserDocument,
-    @Param('rideId') rideid: string,
-    @Body() payload: UpdateRideDTO,
-  ) {
-    const ride = await this.ridesService.updateRide(user, rideid, payload);
-
-    return Response.json('Ride updated', ride);
-  }
-
-  @UseGuards(JwtGuard)
   @Get('brands')
   async getCarBrands(@Query() payload: PaginationRequestDTO) {
     const { data, meta } = await this.getCarBrands(payload);
@@ -202,5 +179,28 @@ export class RidesController {
     const ride = await this.ridesService.getSingleRide(rideId);
 
     return Response.json('ride found successfully', ride);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post()
+  async createRide(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: CreateRideDTO,
+  ) {
+    const ride = await this.ridesService.createRide(user, payload);
+
+    return Response.json('Ride created', ride);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put(':rideId')
+  async updateRide(
+    @CurrentUser() user: UserDocument,
+    @Param('rideId') rideid: string,
+    @Body() payload: UpdateRideDTO,
+  ) {
+    const ride = await this.ridesService.updateRide(user, rideid, payload);
+
+    return Response.json('Ride updated', ride);
   }
 }
