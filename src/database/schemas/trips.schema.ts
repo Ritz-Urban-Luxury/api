@@ -113,6 +113,9 @@ export class Trip extends BaseSchema {
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS, required: true })
   driver: UserDocument | string;
 
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  cancelledBy: UserDocument | string;
+
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.RIDES, required: true })
   ride: RidesDocument | string;
 

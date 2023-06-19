@@ -302,7 +302,13 @@ export class RidesService {
         status: { $in: [TripStatus.Started, TripStatus.DriverArrived] },
         $or: [{ user: user.id }, { driver: user.id }],
       },
-      { $set: { status: TripStatus.Cancelled, cancellationReason: reason } },
+      {
+        $set: {
+          status: TripStatus.Cancelled,
+          cancellationReason: reason,
+          cancelledBy: user.id,
+        },
+      },
       {
         populate: { path: 'user driver' },
         options: { upsert: false, new: true },
