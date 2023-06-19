@@ -90,17 +90,21 @@ export class WebsocketGateway {
     @CurrentClientUser() user: UserDocument,
     @MessageBody() payload: RideLocationDTO,
   ) {
-    this.updateRideStatus(user, payload.ride, [payload.lat, payload.lon]);
-
-    await this.db.rides.updateOne(
-      { _id: payload.ride, driver: user.id },
+    const ride = await this.db.rides.findOneAndUpdate(
+      { driver: user.id },
       {
         $set: {
-          'location.coordinates': [payload.lat, payload.lon],
-          'location.heading': payload.heading,
+          location: {
+            coordinates: [payload.lat, payload.lon],
+            heading: payload.heading,
+            type: 'Point',
+          },
         },
       },
+      { new: true },
     );
+
+    this.updateRideStatus(user, ride.id, [payload.lat, payload.lon]);
   }
 
   @UseGuards(WSJwtGuard)

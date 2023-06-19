@@ -30,10 +30,10 @@ export type UserDocument = User &
   },
 })
 export class User extends BaseSchema {
-  @Prop({ required: true })
+  @Prop()
   firstName: string;
 
-  @Prop({ required: true })
+  @Prop()
   lastName: string;
 
   @Prop()

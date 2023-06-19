@@ -1,4 +1,10 @@
-import { IsDate, IsEmail, IsOptional, IsString, IsUrl } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUrl,
+} from 'class-validator';
 
 export class UpdateUserDTO {
   @IsString()
@@ -29,7 +35,7 @@ export class UpdateUserDTO {
   @IsOptional()
   licenseNumber?: string;
 
-  @IsDate()
+  @IsDateString()
   @IsOptional()
   licenseExpiry?: string;
 }

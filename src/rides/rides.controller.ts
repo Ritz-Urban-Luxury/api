@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { UseVerifiedDriver } from 'src/shared/decorators/use-verified-driver.decorator';
 import { JwtGuard } from '../authentication/guards/jwt.guard';
 import { UserDocument } from '../database/schemas/user.schema';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
@@ -190,6 +191,14 @@ export class RidesController {
     const ride = await this.ridesService.createRide(user, payload);
 
     return Response.json('Ride created', ride);
+  }
+
+  @UseVerifiedDriver()
+  @Put('toggle-ride')
+  async toggleRideStatus(@CurrentUser() user: UserDocument) {
+    const ride = await this.ridesService.toggleRideStatus(user);
+
+    return Response.json('ride status toggled', ride);
   }
 
   @UseGuards(JwtGuard)

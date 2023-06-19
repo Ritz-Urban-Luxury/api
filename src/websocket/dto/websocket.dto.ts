@@ -2,7 +2,6 @@ import {
   IsBoolean,
   IsLatitude,
   IsLongitude,
-  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -18,10 +17,6 @@ export class RideLocationDTO {
   @IsLongitude()
   @IsNotEmpty()
   lon: number;
-
-  @IsMongoId()
-  @IsNotEmpty()
-  ride: string;
 
   @IsNumber()
   @Max(360)

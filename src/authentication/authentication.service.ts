@@ -295,28 +295,19 @@ export class AuthenticationService {
       if (phoneOtp) {
         const otp = await this.getPhoneOtpOrFail(phoneNumber, phoneOtp);
 
-        const [existingUser] = await Promise.all([
-          this.db.users.findOne({
-            phoneNumber: otp.meta?.phoneNumber as string,
-            deleted: { $ne: true },
-          }),
-          this.db.authTokens.updateOne(
-            { _id: otp.id },
-            { $set: { isUsed: true } },
-          ),
-        ]);
-        if (existingUser) {
-          return this.authorizeUser(existingUser);
-        }
-      } else {
-        const existingUser = await this.db.users.findOne({
-          phoneNumber: _phoneNumber,
-          deleted: { $ne: true },
-        });
+        await this.db.authTokens.updateOne(
+          { _id: otp.id },
+          { $set: { isUsed: true } },
+        );
+      }
 
-        if (existingUser) {
-          throw new ConflictException('user with phone number already exists');
-        }
+      const existingUser = await this.db.users.findOne({
+        phoneNumber: _phoneNumber,
+        deleted: { $ne: true },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('user with phone number already exists');
       }
 
       userObj.phoneNumber = _phoneNumber;

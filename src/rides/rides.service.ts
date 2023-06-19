@@ -767,7 +767,7 @@ export class RidesService {
 
   async createRide(user: UserDocument, payload: CreateRideDTO) {
     return this.db.rides.findOneAndUpdate(
-      { driver: user.id, registration: payload.registration },
+      { driver: user.id },
       { ...payload, driver: user.id },
       { new: true, upsert: true },
     );
@@ -786,6 +786,29 @@ export class RidesService {
     return this.db.rides.findOneAndUpdate(
       { _id: ride.id },
       { $set: payload },
+      { new: true },
+    );
+  }
+
+  async toggleRideStatus(user: UserDocument) {
+    const ride = await this.db.rides.findOne({
+      deleted: { $ne: true },
+      driver: user.id,
+    });
+    if (!ride) {
+      throw new BadRequestException('Ride not found');
+    }
+
+    return this.db.rides.findOneAndUpdate(
+      { _id: ride.id },
+      {
+        $set: {
+          status:
+            ride.status === RideStatus.Offline
+              ? RideStatus.Online
+              : RideStatus.Offline,
+        },
+      },
       { new: true },
     );
   }
