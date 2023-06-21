@@ -168,16 +168,17 @@ export class RidesService {
       throw new BadRequestException('All drivers are busy at this time');
     }
 
-    await this.cache.set(
-      trackingId,
-      true,
-      this.WAIT_TIME * available.length * 2,
-    );
-    await this.cache.set(
-      `${user.id}`,
-      trackingId,
-      this.WAIT_TIME * available.length * 2,
-    );
+    await Promise.all([
+      this.cache.set(trackingId, true, this.WAIT_TIME * available.length * 2),
+      this.cache.set(
+        `${user.id}`,
+        trackingId,
+        this.WAIT_TIME * available.length * 2,
+      ),
+    ]);
+    this.cache
+      .get(`${user.id}`)
+      .then((value) => console.log(user.id, 'user id tracking set to', value));
     this.connectToDriver(user, available, trackingId, {
       ...payload,
       amount,
@@ -190,7 +191,7 @@ export class RidesService {
   async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
     const { trackingId } = payload;
     const value = await this.cache.get<string>(`${user.id}`);
-    console.log({ value, trackingId });
+    console.log({ value, trackingId, userId: user.id });
     if (value !== trackingId) {
       throw new BadRequestException('invalid tracking id');
     }
