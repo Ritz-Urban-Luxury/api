@@ -176,9 +176,6 @@ export class RidesService {
         this.WAIT_TIME * available.length * 2,
       ),
     ]);
-    this.cache
-      .get(`${user.id}`)
-      .then((value) => console.log(user.id, 'user id tracking set to', value));
     this.connectToDriver(user, available, trackingId, {
       ...payload,
       amount,
@@ -191,7 +188,6 @@ export class RidesService {
   async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
     const { trackingId } = payload;
     const value = await this.cache.get<string>(`${user.id}`);
-    console.log({ value, trackingId, userId: user.id });
     if (value !== trackingId) {
       throw new BadRequestException('invalid tracking id');
     }
