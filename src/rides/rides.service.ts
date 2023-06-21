@@ -189,9 +189,9 @@ export class RidesService {
 
   async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
     const { trackingId } = payload;
-    const value = await this.cache.get<boolean>(trackingId);
-    console.log({ trackingId, value, payload });
-    if (typeof value !== 'boolean') {
+    const value = await this.cache.get<string>(`${user.id}`);
+    console.log({ value, trackingId });
+    if (value !== trackingId) {
       throw new BadRequestException('invalid tracking id');
     }
 
