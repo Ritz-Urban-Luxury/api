@@ -43,7 +43,7 @@ export class RidesController {
   @UseGuards(JwtGuard)
   @Get('brands')
   async getCarBrands(@Query() payload: PaginationRequestDTO) {
-    const { data, meta } = await this.getCarBrands(payload);
+    const { data, meta } = await this.ridesService.getCarBrands(payload);
 
     return Response.json('car brands', data, meta);
   }
