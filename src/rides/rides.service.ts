@@ -627,7 +627,7 @@ export class RidesService {
     return { ride, totalReviews, rating: sum / Math.min(1, totalReviews) };
   }
 
-  async getCarBrands(payload: PaginationRequestDTO) {
+  async getRentalCarBrands(payload: PaginationRequestDTO) {
     const { page = 1, limit = 100 } = payload;
     const $skip = (page - 1) * limit;
     const all = [
@@ -815,5 +815,9 @@ export class RidesService {
       },
       { new: true },
     );
+  }
+
+  async getCarBrands() {
+    return this.db.carBrands.find();
   }
 }

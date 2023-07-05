@@ -10,6 +10,7 @@ import { RideSchema } from './schemas/rides.schema';
 import { TripSchema } from './schemas/trips.schema';
 import { UserSchema } from './schemas/user.schema';
 import { RentalSchema } from './schemas/rentals.schema';
+import { CarBrandSchema } from './schemas/car-brands.schema';
 
 @Global()
 @Module({
@@ -23,6 +24,7 @@ import { RentalSchema } from './schemas/rentals.schema';
       { name: DB_TABLES.MESSAGES, schema: MessageSchema },
       { name: DB_TABLES.CARDS, schema: CardSchema },
       { name: DB_TABLES.RENTALS, schema: RentalSchema },
+      { name: DB_TABLES.CAR_BRANDS, schema: CarBrandSchema },
     ]),
   ],
   providers: [DatabaseService],

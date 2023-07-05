@@ -7,4 +7,5 @@ export const DB_TABLES = {
   MESSAGES: 'messages',
   CARDS: 'cards',
   RENTALS: 'rentals',
+  CAR_BRANDS: 'car_brands',
 };

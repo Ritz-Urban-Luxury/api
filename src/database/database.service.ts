@@ -16,6 +16,7 @@ import { RidesDocument } from './schemas/rides.schema';
 import { TripDocument } from './schemas/trips.schema';
 import { UserDocument } from './schemas/user.schema';
 import { RentalDocument } from './schemas/rentals.schema';
+import { CarBrandDocument } from './schemas/car-brands.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -36,6 +37,8 @@ export class DatabaseService {
     public readonly cards: Model<CardDocument>,
     @InjectModel(DB_TABLES.RENTALS)
     public readonly rentals: Model<RentalDocument>,
+    @InjectModel(DB_TABLES.CAR_BRANDS)
+    public readonly carBrands: Model<CarBrandDocument>,
   ) {}
 
   async findOrFail<
