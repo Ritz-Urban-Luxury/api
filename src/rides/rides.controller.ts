@@ -40,7 +40,6 @@ export class RidesController {
     return Response.json('available rides', rides);
   }
 
-  @UseGuards(JwtGuard)
   @Get('/brands')
   async getCarBrands() {
     const brands = await this.ridesService.getCarBrands();
