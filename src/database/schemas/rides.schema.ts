@@ -33,6 +33,9 @@ export class Location {
 
   @Prop()
   heading?: number;
+
+  @Prop()
+  address?: string;
 }
 
 export const LocationSchema = SchemaFactory.createForClass(Location);

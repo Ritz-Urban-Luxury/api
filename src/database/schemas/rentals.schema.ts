@@ -4,7 +4,7 @@ import { BaseSchema, Schema } from 'src/shared/base.schema';
 import { DB_TABLES } from 'src/shared/constants';
 import { Document } from 'src/shared/types';
 import { UserDocument } from './user.schema';
-import { RidesDocument } from './rides.schema';
+import { Location, LocationSchema, RidesDocument } from './rides.schema';
 import { PaymentMethod, PaymentMethods } from './trips.schema';
 
 export enum RentalBillingType {
@@ -57,6 +57,12 @@ export class Rental extends BaseSchema {
 
   @Prop({ type: SchemaTypes.Mixed })
   meta?: Record<string, unknown>;
+
+  @Prop({ type: LocationSchema, required: true })
+  from: Location;
+
+  @Prop({ type: LocationSchema, required: true })
+  to: Location;
 }
 
 export const RentalSchema = SchemaFactory.createForClass(Rental);

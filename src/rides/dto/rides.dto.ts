@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 import {
   IsArray,
   IsDate,
@@ -10,6 +11,11 @@ import {
   IsOptional,
   IsString,
   ValidateNested,
+  ValidationArguments,
+  ValidationOptions,
+  ValidatorConstraint,
+  registerDecorator,
+  isLatLong,
 } from 'class-validator';
 import {
   RentalBillingType,
@@ -22,6 +28,33 @@ import {
   Rating,
   TripStatus,
 } from '../../database/schemas/trips.schema';
+
+@ValidatorConstraint()
+class IsCoordinatesConstraint {
+  validate(value: [number, number]) {
+    if (!Array.isArray(value) || value.length !== 2) {
+      return false;
+    }
+
+    return isLatLong(value.join(','));
+  }
+
+  defaultMessage(validationArguments?: ValidationArguments) {
+    return `${validationArguments.property} must be a valid coordinate of format [lat, lon]`;
+  }
+}
+
+const IsCoordinates =
+  (validationOptions?: ValidationOptions) =>
+  (object: unknown, propertyName: string) => {
+    registerDecorator({
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: IsCoordinatesConstraint,
+    });
+  };
 
 export class GetRidesDTO {
   @IsLatitude()
@@ -126,6 +159,24 @@ export class UpdateTripDTO {
   stops?: RideStopsDTO[];
 }
 
+export class LocationDTO {
+  @IsIn(['Point'])
+  @IsNotEmpty()
+  type: 'Point';
+
+  @IsNumber()
+  @IsOptional()
+  heading: number;
+
+  @IsString()
+  @IsNotEmpty()
+  address: string;
+
+  @IsCoordinates()
+  @IsNotEmpty()
+  coordinates: [number, number];
+}
+
 export class HireRideDTO {
   @IsMongoId()
   @IsNotEmpty()
@@ -146,6 +197,14 @@ export class HireRideDTO {
   @IsIn(PaymentMethods)
   @IsNotEmpty()
   paymentMethod: PaymentMethod;
+
+  @ValidateNested()
+  @IsNotEmpty()
+  from: LocationDTO;
+
+  @ValidateNested()
+  @IsNotEmpty()
+  to: LocationDTO;
 }
 
 export class CreateRideDTO {
