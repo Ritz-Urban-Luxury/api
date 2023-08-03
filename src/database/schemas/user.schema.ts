@@ -77,6 +77,30 @@ export class User extends BaseSchema {
 
   @Prop()
   isVerified?: boolean;
+
+  @Prop()
+  billingType?: string;
+
+  @Prop()
+  companyName?: string;
+
+  @Prop()
+  address?: string;
+
+  @Prop()
+  registrationCode?: string;
+
+  @Prop()
+  vatNumber?: string;
+
+  @Prop()
+  bankHolderName?: string;
+
+  @Prop()
+  bank?: string;
+
+  @Prop()
+  accountNumber?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -38,4 +38,36 @@ export class UpdateUserDTO {
   @IsDateString()
   @IsOptional()
   licenseExpiry?: string;
+
+  @IsString()
+  @IsOptional()
+  billingType?: string;
+
+  @IsString()
+  @IsOptional()
+  companyName?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  registrationCode?: string;
+
+  @IsString()
+  @IsOptional()
+  vatNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  bankHolderName?: string;
+
+  @IsString()
+  @IsOptional()
+  bank?: string;
+
+  @IsString()
+  @IsOptional()
+  accountNumber?: string;
 }
