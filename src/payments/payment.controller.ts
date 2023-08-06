@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -15,12 +17,14 @@ import { Response } from '../shared/response';
 import { RequestReferenceDTO } from './dto/payment.dto';
 import { PaymentService } from './payment.service';
 import { MonnifyService } from './providers/monnify/monify.service';
+import { PaystackService } from './providers/paystack/paystack.service';
 
 @Controller('payments')
 export class PaymentController {
   constructor(
     private readonly paymentService: PaymentService,
     private readonly monnifyService: MonnifyService,
+    private readonly paystackService: PaystackService,
   ) {}
 
   @UseGuards(JwtGuard)
@@ -57,5 +61,35 @@ export class PaymentController {
     );
 
     return Response.json('thanks boo');
+  }
+
+  @Post('webhooks/paystack')
+  @HttpCode(HttpStatus.OK)
+  async paystackWebhook(
+    @Body() payload: unknown,
+    @Headers() headers: Record<string, string>,
+  ) {
+    await this.paystackService.handleWebhook(
+      payload,
+      headers['x-paystack-signature'],
+    );
+
+    return Response.json('thanks boo');
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('cards')
+  async getCards(@CurrentUser() user: UserDocument) {
+    const cards = await this.paymentService.getCards(user);
+
+    return Response.json('cards', cards);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('cards/:id')
+  async deleteCard(@CurrentUser() user: UserDocument, @Param('id') id: string) {
+    const charge = await this.paymentService.deleteCard(user, id);
+
+    return Response.json('charge deleted', charge);
   }
 }

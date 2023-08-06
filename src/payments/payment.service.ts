@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CardDocument } from '../database/schemas/card.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
@@ -97,5 +97,25 @@ export class PaymentService {
       default:
         throw new Error(`Cannot charge ${method} payment method`);
     }
+  }
+
+  async getCards(user: UserDocument) {
+    return this.db.cards.find({ user: user.id });
+  }
+
+  async deleteCard(user: UserDocument, cardId: string) {
+    const card = await this.db.cards.findOneAndUpdate(
+      {
+        _id: cardId,
+        user: user.id,
+      },
+      { $set: { deleted: true } },
+      { new: true },
+    );
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    return card;
   }
 }

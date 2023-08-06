@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
   FilterQuery,
@@ -99,5 +103,21 @@ export class DatabaseService {
     }
 
     return doc;
+  }
+
+  async markTokenAsUsedOrFail<E extends Error>(
+    query: FilterQuery<AuthTokenDocument>,
+    error?: E,
+  ) {
+    const token = await this.authTokens.findOneAndUpdate(
+      query,
+      { $set: { isUsed: true } },
+      { new: true, upsert: false },
+    );
+    if (!token) {
+      throw error || new BadRequestException('invalid otp');
+    }
+
+    return token;
   }
 }

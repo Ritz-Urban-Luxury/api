@@ -6,5 +6,6 @@ export interface PaymentProvider {
     user: UserDocument;
     card: CardDocument;
     amount: number;
+    reference: string;
   }): Promise<unknown>;
 }

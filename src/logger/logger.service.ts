@@ -11,7 +11,12 @@ export class Logger implements LoggerService {
 
   private logLevels: LogLevel[] = [];
 
-  constructor() {
+  constructor(_logger?: WinstonLogger) {
+    if (_logger) {
+      this.logger = _logger;
+      return;
+    }
+
     const logger = createLogger({
       level: '',
       format: format.combine(format.timestamp(), format.simple()),
@@ -58,5 +63,9 @@ export class Logger implements LoggerService {
 
   setLogLevels?(levels: LogLevel[]) {
     this.logLevels = levels;
+  }
+
+  child(options: unknown) {
+    return new Logger(this.logger.child(options));
   }
 }

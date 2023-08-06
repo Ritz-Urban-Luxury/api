@@ -52,6 +52,10 @@ const config = () => ({
   turnOffSMS: process.env.TURN_OFF_SMS?.toLocaleLowerCase() === 'true',
   turnOffGeolaction:
     process.env.TURN_OFF_GEOLOCATOIN?.toLocaleLowerCase() === 'true',
+  paystack: {
+    url: process.env.PAYSTACK_API_URL,
+    secretKey: process.env.PAYSTACK_SECRET_KEY,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;
