@@ -202,9 +202,9 @@ export class HireRideDTO {
   @IsNotEmpty()
   from: LocationDTO;
 
-  @ValidateNested()
-  @IsNotEmpty()
-  to: LocationDTO;
+  // @ValidateNested()
+  // @IsNotEmpty()
+  // to: LocationDTO;
 }
 
 export class CreateRideDTO {

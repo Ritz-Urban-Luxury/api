@@ -61,8 +61,8 @@ export class Rental extends BaseSchema {
   @Prop({ type: LocationSchema, required: true })
   from: Location;
 
-  @Prop({ type: LocationSchema, required: true })
-  to: Location;
+  // @Prop({ type: LocationSchema, required: true })
+  // to: Location;
 }
 
 export const RentalSchema = SchemaFactory.createForClass(Rental);
