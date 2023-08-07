@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CardDocument } from '../database/schemas/card.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
@@ -53,7 +57,7 @@ export class PaymentService {
   async debitUserRULBalance(user: UserDocument, amount: number) {
     const balance = await this.getUserBalance(user);
     if ((balance?.amount || 0) < amount) {
-      throw new Error('insufficient funds in RUL balance');
+      throw new BadRequestException('insufficient funds in RUL balance');
     }
 
     return this.db.balances.findOneAndUpdate(
@@ -71,7 +75,7 @@ export class PaymentService {
         isDefault: true,
         deleted: { $ne: true },
       },
-      { error: new Error('No default card setup for user') },
+      { error: new BadRequestException('No default card setup for user') },
     );
     const paymentProvider = this.getPaymentProvider(card.provider);
 
