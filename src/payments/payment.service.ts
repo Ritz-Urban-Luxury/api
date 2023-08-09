@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { isMongoId } from 'class-validator';
 import { DatabaseService } from '../database/database.service';
 import { CardDocument } from '../database/schemas/card.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
@@ -67,15 +68,23 @@ export class PaymentService {
     );
   }
 
-  async debitUserCard(user: UserDocument, amount: number) {
+  async debitUserCard(user: UserDocument, amount: number, cardId: string) {
+    const error = new BadRequestException(
+      `Cannot charge ${cardId} payment method`,
+    );
+    if (!isMongoId(cardId)) {
+      throw error;
+    }
+
     const card = await this.db.findOrFail<CardDocument>(
       this.db.cards,
       {
+        _id: cardId,
         user: user.id,
         isDefault: true,
         deleted: { $ne: true },
       },
-      { error: new BadRequestException('No default card setup for user') },
+      { error },
     );
     const paymentProvider = this.getPaymentProvider(card.provider);
 
@@ -94,12 +103,10 @@ export class PaymentService {
     switch (method) {
       case PaymentMethod.RULBalance:
         return this.debitUserRULBalance(user, amount);
-      case PaymentMethod.Card:
-        return this.debitUserCard(user, amount);
       case PaymentMethod.Cash:
         return 'Give the driver cash';
       default:
-        throw new Error(`Cannot charge ${method} payment method`);
+        return this.debitUserCard(user, amount, method as string);
     }
   }
 

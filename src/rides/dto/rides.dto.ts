@@ -194,7 +194,7 @@ export class HireRideDTO {
   @IsOptional()
   checkOutAt?: Date;
 
-  @IsIn(PaymentMethods)
+  @IsString()
   @IsNotEmpty()
   paymentMethod: PaymentMethod;
 
