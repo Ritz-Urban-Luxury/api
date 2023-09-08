@@ -220,7 +220,11 @@ export class RidesService {
       trackingId = Math.random().toString(32).substring(2);
 
       this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
-      this.websocket.emitToUser(driver, 'RideRequest', { trackingId });
+      this.websocket.emitToUser(driver, 'RideRequest', {
+        trackingId,
+        user,
+        payload,
+      });
 
       await this.cache.set(trackingId, false, this.WAIT_TIME);
       await new Promise((resolve) => {

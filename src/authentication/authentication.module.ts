@@ -4,7 +4,7 @@ import { NotificationModule } from '../notification';
 import config from '../shared/config';
 import { AuthenticationController } from './authentication.controller';
 import { AuthenticationService } from './authentication.service';
-import { JwtStrategy } from './strategy/jwt.strategy';
+import { AdminJwtStrategy, JwtStrategy } from './strategy/jwt.strategy';
 import { WSJWTStrategy } from './strategy/ws-jwt.guard';
 
 @Module({
@@ -21,7 +21,12 @@ import { WSJWTStrategy } from './strategy/ws-jwt.guard';
     }),
     NotificationModule,
   ],
-  providers: [AuthenticationService, JwtStrategy, WSJWTStrategy],
+  providers: [
+    AuthenticationService,
+    JwtStrategy,
+    WSJWTStrategy,
+    AdminJwtStrategy,
+  ],
   controllers: [AuthenticationController],
   exports: [AuthenticationService],
 })

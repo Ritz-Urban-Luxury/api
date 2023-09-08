@@ -18,3 +18,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return this.authenticationService.validateJwtPayload(payload);
   }
 }
+
+@Injectable()
+export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
+  constructor(private authenticationService: AuthenticationService) {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: config().jwt.secret,
+    });
+  }
+
+  async validate(payload) {
+    const user = await this.authenticationService.validateJwtPayload(payload);
+    if (!user.isAppAdmin) {
+      return null;
+    }
+
+    return user;
+  }
+}
