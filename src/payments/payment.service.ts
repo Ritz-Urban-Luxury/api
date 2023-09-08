@@ -57,7 +57,7 @@ export class PaymentService {
 
   async debitUserRULBalance(user: UserDocument, amount: number) {
     const balance = await this.getUserBalance(user);
-    if ((balance?.amount || 0) < amount) {
+    if ((balance?.amount || 0) < Math.abs(amount)) {
       throw new BadRequestException('insufficient funds in RUL balance');
     }
 
