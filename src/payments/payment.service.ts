@@ -63,7 +63,7 @@ export class PaymentService {
 
     return this.db.balances.findOneAndUpdate(
       { _id: balance?.id },
-      { $inc: { amount: -amount } },
+      { $set: { amount: balance.amount - Math.abs(amount) } },
       { new: true },
     );
   }
