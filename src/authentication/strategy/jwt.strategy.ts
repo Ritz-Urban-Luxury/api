@@ -31,7 +31,7 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
 
   async validate(payload) {
     const user = await this.authenticationService.validateJwtPayload(payload);
-    if (!user.isAppAdmin) {
+    if (!user?.isAppAdmin) {
       return null;
     }
 

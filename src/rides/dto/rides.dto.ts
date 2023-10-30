@@ -21,12 +21,14 @@ import {
   RentalBillingType,
   RentalBillingTypes,
 } from 'src/database/schemas/rentals.schema';
+import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import { RideType, RideTypes } from '../../database/schemas/rides.schema';
 import {
   PaymentMethod,
   PaymentMethods,
   Rating,
   TripStatus,
+  TripStatuses,
 } from '../../database/schemas/trips.schema';
 
 @ValidatorConstraint()
@@ -233,4 +235,10 @@ export class UpdateRideDTO {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+}
+
+export class AdminGetTripsDTO extends PaginationRequestDTO {
+  @IsIn(TripStatuses, { each: true })
+  @IsOptional()
+  status?: TripStatus | TripStatus[];
 }
