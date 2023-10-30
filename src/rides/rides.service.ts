@@ -32,6 +32,7 @@ import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import {
   AcceptRideDTO,
+  AdminGetRentalsDTO,
   AdminGetTripsDTO,
   CreateRideDTO,
   GetRideQuoteDTO,
@@ -834,5 +835,15 @@ export class RidesService {
     }
 
     return this.db.trips.paginate(q, { page, limit });
+  }
+
+  async getRentals(query: AdminGetRentalsDTO) {
+    const { page = 1, limit = 100, status } = query;
+    const q: FilterQuery<RentalDocument> = { deleted: { $ne: true } };
+    if (status) {
+      q.status = { $in: Array.isArray(status) ? status : [status] };
+    }
+
+    return this.db.rentals.paginate(q, { page, limit });
   }
 }

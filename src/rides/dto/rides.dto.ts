@@ -20,6 +20,7 @@ import {
 import {
   RentalBillingType,
   RentalBillingTypes,
+  RentalStatus,
 } from 'src/database/schemas/rentals.schema';
 import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import { RideType, RideTypes } from '../../database/schemas/rides.schema';
@@ -241,4 +242,10 @@ export class AdminGetTripsDTO extends PaginationRequestDTO {
   @IsIn(TripStatuses, { each: true })
   @IsOptional()
   status?: TripStatus | TripStatus[];
+}
+
+export class AdminGetRentalsDTO extends PaginationRequestDTO {
+  @IsIn(TripStatuses, { each: true })
+  @IsOptional()
+  status?: RentalStatus | RentalStatus[];
 }
