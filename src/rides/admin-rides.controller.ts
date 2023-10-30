@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
 import { Response } from 'src/shared/response';
 import { RidesService } from './rides.service';
@@ -21,5 +21,19 @@ export class AdminRideController {
     const { docs, ...meta } = await this.ridesService.getRentals(query);
 
     return Response.json('rentals', docs, meta);
+  }
+
+  @Get('/trips/:tripId')
+  async getRide(@Param('tripId') tripId: string) {
+    const trip = await this.ridesService.getTrip(tripId);
+
+    return Response.json('trip', trip);
+  }
+
+  @Get('/rentals/:rentalId')
+  async getRental(@Param('rentalId') rentalId: string) {
+    const rental = await this.ridesService.getRental(rentalId);
+
+    return Response.json('rental', rental);
   }
 }

@@ -846,4 +846,26 @@ export class RidesService {
 
     return this.db.rentals.paginate(q, { page, limit });
   }
+
+  async getTrip(_id: string) {
+    const trip = await this.db.trips
+      .findOne({ _id })
+      .populate('user driver ride');
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    return trip;
+  }
+
+  async getRental(_id: string) {
+    const rental = await this.db.rentals
+      .findOne({ _id })
+      .populate('user driver ride');
+    if (!rental) {
+      throw new NotFoundException('Rental not found');
+    }
+
+    return rental;
+  }
 }
