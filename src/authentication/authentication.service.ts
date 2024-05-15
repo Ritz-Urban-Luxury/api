@@ -69,7 +69,7 @@ export class AuthenticationService {
       this.notificationService
         .sendSMS({
           to: phone,
-          sms: `Your verification code is: ${token}`,
+          sms: `_${token}_`,
         })
         .catch((error) => {
           this.logger.error(`error sending phone otp sms - ${error.message}`);

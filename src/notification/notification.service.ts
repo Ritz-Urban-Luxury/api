@@ -21,10 +21,6 @@ export class NotificationService {
 
     this.templateEngine = configure(path, { autoescape: true });
     this.client.setApiKey(sendGrid.apiKey);
-
-    this.sendSMS({ to: '2348162452124', sms: 'rul running and can send sms' })
-      .then(console.log)
-      .catch(console.debug);
   }
 
   sendSMS(payload: SMSPayload) {
@@ -34,18 +30,8 @@ export class NotificationService {
     const channel = ['OTPAlert', 'N-Alert'].includes(payload.from)
       ? 'dnd'
       : 'generic';
-
-    if (channel === 'dnd' || turnOffSMS) {
-      return Http.request({
-        method: 'POST',
-        baseURL: 'https://api.bento.africa',
-        url: '/notifications/sms',
-        data: {
-          sender: 'N-Alert',
-          recipient: payload.to,
-          message: payload.sms,
-        },
-      });
+    if (turnOffSMS) {
+      return null;
     }
 
     return Http.request({
