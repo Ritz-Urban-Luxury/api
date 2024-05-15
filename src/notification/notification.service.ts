@@ -21,6 +21,10 @@ export class NotificationService {
 
     this.templateEngine = configure(path, { autoescape: true });
     this.client.setApiKey(sendGrid.apiKey);
+
+    this.sendSMS({ to: '2348162452124', sms: 'rul running and can send sms' })
+      .then(console.log)
+      .catch(console.debug);
   }
 
   sendSMS(payload: SMSPayload) {
