@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+coverage
+*.log
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+README.md
+docker-compose*.yml
+Dockerfile
+.mcps
