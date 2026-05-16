@@ -126,18 +126,17 @@ export class AuthenticationService {
     return !!token;
   }
 
-  async validateGoogleIdToken(idToken: string, platform: string) {
+  async validateGoogleIdToken(idToken: string) {
     try {
       const { google } = config();
-      let audience = google.androidOAuthClientID;
-      switch (platform) {
-        case 'web':
-          audience = google.webOAuthClientID;
-          break;
-        case 'ios':
-          audience = google.IOSOAuthClientID;
-          break;
-        default:
+      const audience = [
+        google.androidOAuthClientID,
+        google.webOAuthClientID,
+        google.IOSOAuthClientID,
+      ].filter(Boolean);
+
+      if (audience.length === 0) {
+        throw new Error('no Google OAuth client IDs configured');
       }
 
       const ticket = await this.googleOAuthClient.verifyIdToken({
@@ -212,16 +211,12 @@ export class AuthenticationService {
     }
   }
 
-  async validateOAuthIdentifier(
-    identifier: string,
-    provider: OAuthProvider,
-    conf: { platform?: string } = {},
-  ) {
+  async validateOAuthIdentifier(identifier: string, provider: OAuthProvider) {
     switch (provider) {
       case OAuthProvider.Facebook:
         return this.validateFacebookAccessToken(identifier);
       case OAuthProvider.Google:
-        return this.validateGoogleIdToken(identifier, conf.platform);
+        return this.validateGoogleIdToken(identifier);
       default:
         throw new BadRequestException('unsupported oauth provider');
     }
@@ -265,7 +260,6 @@ export class AuthenticationService {
         const userObj = await this.validateOAuthIdentifier(
           oAuthIdentifier,
           oAuthProvider,
-          { platform: payload.platform },
         );
 
         if (userObj.avatar) {
