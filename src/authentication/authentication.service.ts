@@ -41,7 +41,10 @@ export class AuthenticationService {
     private readonly fileService: FileService,
     private readonly db: DatabaseService,
   ) {
-    this.googleOAuthClient = new OAuth2Client();
+    this.googleOAuthClient = new OAuth2Client({
+      redirectUri:
+        config().google.redirectUri || 'com.ritz.ritz:/oauth2redirect/google',
+    });
   }
 
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {

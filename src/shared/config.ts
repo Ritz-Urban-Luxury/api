@@ -9,6 +9,13 @@ const config = () => ({
     url: process.env.TERMII_API_URL,
     from: process.env.TERMII_FROM,
   },
+  email: {
+    provider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
+  },
+  resend: {
+    apiKey: process.env.RESEND_API_KEY,
+    from: process.env.RESEND_DEFAULT_FROM,
+  },
   sendGrid: {
     from: {
       name: process.env.SENDGRID_DEFAULT_FROM_NAME,
@@ -22,6 +29,7 @@ const config = () => ({
     androidOAuthClientID: process.env.GOOGLE_ANDROID_OAUTH_CLIENT_ID,
     mapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
     mapsApiUrl: process.env.GOOGLE_MAPS_API,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI,
   },
   facebook: {
     appId: process.env.FACEBOOK_APP_ID,
