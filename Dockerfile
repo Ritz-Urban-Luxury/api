@@ -10,6 +10,7 @@ RUN yarn install --frozen-lockfile --ignore-engines
 
 COPY nest-cli.json tsconfig.json tsconfig.build.json ./
 COPY src ./src
+COPY templates ./templates
 
 RUN yarn build
 
@@ -25,6 +26,7 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production --ignore-engines && yarn cache clean
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/templates ./templates
 
 USER node
 
