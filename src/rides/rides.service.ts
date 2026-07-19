@@ -205,7 +205,7 @@ export class RidesService {
       throw new BadRequestException('invalid tracking id');
     }
 
-    await this.cache.set(payload.trackingId, true, this.WAIT_TIME);
+    await this.cache.set(payload.trackingId, true, this.WAIT_TIME * 2);
   }
 
   async connectToDriver(
@@ -214,6 +214,8 @@ export class RidesService {
     connectionId: string,
     payload: RequestRideDTO & { distance: number; amount: number },
   ) {
+    // Offer flag must outlive the wait window
+    const offerTtl = this.WAIT_TIME * 2;
     let trackingId: string;
     for (let i = 0; i < available.length; i += 1) {
       const ride = available[i];
@@ -221,69 +223,72 @@ export class RidesService {
 
       trackingId = Math.random().toString(32).substring(2);
 
-      this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
-      this.websocket.emitToUser(driver, 'RideRequest', {
-        trackingId,
-        user,
-        payload,
-      });
-
-      await this.cache.set(trackingId, false, this.WAIT_TIME);
-      await new Promise((resolve) => {
-        setTimeout(resolve, this.WAIT_TIME);
-      });
-
-      const [accepted, waiting] = await Promise.all([
-        this.cache.get<boolean>(trackingId),
-        this.cache.get<boolean>(connectionId),
-      ]);
-      if (!waiting) {
-        this.websocket.emitToUser(user, 'RideRequestCancelled', {
-          trackingId: connectionId,
-        });
-        this.websocket.emitToUser(driver, 'RideRequestCancelled', {
+      // Driver not connected — skip wait and try next (emit would be silent)
+      if (driver?.id && this.websocket.getUserRoomSize(driver.id) >= 1) {
+        this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
+        this.websocket.emitToUser(driver, 'RideRequest', {
           trackingId,
+          user,
+          payload,
         });
 
-        await Promise.all([
-          this.cache.del(connectionId),
-          this.cache.del(`${user.id}`),
+        await this.cache.set(trackingId, false, offerTtl);
+        await new Promise((resolve) => {
+          setTimeout(resolve, this.WAIT_TIME);
+        });
+
+        const [accepted, waiting] = await Promise.all([
+          this.cache.get<boolean>(trackingId),
+          this.cache.get<boolean>(connectionId),
         ]);
-        return;
-      }
+        if (!waiting) {
+          this.websocket.emitToUser(user, 'RideRequestCancelled', {
+            trackingId: connectionId,
+          });
+          this.websocket.emitToUser(driver, 'RideRequestCancelled', {
+            trackingId,
+          });
 
-      if (accepted) {
-        const [trip] = await Promise.all([
-          this.db.trips.create({
-            ...payload,
-            to: {
-              type: 'Point',
-              coordinates: [payload.toLat, payload.toLon],
-            },
-            from: {
-              type: 'Point',
-              coordinates: [payload.fromLat, payload.fromLon],
-            },
-            user,
-            ride,
-            driver,
-            stops: (payload.stops || []).map((stop) => ({
-              to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
-              toAddress: stop.toAddress,
-            })),
-          }),
-          this.db.rides.updateOne(
-            { _id: ride.id },
-            { status: RideStatus.Busy },
-          ),
-          this.cache.del(connectionId),
-          this.cache.del(`${user.id}`),
-        ]);
+          await Promise.all([
+            this.cache.del(connectionId),
+            this.cache.del(`${user.id}`),
+          ]);
+          return;
+        }
 
-        this.websocket.emitToUser(user, 'TripStarted', trip);
-        this.websocket.emitToUser(driver, 'TripStarted', trip);
+        if (accepted === true) {
+          const [trip] = await Promise.all([
+            this.db.trips.create({
+              ...payload,
+              to: {
+                type: 'Point',
+                coordinates: [payload.toLat, payload.toLon],
+              },
+              from: {
+                type: 'Point',
+                coordinates: [payload.fromLat, payload.fromLon],
+              },
+              user,
+              ride,
+              driver,
+              stops: (payload.stops || []).map((stop) => ({
+                to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
+                toAddress: stop.toAddress,
+              })),
+            }),
+            this.db.rides.updateOne(
+              { _id: ride.id },
+              { status: RideStatus.Busy },
+            ),
+            this.cache.del(connectionId),
+            this.cache.del(`${user.id}`),
+          ]);
 
-        return;
+          this.websocket.emitToUser(user, 'TripStarted', trip);
+          this.websocket.emitToUser(driver, 'TripStarted', trip);
+
+          return;
+        }
       }
     }
 
@@ -800,7 +805,10 @@ export class RidesService {
     );
   }
 
-  async toggleRideStatus(user: UserDocument) {
+  async setRideAvailability(
+    user: UserDocument,
+    status: RideStatus.Online | RideStatus.Offline,
+  ) {
     const ride = await this.db.rides.findOne({
       deleted: { $ne: true },
       driver: user.id,
@@ -809,16 +817,23 @@ export class RidesService {
       throw new BadRequestException('Ride not found');
     }
 
+    // Busy / FinishingTrip must not be overwritten by availability flips
+    if (
+      ride.status === RideStatus.Busy ||
+      ride.status === RideStatus.FinishingTrip
+    ) {
+      throw new BadRequestException(
+        'cannot change availability while on an active trip',
+      );
+    }
+
+    if (ride.status === status) {
+      return ride;
+    }
+
     return this.db.rides.findOneAndUpdate(
       { _id: ride.id },
-      {
-        $set: {
-          status:
-            ride.status === RideStatus.Offline
-              ? RideStatus.Online
-              : RideStatus.Offline,
-        },
-      },
+      { $set: { status } },
       { new: true },
     );
   }

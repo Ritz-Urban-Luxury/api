@@ -448,21 +448,37 @@ export class AuthenticationService {
   }
 
   async validateWebsocketClient(client: Socket) {
-    try {
-      const authorization =
-        client.handshake.headers.authorization ||
-        `${client.handshake.query.authorization}`;
+    const authPayload = client.handshake.auth as
+      | { token?: string; authorization?: string }
+      | undefined;
+    const raw = [
+      client.handshake.headers.authorization,
+      client.handshake.query?.authorization,
+      authPayload?.authorization,
+      authPayload?.token,
+    ]
+      .flat()
+      .filter((v): v is string => typeof v === 'string' && v.length > 0);
 
-      const token = authorization?.replace(/bearer /gi, '');
-      const user = await this.getUserFromAuthToken(token);
-      if (!user) {
-        throw new Error();
-      }
+    const tokens = [
+      ...new Set(raw.map((auth) => auth.replace(/bearer /gi, '').trim())),
+    ].filter(Boolean);
 
+    const results = await Promise.all(
+      tokens.map(async (token) => {
+        try {
+          return await this.getUserFromAuthToken(token);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const user = results.find((candidate) => candidate);
+    if (user) {
       return user;
-    } catch (error) {
-      throw new WsException('Unauthorized');
     }
+
+    throw new WsException('Unauthorized');
   }
 
   async validateJwtPayload({ id: _id, payloadId = '' }) {

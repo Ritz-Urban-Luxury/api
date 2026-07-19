@@ -58,6 +58,11 @@ export class WebsocketGateway {
     this.server.to(user.id).emit(event, data);
   }
 
+  /** How many sockets are currently in this user's room. */
+  getUserRoomSize(userId: string): number {
+    return this.server.sockets.adapter.rooms.get(userId)?.size ?? 0;
+  }
+
   async updateRideStatus(
     user: UserDocument,
     ride: string,

@@ -23,6 +23,7 @@ import {
   HireRideDTO,
   MessageDTO,
   RequestRideDTO,
+  SetRideAvailabilityDTO,
   UpdateRideDTO,
   UpdateTripDTO,
 } from './dto/rides.dto';
@@ -202,10 +203,16 @@ export class RidesController {
 
   @UseVerifiedDriver()
   @Put('toggle-ride')
-  async toggleRideStatus(@CurrentUser() user: UserDocument) {
-    const ride = await this.ridesService.toggleRideStatus(user);
+  async toggleRideStatus(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: SetRideAvailabilityDTO,
+  ) {
+    const ride = await this.ridesService.setRideAvailability(
+      user,
+      payload.status,
+    );
 
-    return Response.json('ride status toggled', ride);
+    return Response.json('ride status updated', ride);
   }
 
   @UseGuards(JwtGuard)

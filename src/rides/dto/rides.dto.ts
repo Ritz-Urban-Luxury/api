@@ -23,7 +23,11 @@ import {
   RentalStatus,
 } from 'src/database/schemas/rentals.schema';
 import { PaginationRequestDTO } from 'src/shared/pagination.dto';
-import { RideType, RideTypes } from '../../database/schemas/rides.schema';
+import {
+  RideType,
+  RideTypes,
+  RideStatus,
+} from '../../database/schemas/rides.schema';
 import {
   PaymentMethod,
   PaymentMethods,
@@ -236,6 +240,13 @@ export class UpdateRideDTO {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+}
+
+/** Explicit Online/Offline — idempotent when the same status is sent again. */
+export class SetRideAvailabilityDTO {
+  @IsIn([RideStatus.Online, RideStatus.Offline])
+  @IsNotEmpty()
+  status: RideStatus.Online | RideStatus.Offline;
 }
 
 export class AdminGetTripsDTO extends PaginationRequestDTO {

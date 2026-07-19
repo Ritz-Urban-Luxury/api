@@ -1,10 +1,13 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
 } from 'class-validator';
+import { PaginationRequestDTO } from '../../shared/pagination.dto';
 
 export class UpdateUserDTO {
   @IsString()
@@ -70,4 +73,16 @@ export class UpdateUserDTO {
   @IsString()
   @IsOptional()
   accountNumber?: string;
+}
+
+export class SetUserVerificationDTO {
+  @IsBoolean()
+  @IsNotEmpty()
+  isVerified: boolean;
+}
+
+export class AdminGetDriversDTO extends PaginationRequestDTO {
+  @IsBoolean()
+  @IsOptional()
+  verified?: boolean;
 }

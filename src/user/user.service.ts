@@ -1,8 +1,17 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { FilterQuery } from 'mongoose';
 import { DatabaseService } from '../database/database.service';
 import { UserDocument } from '../database/schemas/user.schema';
 import { Util } from '../shared/util';
-import { UpdateUserDTO } from './dto/user.dto';
+import {
+  AdminGetDriversDTO,
+  SetUserVerificationDTO,
+  UpdateUserDTO,
+} from './dto/user.dto';
 
 @Injectable()
 export class UserService {
@@ -55,5 +64,40 @@ export class UserService {
     );
 
     return _user.preferences;
+  }
+
+  async listDrivers(query: AdminGetDriversDTO) {
+    const { page = 1, limit = 100, verified } = query;
+    const driverIds = await this.db.rides.distinct('driver', {
+      deleted: { $ne: true },
+    });
+
+    const q: FilterQuery<UserDocument> = {
+      _id: { $in: driverIds },
+      deleted: { $ne: true },
+    };
+    if (typeof verified === 'boolean') {
+      q.isVerified = verified ? true : { $ne: true };
+    }
+
+    return this.db.users.paginate(q, {
+      page,
+      limit,
+      select: '-password -oAuthIdentifier -oAuthProvider',
+      sort: { createdAt: -1 },
+    });
+  }
+
+  async setVerification(userId: string, payload: SetUserVerificationDTO) {
+    const user = await this.db.users.findOneAndUpdate(
+      { _id: userId, deleted: { $ne: true } },
+      { $set: { isVerified: payload.isVerified } },
+      { new: true, upsert: false },
+    );
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+
+    return user;
   }
 }
