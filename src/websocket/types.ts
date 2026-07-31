@@ -16,3 +16,12 @@ export enum WebsocketEvent {
 }
 
 export type WebsocketEventType = WebsocketEvent | keyof typeof WebsocketEvent;
+
+export interface RideLocationEventPayload {
+  tripId: string;
+  rideId: string;
+  lat: number;
+  lon: number;
+  heading?: number;
+  updatedAt: string;
+}
