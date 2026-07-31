@@ -97,11 +97,17 @@ export class RidesService {
       return { trackingId };
     }
 
-    return this.db.trips.findOne({
-      user: user.id,
-      status: { $nin: InactiveTripStatuses },
-      deleted: { $ne: true },
-    });
+    return this.db.trips
+      .findOne({
+        user: user.id,
+        status: { $nin: InactiveTripStatuses },
+        deleted: { $ne: true },
+      })
+      .populate({
+        path: 'ride',
+        populate: { path: 'driver' },
+      })
+      .populate('driver');
   }
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {

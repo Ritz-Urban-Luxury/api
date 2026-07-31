@@ -33,6 +33,10 @@ import {
 @UseFilters(WSValidationFilter)
 @UsePipes(ValidationPipe)
 export class WebsocketGateway {
+  private readonly lastLocationSequence = new Map<string, number>();
+
+  private readonly lastLocationPersistence = new Map<string, number>();
+
   @WebSocketServer()
   private readonly server: Server;
 
@@ -95,39 +99,48 @@ export class WebsocketGateway {
     @CurrentClientUser() user: UserDocument,
     @MessageBody() payload: RideLocationDTO,
   ) {
-    const ride = await this.db.rides.findOneAndUpdate(
-      { driver: user.id },
-      {
-        $set: {
-          location: {
-            coordinates: [payload.lat, payload.lon],
-            heading: payload.heading,
-            type: 'Point',
-          },
-        },
-      },
-      { new: true },
-    );
-
     const trip = await this.db.trips
       .findOne({
         driver: user.id,
-        ride: ride.id,
         status: { $nin: InactiveTripStatuses },
         deleted: { $ne: true },
       })
       .populate('user');
 
     if (!trip) {
+      await this.persistRideLocation(user.id, payload);
       return;
     }
 
+    const lastSequence = this.lastLocationSequence.get(user.id);
+    if (
+      payload.sequence !== undefined &&
+      lastSequence !== undefined &&
+      payload.sequence <= lastSequence
+    ) {
+      return;
+    }
+
+    if (payload.sequence !== undefined) {
+      this.lastLocationSequence.set(user.id, payload.sequence);
+    }
+
+    const rideId = typeof trip.ride === 'string' ? trip.ride : trip.ride?.id;
+    if (!rideId) {
+      return;
+    }
+
+    const recordedAt = payload.recordedAt ?? new Date().toISOString();
     const locationEvent: RideLocationEventPayload = {
+      accuracy: payload.accuracy,
       tripId: trip.id,
-      rideId: ride.id,
+      rideId,
       lat: payload.lat,
       lon: payload.lon,
       heading: payload.heading,
+      recordedAt,
+      sequence: payload.sequence,
+      speed: payload.speed,
       updatedAt: new Date().toISOString(),
     };
 
@@ -136,7 +149,50 @@ export class WebsocketGateway {
       WebsocketEvent.RideLocation,
       locationEvent,
     );
-    await this.updateRideStatus(trip, ride.id, [payload.lat, payload.lon]);
+
+    if (this.shouldPersistLocation(rideId)) {
+      await Promise.all([
+        this.persistRideLocation(user.id, payload),
+        this.updateRideStatus(trip, rideId, [payload.lat, payload.lon]),
+      ]);
+    }
+  }
+
+  private shouldPersistLocation(rideId: string) {
+    const now = Date.now();
+    const lastPersistedAt = this.lastLocationPersistence.get(rideId) ?? 0;
+
+    if (now - lastPersistedAt < 10000) {
+      return false;
+    }
+
+    this.lastLocationPersistence.set(rideId, now);
+    return true;
+  }
+
+  private async persistRideLocation(
+    driverId: string,
+    payload: RideLocationDTO,
+  ) {
+    return this.db.rides.findOneAndUpdate(
+      { driver: driverId },
+      {
+        $set: {
+          location: {
+            accuracy: payload.accuracy,
+            coordinates: [payload.lat, payload.lon],
+            heading: payload.heading,
+            recordedAt: payload.recordedAt
+              ? new Date(payload.recordedAt)
+              : new Date(),
+            sequence: payload.sequence,
+            speed: payload.speed,
+            type: 'Point',
+          },
+        },
+      },
+      { new: true },
+    );
   }
 
   @UseGuards(WSJwtGuard)

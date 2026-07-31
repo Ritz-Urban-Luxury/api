@@ -25,6 +25,9 @@ export const RideTypes = Object.values(RideType);
 
 @EmbeddedSchema()
 export class Location {
+  @Prop()
+  accuracy?: number;
+
   @Prop({ required: true })
   type: 'Point';
 
@@ -33,6 +36,15 @@ export class Location {
 
   @Prop()
   heading?: number;
+
+  @Prop()
+  recordedAt?: Date;
+
+  @Prop()
+  sequence?: number;
+
+  @Prop()
+  speed?: number;
 
   @Prop()
   address?: string;

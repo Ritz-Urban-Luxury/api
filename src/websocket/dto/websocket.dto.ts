@@ -1,5 +1,7 @@
 import {
   IsBoolean,
+  IsDateString,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNotEmpty,
@@ -10,6 +12,11 @@ import {
 } from 'class-validator';
 
 export class RideLocationDTO {
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  accuracy?: number;
+
   @IsLatitude()
   @IsNotEmpty()
   lat: number;
@@ -23,6 +30,20 @@ export class RideLocationDTO {
   @Min(0)
   @IsOptional()
   heading?: number;
+
+  @IsDateString()
+  @IsOptional()
+  recordedAt?: string;
+
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  sequence?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  speed?: number;
 }
 
 export class DriverETADTO {
