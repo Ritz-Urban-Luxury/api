@@ -6,13 +6,13 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Util } from 'src/shared/util';
 import { AuthenticationService } from '../authentication';
 import { WSJwtGuard } from '../authentication/guards/ws-jwt.guard';
 import { DatabaseService } from '../database/database.service';
 import { RideStatus, RidesDocument } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
+  TripDocument,
   TripStatus,
 } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
@@ -21,8 +21,13 @@ import { GeolocationService } from '../rides/geolocation.service';
 import { CurrentClientUser } from '../shared/decorators/current-client-user.decorator';
 import { WSValidationFilter } from '../shared/filter/ws-validation-filter';
 import { ValidationPipe } from '../shared/pipes/validation.pipe';
+import { Util } from '../shared/util';
 import { DriverETADTO, RideLocationDTO } from './dto/websocket.dto';
-import { WebsocketEvent, WebsocketEventType } from './types';
+import {
+  RideLocationEventPayload,
+  WebsocketEvent,
+  WebsocketEventType,
+} from './types';
 
 @WebSocketGateway({ transports: ['websocket'] })
 @UseFilters(WSValidationFilter)
@@ -64,16 +69,11 @@ export class WebsocketGateway {
   }
 
   async updateRideStatus(
-    user: UserDocument,
+    trip: TripDocument,
     ride: string,
     coords: [number, number],
   ) {
-    const trip = await this.db.trips.findOne({
-      driver: user.id,
-      ride,
-      status: TripStatus.InProgress,
-    });
-    if (trip) {
+    if (trip?.status === TripStatus.InProgress) {
       const distance = Util.calculateDistance(
         coords,
         trip.nextDestination.to.coordinates,
@@ -109,7 +109,34 @@ export class WebsocketGateway {
       { new: true },
     );
 
-    this.updateRideStatus(user, ride.id, [payload.lat, payload.lon]);
+    const trip = await this.db.trips
+      .findOne({
+        driver: user.id,
+        ride: ride.id,
+        status: { $nin: InactiveTripStatuses },
+        deleted: { $ne: true },
+      })
+      .populate('user');
+
+    if (!trip) {
+      return;
+    }
+
+    const locationEvent: RideLocationEventPayload = {
+      tripId: trip.id,
+      rideId: ride.id,
+      lat: payload.lat,
+      lon: payload.lon,
+      heading: payload.heading,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.emitToUser(
+      trip.user as UserDocument,
+      WebsocketEvent.RideLocation,
+      locationEvent,
+    );
+    await this.updateRideStatus(trip, ride.id, [payload.lat, payload.lon]);
   }
 
   @UseGuards(WSJwtGuard)
