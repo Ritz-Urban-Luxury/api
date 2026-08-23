@@ -9,6 +9,8 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { Util } from '../shared/util';
 import {
   AdminGetDriversDTO,
+  AdminListUsersDTO,
+  SetUserAdminDTO,
   SetUserVerificationDTO,
   UpdateUserDTO,
 } from './dto/user.dto';
@@ -92,6 +94,44 @@ export class UserService {
     const user = await this.db.users.findOneAndUpdate(
       { _id: userId, deleted: { $ne: true } },
       { $set: { isVerified: payload.isVerified } },
+      { new: true, upsert: false },
+    );
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+
+    return user;
+  }
+
+  async listUsers(query: AdminListUsersDTO) {
+    const { page = 1, limit = 100, search } = query;
+    const q: FilterQuery<UserDocument> = {
+      deleted: { $ne: true },
+    };
+
+    const term = search?.trim();
+    if (term) {
+      const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      q.$or = [
+        { email: regex },
+        { firstName: regex },
+        { lastName: regex },
+        { phoneNumber: regex },
+      ];
+    }
+
+    return this.db.users.paginate(q, {
+      page,
+      limit,
+      select: '-password -oAuthIdentifier -oAuthProvider',
+      sort: { createdAt: -1 },
+    });
+  }
+
+  async setAdmin(userId: string, payload: SetUserAdminDTO) {
+    const user = await this.db.users.findOneAndUpdate(
+      { _id: userId, deleted: { $ne: true } },
+      { $set: { isAppAdmin: payload.isAppAdmin } },
       { new: true, upsert: false },
     );
     if (!user) {

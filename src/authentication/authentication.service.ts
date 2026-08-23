@@ -12,7 +12,9 @@ import * as Crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 // import moment from 'moment';
 import { Socket } from 'socket.io';
+import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { DatabaseService } from '../database/database.service';
+import { ActivityType } from '../database/schemas/activities.schema';
 import { OAuthProvider, UserDocument } from '../database/schemas/user.schema';
 import { FileService } from '../file/file.service';
 import { Logger } from '../logger/logger.service';
@@ -40,6 +42,7 @@ export class AuthenticationService {
     private readonly jwtService: JwtService,
     private readonly fileService: FileService,
     private readonly db: DatabaseService,
+    private readonly activityLedger: ActivityLedgerService,
   ) {
     this.googleOAuthClient = new OAuth2Client({
       redirectUri:
@@ -280,6 +283,13 @@ export class AuthenticationService {
           },
           { upsert: true, new: true },
         );
+
+        await this.activityLedger.recordActivity({
+          type: ActivityType.UserRegistered,
+          title: 'New User Registration',
+          meta: user.email || user.phoneNumber || user.id,
+          user: user.id,
+        });
       }
 
       return this.authorizeUser(user);
@@ -346,6 +356,13 @@ export class AuthenticationService {
       ...userObj,
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
+    });
+
+    await this.activityLedger.recordActivity({
+      type: ActivityType.UserRegistered,
+      title: 'New User Registration',
+      meta: user.email || user.phoneNumber || user.id,
+      user: user.id,
     });
 
     return this.authorizeUser(user);

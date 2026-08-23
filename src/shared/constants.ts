@@ -8,4 +8,6 @@ export const DB_TABLES = {
   CARDS: 'cards',
   RENTALS: 'rentals',
   CAR_BRANDS: 'car_brands',
+  DRIVER_EARNINGS: 'driver_earnings',
+  ACTIVITIES: 'activities',
 };

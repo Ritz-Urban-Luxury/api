@@ -12,7 +12,9 @@ import {
   RentalDocument,
   RentalStatus,
 } from 'src/database/schemas/rentals.schema';
+import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { DatabaseService } from '../database/database.service';
+import { ActivityType } from '../database/schemas/activities.schema';
 import {
   RidesDocument,
   RideStatus,
@@ -55,6 +57,7 @@ export class RidesService {
     private readonly websocket: WebsocketGateway,
     private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
+    private readonly activityLedger: ActivityLedgerService,
   ) {}
 
   async getAvailableRides(payload: GetRidesDTO) {
@@ -532,8 +535,30 @@ export class RidesService {
       ),
     ]);
 
-    const event =
-      status === TripStatus.Completed ? 'TripEnded' : 'PaymentFailed';
+    const paymentSucceeded = status === TripStatus.Completed;
+    await this.activityLedger.recordActivity({
+      type: paymentSucceeded
+        ? ActivityType.PaymentSucceeded
+        : ActivityType.PaymentFailed,
+      title: this.activityLedger.paymentActivityTitle(
+        trip.paymentMethod,
+        paymentSucceeded,
+      ),
+      meta: this.activityLedger.formatAmountMeta(amount),
+      amount,
+      user: user.id,
+      trip: trip.id,
+    });
+
+    if (paymentSucceeded) {
+      await this.activityLedger.recordDriverEarning({
+        driver: driver.id,
+        trip: trip.id,
+        amount,
+      });
+    }
+
+    const event = paymentSucceeded ? 'TripEnded' : 'PaymentFailed';
 
     this.websocket.emitToUser(user, event, trip);
     this.websocket.emitToUser(driver, event, trip);

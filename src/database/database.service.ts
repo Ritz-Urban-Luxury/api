@@ -13,14 +13,16 @@ import {
 import { BalanceDocument } from '../authentication/balance.schema';
 import { DB_TABLES } from '../shared/constants';
 import { Document, Model } from '../shared/types';
+import { ActivityDocument } from './schemas/activities.schema';
 import { AuthTokenDocument } from './schemas/auth-tokens.schema';
 import { CardDocument } from './schemas/card.schema';
+import { CarBrandDocument } from './schemas/car-brands.schema';
+import { DriverEarningDocument } from './schemas/driver-earnings.schema';
 import { MessageDocument } from './schemas/messages.schema';
+import { RentalDocument } from './schemas/rentals.schema';
 import { RidesDocument } from './schemas/rides.schema';
 import { TripDocument } from './schemas/trips.schema';
 import { UserDocument } from './schemas/user.schema';
-import { RentalDocument } from './schemas/rentals.schema';
-import { CarBrandDocument } from './schemas/car-brands.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -43,6 +45,10 @@ export class DatabaseService {
     public readonly rentals: Model<RentalDocument>,
     @InjectModel(DB_TABLES.CAR_BRANDS)
     public readonly carBrands: Model<CarBrandDocument>,
+    @InjectModel(DB_TABLES.DRIVER_EARNINGS)
+    public readonly driverEarnings: Model<DriverEarningDocument>,
+    @InjectModel(DB_TABLES.ACTIVITIES)
+    public readonly activities: Model<ActivityDocument>,
   ) {}
 
   async findOrFail<

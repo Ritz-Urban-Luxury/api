@@ -86,3 +86,15 @@ export class AdminGetDriversDTO extends PaginationRequestDTO {
   @IsOptional()
   verified?: boolean;
 }
+
+export class AdminListUsersDTO extends PaginationRequestDTO {
+  @IsString()
+  @IsOptional()
+  search?: string;
+}
+
+export class SetUserAdminDTO {
+  @IsBoolean()
+  @IsNotEmpty()
+  isAppAdmin: boolean;
+}

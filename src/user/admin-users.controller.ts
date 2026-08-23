@@ -9,7 +9,12 @@ import {
 } from '@nestjs/common';
 import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
 import { Response } from 'src/shared/response';
-import { AdminGetDriversDTO, SetUserVerificationDTO } from './dto/user.dto';
+import {
+  AdminGetDriversDTO,
+  AdminListUsersDTO,
+  SetUserAdminDTO,
+  SetUserVerificationDTO,
+} from './dto/user.dto';
 import { UserService } from './user.service';
 
 @Controller('admin/users')
@@ -17,11 +22,28 @@ import { UserService } from './user.service';
 export class AdminUserController {
   constructor(private readonly userService: UserService) {}
 
+  @Get()
+  async listUsers(@Query() query: AdminListUsersDTO) {
+    const { docs, ...meta } = await this.userService.listUsers(query);
+
+    return Response.json('users', docs, meta);
+  }
+
   @Get('/drivers')
   async listDrivers(@Query() query: AdminGetDriversDTO) {
     const { docs, ...meta } = await this.userService.listDrivers(query);
 
     return Response.json('drivers', docs, meta);
+  }
+
+  @Put('/:userId/admin')
+  async setAdmin(
+    @Param('userId') userId: string,
+    @Body() payload: SetUserAdminDTO,
+  ) {
+    const user = await this.userService.setAdmin(userId, payload);
+
+    return Response.json('user admin status updated', user);
   }
 
   @Put('/:userId/verification')
