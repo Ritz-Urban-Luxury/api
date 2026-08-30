@@ -68,6 +68,102 @@ export class PaymentService {
     );
   }
 
+  async creditUserRULBalance(user: UserDocument, amount: number) {
+    const balance = await this.getUserBalance(user);
+    const credit = Math.abs(amount);
+
+    return this.db.balances.findOneAndUpdate(
+      { _id: balance?.id },
+      { $inc: { amount: credit } },
+      { new: true },
+    );
+  }
+
+  extractChargeTransaction(paymentResponse: unknown): string | number | null {
+    if (!paymentResponse || typeof paymentResponse !== 'object') {
+      return null;
+    }
+
+    const data = paymentResponse as Record<string, unknown>;
+    if (typeof data.reference === 'string' && data.reference.trim()) {
+      return data.reference;
+    }
+    if (typeof data.id === 'number' || typeof data.id === 'string') {
+      return data.id;
+    }
+
+    return null;
+  }
+
+  async refundCharge(payload: {
+    user?: UserDocument | null;
+    paymentMethod: PaymentMethod | string;
+    paymentResponse: unknown;
+    amount: number;
+    note?: string;
+  }) {
+    const { user, paymentMethod, paymentResponse, amount, note } = payload;
+    const refundAmount = Math.abs(amount);
+
+    if (refundAmount <= 0) {
+      throw new BadRequestException('Refund amount must be greater than zero');
+    }
+
+    if (paymentMethod === PaymentMethod.Cash) {
+      return { provider: 'Cash', amount: refundAmount, status: 'noop' };
+    }
+
+    if (paymentMethod === PaymentMethod.RULBalance) {
+      if (!user) {
+        return {
+          provider: PaymentMethod.RULBalance,
+          amount: refundAmount,
+          status: 'skipped',
+          reason: 'rider account missing',
+        };
+      }
+
+      const balance = await this.creditUserRULBalance(user, refundAmount);
+      return {
+        provider: PaymentMethod.RULBalance,
+        amount: refundAmount,
+        status: 'processed',
+        balance,
+      };
+    }
+
+    const transaction = this.extractChargeTransaction(paymentResponse);
+    if (!transaction) {
+      // Old/test bookings often have no usable charge payload.
+      return {
+        provider: 'Paystack',
+        amount: refundAmount,
+        status: 'skipped',
+        reason: 'no charge reference found for card refund',
+      };
+    }
+
+    const paystack = this.getPaymentProvider('Paystack');
+    if (!paystack.refund) {
+      throw new BadRequestException('Refunds are not supported for Paystack');
+    }
+
+    const refundResponse = await paystack.refund({
+      transaction,
+      amount: refundAmount,
+      customer_note: note,
+      merchant_note: note,
+    });
+
+    return {
+      provider: 'Paystack',
+      amount: refundAmount,
+      status: 'queued',
+      transaction,
+      refundResponse,
+    };
+  }
+
   async debitUserCard(user: UserDocument, amount: number, cardId: string) {
     const error = new BadRequestException(
       `Cannot charge ${cardId} payment method`,

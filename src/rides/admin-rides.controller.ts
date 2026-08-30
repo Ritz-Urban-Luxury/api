@@ -1,8 +1,22 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
 import { Response } from 'src/shared/response';
 import { RidesService } from './rides.service';
-import { AdminGetRentalsDTO, AdminGetTripsDTO } from './dto/rides.dto';
+import {
+  AdminGetRentalsDTO,
+  AdminGetTripsDTO,
+  AdminRefundRentalDTO,
+  AdminUpdateRentalStatusDTO,
+} from './dto/rides.dto';
 
 @Controller('admin/rides')
 @UseGuards(AdminJwtGuard)
@@ -35,5 +49,31 @@ export class AdminRideController {
     const rental = await this.ridesService.getRental(rentalId);
 
     return Response.json('rental', rental);
+  }
+
+  @Patch('/rentals/:rentalId/status')
+  async updateRentalStatus(
+    @Param('rentalId') rentalId: string,
+    @Body() payload: AdminUpdateRentalStatusDTO,
+  ) {
+    const rental = await this.ridesService.updateRentalStatus(
+      rentalId,
+      payload.status,
+    );
+
+    return Response.json('rental updated', rental);
+  }
+
+  @Post('/rentals/:rentalId/refund')
+  async refundRental(
+    @Param('rentalId') rentalId: string,
+    @Body() payload: AdminRefundRentalDTO,
+  ) {
+    const rental = await this.ridesService.refundRental(
+      rentalId,
+      payload.amount,
+    );
+
+    return Response.json('rental refunded', rental);
   }
 }

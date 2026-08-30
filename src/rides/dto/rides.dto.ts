@@ -23,6 +23,7 @@ import {
   RentalBillingType,
   RentalBillingTypes,
   RentalStatus,
+  RentalStatuses,
 } from 'src/database/schemas/rentals.schema';
 import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import {
@@ -288,7 +289,19 @@ export class AdminGetTripsDTO extends PaginationRequestDTO {
 }
 
 export class AdminGetRentalsDTO extends PaginationRequestDTO {
-  @IsIn(TripStatuses, { each: true })
+  @IsIn(RentalStatuses, { each: true })
   @IsOptional()
   status?: RentalStatus | RentalStatus[];
+}
+
+export class AdminUpdateRentalStatusDTO {
+  @IsIn(RentalStatuses)
+  @IsNotEmpty()
+  status: RentalStatus;
+}
+
+export class AdminRefundRentalDTO {
+  @IsNumber()
+  @IsOptional()
+  amount?: number;
 }

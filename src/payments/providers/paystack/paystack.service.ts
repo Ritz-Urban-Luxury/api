@@ -78,6 +78,40 @@ export class PaystackService implements PaymentProvider {
     }
   }
 
+  async refund(payload: {
+    transaction: string | number;
+    amount?: number;
+    currency?: string;
+    customer_note?: string;
+    merchant_note?: string;
+  }) {
+    try {
+      const body: Record<string, unknown> = {
+        transaction: payload.transaction,
+      };
+
+      if (typeof payload.amount === 'number') {
+        body.amount = Math.round(payload.amount * 100);
+      }
+      if (payload.currency) {
+        body.currency = payload.currency;
+      }
+      if (payload.customer_note) {
+        body.customer_note = payload.customer_note;
+      }
+      if (payload.merchant_note) {
+        body.merchant_note = payload.merchant_note;
+      }
+
+      const res = await this.client.post('/refund', body);
+      return (res as Record<string, unknown>).data;
+    } catch (error) {
+      throw new BadRequestException(
+        error?.message || 'Unable to process Paystack refund',
+      );
+    }
+  }
+
   async handleWebhook(payload: unknown, paystackSignature: string) {
     const logger = this.logger.child({
       trackingId: Math.random().toString(32).substring(2),

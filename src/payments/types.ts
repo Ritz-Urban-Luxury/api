@@ -8,4 +8,12 @@ export interface PaymentProvider {
     amount: number;
     reference: string;
   }): Promise<unknown>;
+
+  refund?(payload: {
+    transaction: string | number;
+    amount?: number;
+    currency?: string;
+    customer_note?: string;
+    merchant_note?: string;
+  }): Promise<unknown>;
 }

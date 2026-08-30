@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { FilterQuery } from 'mongoose';
+import { isMongoId } from 'class-validator';
+import { FilterQuery, Types } from 'mongoose';
 import {
   RentalBillingType,
   RentalDocument,
@@ -33,6 +34,7 @@ import { PushNotificationService } from '../notification/push-notification.servi
 import { PaymentService } from '../payments/payment.service';
 import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { WebsocketEvent } from '../websocket/types';
 import {
   AcceptRideDTO,
   AdminGetRentalsDTO,
@@ -1099,7 +1101,16 @@ export class RidesService {
       q.status = { $in: Array.isArray(status) ? status : [status] };
     }
 
-    return this.db.rentals.paginate(q, { page, limit });
+    return this.db.rentals.paginate(q, {
+      page,
+      limit,
+      populate: [
+        { path: 'user', select: 'firstName lastName email phoneNumber' },
+        { path: 'driver', select: 'firstName lastName email phoneNumber' },
+        { path: 'ride' },
+      ],
+      sort: { createdAt: -1 },
+    });
   }
 
   async getTrip(_id: string) {
@@ -1122,5 +1133,320 @@ export class RidesService {
     }
 
     return rental;
+  }
+
+  private getRentalUserId(rental: RentalDocument): string {
+    // After populate(), prefer the original ref id — works even if the user
+    // doc is missing (populate set null) or the virtual `id` is empty.
+    const populatedId = rental.populated?.('user');
+    if (populatedId) {
+      return String(populatedId);
+    }
+
+    const user = rental.user as
+      | UserDocument
+      | Types.ObjectId
+      | string
+      | { _id?: unknown; id?: unknown }
+      | null
+      | undefined;
+
+    if (!user) {
+      return '';
+    }
+
+    if (typeof user === 'string') {
+      return user.trim();
+    }
+
+    if (user instanceof Types.ObjectId) {
+      return user.toHexString();
+    }
+
+    const fromId = (user as { id?: unknown }).id;
+    if (typeof fromId === 'string' && fromId.trim()) {
+      return fromId.trim();
+    }
+    if (fromId instanceof Types.ObjectId) {
+      return fromId.toHexString();
+    }
+
+    const fromObjectId = (user as { _id?: unknown })._id;
+    if (fromObjectId instanceof Types.ObjectId) {
+      return fromObjectId.toHexString();
+    }
+    if (fromObjectId != null && String(fromObjectId).trim()) {
+      return String(fromObjectId).trim();
+    }
+
+    const asString = String(user);
+    return isMongoId(asString) ? asString : '';
+  }
+
+  private async emitRentalStatusUpdated(rental: RentalDocument) {
+    const userId = this.getRentalUserId(rental);
+    if (!userId) {
+      return;
+    }
+
+    await this.websocket.emitToUser(userId, WebsocketEvent.RentalStatusUpdated, {
+      rentalId: rental.id,
+      status: rental.status,
+      startedAt: rental.startedAt ?? null,
+      endedAt: rental.endedAt ?? null,
+      refundedAmount: rental.refundedAmount ?? 0,
+      checkInAt: rental.checkInAt ?? null,
+      checkOutAt: rental.checkOutAt ?? null,
+      billingType: rental.billingType,
+      price: rental.price,
+    });
+  }
+
+  private notifyRentalRider(
+    rental: RentalDocument,
+    kind: 'status' | 'refund',
+    refundAmount?: number,
+  ) {
+    const userId = this.getRentalUserId(rental);
+    if (!userId) {
+      return;
+    }
+
+    const rentalId = String(rental.id);
+    const url = '/(main)/(hireRide)/Waiting';
+
+    if (kind === 'refund') {
+      const amount =
+        typeof refundAmount === 'number' && refundAmount > 0
+          ? refundAmount
+          : Number(rental.refundedAmount || 0);
+      const amountLabel = Number.isFinite(amount)
+        ? `₦${Math.round(amount).toLocaleString('en-NG')}`
+        : 'your payment';
+
+      this.push.sendToUser(userId, {
+        title: 'Rental refund update',
+        body: `A refund of ${amountLabel} is being processed for your car rental.`,
+        app: 'rider',
+        data: {
+          type: 'RentalRefunded',
+          rentalId,
+          status: String(rental.status),
+          url,
+        },
+      });
+      return;
+    }
+
+    const copyByStatus: Partial<
+      Record<RentalStatus, { title: string; body: string }>
+    > = {
+      [RentalStatus.Accepted]: {
+        title: 'Rental confirmed',
+        body: 'Your car rental request was accepted. We’ll notify you when it starts.',
+      },
+      [RentalStatus.InProgress]: {
+        title: 'Rental started',
+        body: 'Your car rental is now active. Open the app to see elapsed time.',
+      },
+      [RentalStatus.Completed]: {
+        title: 'Rental completed',
+        body: 'Your car rental has been marked complete. Thanks for riding with Ritz.',
+      },
+      [RentalStatus.Cancelled]: {
+        title: 'Rental cancelled',
+        body: 'Your car rental was cancelled. Contact support if you need help.',
+      },
+      [RentalStatus.Rejected]: {
+        title: 'Rental request declined',
+        body: 'Your car rental request was declined. A refund will be processed if payment was taken.',
+      },
+      [RentalStatus.Pending]: {
+        title: 'Rental request received',
+        body: 'We’re reviewing your car rental request.',
+      },
+    };
+
+    const copy = copyByStatus[rental.status];
+    if (!copy) {
+      return;
+    }
+
+    this.push.sendToUser(userId, {
+      title: copy.title,
+      body: copy.body,
+      app: 'rider',
+      data: {
+        type: 'RentalStatusUpdated',
+        rentalId,
+        status: String(rental.status),
+        url,
+      },
+    });
+  }
+
+  private assertRentalTransition(
+    current: RentalStatus,
+    next: RentalStatus,
+  ): void {
+    const allowed: Record<RentalStatus, RentalStatus[]> = {
+      [RentalStatus.Pending]: [RentalStatus.Accepted, RentalStatus.Rejected],
+      [RentalStatus.Accepted]: [
+        RentalStatus.InProgress,
+        RentalStatus.Cancelled,
+      ],
+      [RentalStatus.InProgress]: [
+        RentalStatus.Completed,
+        RentalStatus.Cancelled,
+      ],
+      [RentalStatus.Completed]: [],
+      [RentalStatus.Cancelled]: [],
+      [RentalStatus.Rejected]: [],
+    };
+
+    if (!allowed[current]?.includes(next)) {
+      throw new BadRequestException(
+        `Cannot transition rental from ${current} to ${next}`,
+      );
+    }
+  }
+
+  private getRefundableAmount(rental: RentalDocument): number {
+    const refunded = Number(rental.refundedAmount || 0);
+    return Math.max(0, Number(rental.price || 0) - refunded);
+  }
+
+  private async applyRentalRefund(
+    rental: RentalDocument,
+    amount?: number,
+    note?: string,
+  ) {
+    const remaining = this.getRefundableAmount(rental);
+    if (remaining <= 0) {
+      throw new BadRequestException('Rental has already been fully refunded');
+    }
+
+    const refundAmount =
+      typeof amount === 'number' ? Math.abs(amount) : remaining;
+
+    if (refundAmount <= 0) {
+      throw new BadRequestException('Refund amount must be greater than zero');
+    }
+
+    if (refundAmount > remaining + 0.0001) {
+      throw new BadRequestException(
+        `Refund amount cannot exceed remaining ${remaining}`,
+      );
+    }
+
+    const userId = this.getRentalUserId(rental);
+    const user =
+      userId && isMongoId(userId)
+        ? await this.db.users.findById(userId)
+        : null;
+
+    const paymentResponse = (rental.meta as Record<string, unknown> | undefined)
+      ?.paymentResponse;
+
+    const refundResult = await this.paymentService.refundCharge({
+      user,
+      paymentMethod: rental.paymentMethod,
+      paymentResponse,
+      amount: refundAmount,
+      note: note || `Rental ${rental.id} refund`,
+    });
+
+    const counted =
+      refundResult &&
+      typeof refundResult === 'object' &&
+      (refundResult as { status?: string }).status !== 'skipped';
+
+    const nextRefunded = counted
+      ? Number(rental.refundedAmount || 0) + refundAmount
+      : Number(rental.refundedAmount || 0);
+
+    const meta = {
+      ...(rental.meta || {}),
+      refundResponse: refundResult,
+    };
+
+    return this.db.rentals
+      .findOneAndUpdate(
+        { _id: rental.id },
+        {
+          $set: {
+            ...(counted
+              ? {
+                  refundedAmount: nextRefunded,
+                  refundedAt: new Date(),
+                }
+              : {}),
+            meta,
+          },
+        },
+        { new: true },
+      )
+      .populate('user driver ride');
+  }
+
+  async updateRentalStatus(rentalId: string, status: RentalStatus) {
+    let rental = await this.getRental(rentalId);
+    this.assertRentalTransition(rental.status, status);
+
+    if (status === RentalStatus.Rejected) {
+      const refunded = await this.applyRentalRefund(
+        rental,
+        undefined,
+        `Rental ${rental.id} rejected`,
+      );
+      if (!refunded) {
+        throw new NotFoundException('Rental not found');
+      }
+      rental = refunded;
+    }
+
+    const $set: Record<string, unknown> = { status };
+    if (status === RentalStatus.InProgress) {
+      $set.startedAt = new Date();
+    }
+    if (status === RentalStatus.Completed) {
+      $set.endedAt = new Date();
+    }
+
+    const updated = await this.db.rentals
+      .findOneAndUpdate({ _id: rental.id }, { $set }, { new: true })
+      .populate('user driver ride');
+
+    if (!updated) {
+      throw new NotFoundException('Rental not found');
+    }
+
+    await this.emitRentalStatusUpdated(updated);
+    this.notifyRentalRider(updated, 'status');
+    return updated;
+  }
+
+  async refundRental(rentalId: string, amount?: number) {
+    const rental = await this.getRental(rentalId);
+    const previousRefunded = Number(rental.refundedAmount || 0);
+    const updated = await this.applyRentalRefund(
+      rental,
+      amount,
+      `Rental ${rental.id} admin refund`,
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Rental not found');
+    }
+
+    await this.emitRentalStatusUpdated(updated);
+    const refundedDelta =
+      Number(updated.refundedAmount || 0) - previousRefunded;
+    this.notifyRentalRider(
+      updated,
+      'refund',
+      refundedDelta > 0 ? refundedDelta : amount,
+    );
+    return updated;
   }
 }

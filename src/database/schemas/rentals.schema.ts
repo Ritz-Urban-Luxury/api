@@ -55,6 +55,18 @@ export class Rental extends BaseSchema {
   @Prop({ type: String, default: RentalStatus.Pending, enum: RentalStatuses })
   status: RentalStatus;
 
+  @Prop()
+  startedAt?: Date;
+
+  @Prop()
+  endedAt?: Date;
+
+  @Prop({ type: Number, default: 0 })
+  refundedAmount?: number;
+
+  @Prop()
+  refundedAt?: Date;
+
   @Prop({ type: SchemaTypes.Mixed })
   meta?: Record<string, unknown>;
 
