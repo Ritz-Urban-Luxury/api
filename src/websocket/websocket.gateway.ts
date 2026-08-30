@@ -37,6 +37,12 @@ export class WebsocketGateway {
 
   private readonly lastLocationPersistence = new Map<string, number>();
 
+  /** Freshest driver ping per trip — used by rider HTTP polling fallback. */
+  private readonly lastRideLocations = new Map<
+    string,
+    RideLocationEventPayload
+  >();
+
   @WebSocketServer()
   private readonly server: Server;
 
@@ -63,13 +69,35 @@ export class WebsocketGateway {
     }
   }
 
-  async emitToUser<T>(user: UserDocument, event: WebsocketEventType, data: T) {
-    this.server.to(user.id).emit(event, data);
+  async emitToUser<T>(
+    user: UserDocument | string,
+    event: WebsocketEventType,
+    data: T,
+  ) {
+    const roomId =
+      typeof user === 'string'
+        ? user
+        : (user?.id ?? String((user as { _id?: unknown })?._id ?? ''));
+
+    if (!roomId) {
+      this.logger.warn(`emitToUser skipped — missing user room for ${event}`);
+      return;
+    }
+
+    this.server.to(roomId).emit(event, data);
   }
 
   /** How many sockets are currently in this user's room. */
   getUserRoomSize(userId: string): number {
     return this.server.sockets.adapter.rooms.get(userId)?.size ?? 0;
+  }
+
+  getLastRideLocation(tripId: string): RideLocationEventPayload | null {
+    return this.lastRideLocations.get(tripId) ?? null;
+  }
+
+  clearLastRideLocation(tripId: string) {
+    this.lastRideLocations.delete(tripId);
   }
 
   async updateRideStatus(
@@ -99,6 +127,11 @@ export class WebsocketGateway {
     @CurrentClientUser() user: UserDocument,
     @MessageBody() payload: RideLocationDTO,
   ) {
+    const location = this.normalizeRideLocation(payload);
+    if (!location) {
+      return;
+    }
+
     const trip = await this.db.trips
       .findOne({
         driver: user.id,
@@ -108,21 +141,21 @@ export class WebsocketGateway {
       .populate('user');
 
     if (!trip) {
-      await this.persistRideLocation(user.id, payload);
+      await this.persistRideLocation(user.id, location);
       return;
     }
 
     const lastSequence = this.lastLocationSequence.get(user.id);
     if (
-      payload.sequence !== undefined &&
+      location.sequence !== undefined &&
       lastSequence !== undefined &&
-      payload.sequence <= lastSequence
+      location.sequence <= lastSequence
     ) {
       return;
     }
 
-    if (payload.sequence !== undefined) {
-      this.lastLocationSequence.set(user.id, payload.sequence);
+    if (location.sequence !== undefined) {
+      this.lastLocationSequence.set(user.id, location.sequence);
     }
 
     const rideId = typeof trip.ride === 'string' ? trip.ride : trip.ride?.id;
@@ -130,31 +163,39 @@ export class WebsocketGateway {
       return;
     }
 
-    const recordedAt = payload.recordedAt ?? new Date().toISOString();
+    const recordedAt = location.recordedAt ?? new Date().toISOString();
     const locationEvent: RideLocationEventPayload = {
-      accuracy: payload.accuracy,
+      accuracy: location.accuracy,
       tripId: trip.id,
       rideId,
-      lat: payload.lat,
-      lon: payload.lon,
-      heading: payload.heading,
+      lat: location.lat,
+      lon: location.lon,
+      heading: location.heading,
       recordedAt,
-      sequence: payload.sequence,
-      speed: payload.speed,
+      sequence: location.sequence,
+      speed: location.speed,
       updatedAt: new Date().toISOString(),
     };
 
+    this.lastRideLocations.set(trip.id, locationEvent);
+
+    const riderRoomId =
+      typeof trip.user === 'string'
+        ? trip.user
+        : ((trip.user as UserDocument)?.id ??
+          String((trip.user as { _id?: unknown })?._id ?? ''));
+
     await this.emitToUser(
-      trip.user as UserDocument,
+      riderRoomId,
       WebsocketEvent.RideLocation,
       locationEvent,
     );
 
+    // Always keep the ride document fresh enough for HTTP polling.
+    await this.persistRideLocation(user.id, location);
+
     if (this.shouldPersistLocation(rideId)) {
-      await Promise.all([
-        this.persistRideLocation(user.id, payload),
-        this.updateRideStatus(trip, rideId, [payload.lat, payload.lon]),
-      ]);
+      await this.updateRideStatus(trip, rideId, [location.lat, location.lon]);
     }
   }
 
@@ -162,7 +203,8 @@ export class WebsocketGateway {
     const now = Date.now();
     const lastPersistedAt = this.lastLocationPersistence.get(rideId) ?? 0;
 
-    if (now - lastPersistedAt < 10000) {
+    // Keep DB fresh enough for rider HTTP polling fallback (~2–3s).
+    if (now - lastPersistedAt < 2000) {
       return false;
     }
 
@@ -170,29 +212,95 @@ export class WebsocketGateway {
     return true;
   }
 
+  private normalizeRideLocation(payload: RideLocationDTO): {
+    accuracy?: number;
+    lat: number;
+    lon: number;
+    heading?: number;
+    recordedAt?: string;
+    sequence?: number;
+    speed?: number;
+  } | null {
+    const lat = Number(payload.lat);
+    const lon = Number(payload.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      this.logger.warn(
+        `ignoring RideLocation with non-numeric coords lat=${payload.lat} lon=${payload.lon}`,
+      );
+      return null;
+    }
+
+    const accuracy =
+      payload.accuracy === undefined || payload.accuracy === null
+        ? undefined
+        : Number(payload.accuracy);
+    const heading =
+      payload.heading === undefined || payload.heading === null
+        ? undefined
+        : Number(payload.heading);
+    const sequence =
+      payload.sequence === undefined || payload.sequence === null
+        ? undefined
+        : Number(payload.sequence);
+    const speed =
+      payload.speed === undefined || payload.speed === null
+        ? undefined
+        : Number(payload.speed);
+
+    return {
+      accuracy: Number.isFinite(accuracy) ? accuracy : undefined,
+      lat,
+      lon,
+      heading: Number.isFinite(heading) ? heading : undefined,
+      recordedAt: payload.recordedAt,
+      sequence: Number.isFinite(sequence) ? sequence : undefined,
+      speed: Number.isFinite(speed) ? speed : undefined,
+    };
+  }
+
   private async persistRideLocation(
     driverId: string,
-    payload: RideLocationDTO,
+    payload: {
+      accuracy?: number;
+      lat: number;
+      lon: number;
+      heading?: number;
+      recordedAt?: string;
+      sequence?: number;
+      speed?: number;
+    },
   ) {
-    return this.db.rides.findOneAndUpdate(
-      { driver: driverId },
-      {
-        $set: {
-          location: {
-            accuracy: payload.accuracy,
-            coordinates: [payload.lat, payload.lon],
-            heading: payload.heading,
-            recordedAt: payload.recordedAt
-              ? new Date(payload.recordedAt)
-              : new Date(),
-            sequence: payload.sequence,
-            speed: payload.speed,
-            type: 'Point',
+    try {
+      // Keep GeoJSON `type` + `coordinates` first. MongoDB 2dsphere rejects
+      // Points when non-geo fields are serialized ahead of `type`.
+      return await this.db.rides.findOneAndUpdate(
+        { driver: driverId },
+        {
+          $set: {
+            location: {
+              type: 'Point',
+              coordinates: [payload.lat, payload.lon],
+              accuracy: payload.accuracy,
+              heading: payload.heading,
+              recordedAt: payload.recordedAt
+                ? new Date(payload.recordedAt)
+                : new Date(),
+              sequence: payload.sequence,
+              speed: payload.speed,
+            },
           },
         },
-      },
-      { new: true },
-    );
+        { new: true },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `failed to persist ride location for driver ${driverId}: ${
+          (error as Error)?.message || error
+        }`,
+      );
+      return null;
+    }
   }
 
   @UseGuards(WSJwtGuard)
@@ -211,20 +319,31 @@ export class WebsocketGateway {
 
     if (trip) {
       const ride = trip.ride as RidesDocument;
+      const liveLocation = this.lastRideLocations.get(trip.id);
+      const fromCoordinates: [number, number] = liveLocation
+        ? [liveLocation.lat, liveLocation.lon]
+        : (ride.location.coordinates as [number, number]);
       const coordinates =
         trip.status === TripStatus.Started
           ? trip.from.coordinates
           : trip.nextDestination?.to?.coordinates;
       const eta = payload.ignoreETA
         ? null
-        : await GeolocationService.getETA(
-            ride.location.coordinates,
-            coordinates,
-          );
+        : await GeolocationService.getETA(fromCoordinates, coordinates);
 
       this.emitToUser(user, WebsocketEvent.RideETA, {
         eta,
-        location: ride.location,
+        location: liveLocation
+          ? {
+              type: 'Point',
+              coordinates: fromCoordinates,
+              heading: liveLocation.heading,
+              recordedAt: liveLocation.recordedAt,
+              sequence: liveLocation.sequence,
+              speed: liveLocation.speed,
+              accuracy: liveLocation.accuracy,
+            }
+          : ride.location,
       });
     }
   }

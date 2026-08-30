@@ -1,4 +1,5 @@
 /* eslint-disable max-classes-per-file */
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDate,
@@ -8,6 +9,7 @@ import {
   IsMongoId,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   ValidateNested,
@@ -146,6 +148,28 @@ export class AcceptRideDTO {
   trackingId: string;
 }
 
+export class GetDrivingRouteDTO {
+  @Type(() => Number)
+  @IsLatitude()
+  @IsNotEmpty()
+  fromLat: number;
+
+  @Type(() => Number)
+  @IsLongitude()
+  @IsNotEmpty()
+  fromLon: number;
+
+  @Type(() => Number)
+  @IsLatitude()
+  @IsNotEmpty()
+  toLat: number;
+
+  @Type(() => Number)
+  @IsLongitude()
+  @IsNotEmpty()
+  toLon: number;
+}
+
 export class MessageDTO {
   @IsString()
   @IsNotEmpty()
@@ -234,6 +258,14 @@ export class CreateRideDTO {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+
+  @IsIn(RideTypes)
+  @IsOptional()
+  type?: RideType;
+
+  @IsObject()
+  @IsOptional()
+  specs?: Record<string, unknown>;
 }
 
 export class UpdateRideDTO {

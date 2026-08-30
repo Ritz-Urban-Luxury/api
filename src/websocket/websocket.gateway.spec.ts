@@ -23,6 +23,10 @@ describe('WebsocketGateway', () => {
       findOne,
     },
   } as unknown as DatabaseService;
+  const logger = {
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as unknown as Logger;
   let gateway: WebsocketGateway;
 
   beforeEach(() => {
@@ -30,12 +34,40 @@ describe('WebsocketGateway', () => {
     findOneAndUpdate.mockResolvedValue(ride);
     gateway = new WebsocketGateway(
       {} as AuthenticationService,
-      {} as Logger,
+      logger,
       db,
     );
   });
 
   describe('updateRideLocation', () => {
+    it('coerces string coordinates before persisting', async () => {
+      const populate = jest.fn().mockResolvedValue(null);
+      findOne.mockReturnValue({ populate });
+
+      await gateway.updateRideLocation(driver, {
+        lat: '9.067114' as unknown as number,
+        lon: '7.397462' as unknown as number,
+      });
+
+      expect(findOneAndUpdate).toHaveBeenCalledWith(
+        { driver: driver.id },
+        {
+          $set: {
+            location: {
+              type: 'Point',
+              coordinates: [9.067114, 7.397462],
+              accuracy: undefined,
+              heading: undefined,
+              recordedAt: expect.any(Date),
+              sequence: undefined,
+              speed: undefined,
+            },
+          },
+        },
+        { new: true },
+      );
+    });
+
     it('stores and emits the driver location to the active trip rider', async () => {
       const trip = {
         id: 'trip-id',
@@ -64,13 +96,13 @@ describe('WebsocketGateway', () => {
         {
           $set: {
             location: {
-              accuracy: 8,
+              type: 'Point',
               coordinates: [9.067114, 7.397462],
+              accuracy: 8,
               heading: 90,
               recordedAt: new Date('2026-07-31T15:00:00.000Z'),
               sequence: 100,
               speed: 12,
-              type: 'Point',
             },
           },
         },
@@ -89,7 +121,7 @@ describe('WebsocketGateway', () => {
       });
       expect(populate).toHaveBeenCalledWith('user');
       expect(emitToUser).toHaveBeenCalledWith(
-        rider,
+        rider.id,
         WebsocketEvent.RideLocation,
         {
           accuracy: 8,
@@ -205,7 +237,8 @@ describe('WebsocketGateway', () => {
       });
 
       expect(emitToUser).toHaveBeenCalledTimes(2);
-      expect(findOneAndUpdate).toHaveBeenCalledTimes(1);
+      // Location is always persisted so rider HTTP polling stays fresh.
+      expect(findOneAndUpdate).toHaveBeenCalledTimes(2);
     });
   });
 });

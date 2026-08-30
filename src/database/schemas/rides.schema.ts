@@ -25,14 +25,16 @@ export const RideTypes = Object.values(RideType);
 
 @EmbeddedSchema()
 export class Location {
-  @Prop()
-  accuracy?: number;
-
+  // GeoJSON fields must be first: MongoDB 2dsphere fails if other props
+  // precede `type` in the BSON document (Mongoose serializes by path order).
   @Prop({ required: true })
   type: 'Point';
 
-  @Prop([{ type: Number, maxlength: 2 }])
+  @Prop({ type: [Number], required: true })
   coordinates: [number, number];
+
+  @Prop()
+  accuracy?: number;
 
   @Prop()
   heading?: number;

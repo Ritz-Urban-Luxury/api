@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -73,6 +74,24 @@ export class UpdateUserDTO {
   @IsString()
   @IsOptional()
   accountNumber?: string;
+}
+
+export class UpsertPushTokenDTO {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+
+  @IsIn(['ios', 'android'])
+  platform: 'ios' | 'android';
+
+  @IsIn(['rider', 'driver'])
+  app: 'rider' | 'driver';
+}
+
+export class RemovePushTokenDTO {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
 }
 
 export class SetUserVerificationDTO {

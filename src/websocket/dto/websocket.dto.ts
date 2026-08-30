@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -12,19 +13,23 @@ import {
 } from 'class-validator';
 
 export class RideLocationDTO {
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @IsOptional()
   accuracy?: number;
 
+  @Type(() => Number)
   @IsLatitude()
   @IsNotEmpty()
   lat: number;
 
+  @Type(() => Number)
   @IsLongitude()
   @IsNotEmpty()
   lon: number;
 
+  @Type(() => Number)
   @IsNumber()
   @Max(360)
   @Min(0)
@@ -35,11 +40,13 @@ export class RideLocationDTO {
   @IsOptional()
   recordedAt?: string;
 
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   @IsOptional()
   sequence?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @IsOptional()

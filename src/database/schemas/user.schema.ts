@@ -11,6 +11,16 @@ export enum OAuthProvider {
 
 export const OAuthProviders = Object.values(OAuthProvider);
 
+export type PushPlatform = 'ios' | 'android';
+export type PushApp = 'rider' | 'driver';
+
+export type PushDevice = {
+  token: string;
+  platform: PushPlatform;
+  app: PushApp;
+  updatedAt?: Date;
+};
+
 export type UserDocument = User &
   Document & {
     isValidPassword(password: string): Promise<boolean>;
@@ -26,6 +36,7 @@ export type UserDocument = User &
       delete ret.oAuthIdentifier;
       delete ret.oAuthProvider;
       delete ret.preferences;
+      delete ret.pushDevices;
     },
   },
 })
@@ -104,6 +115,19 @@ export class User extends BaseSchema {
 
   @Prop()
   isAppAdmin?: boolean;
+
+  @Prop({
+    type: [
+      {
+        token: { type: String, required: true },
+        platform: { type: String, enum: ['ios', 'android'], required: true },
+        app: { type: String, enum: ['rider', 'driver'], required: true },
+        updatedAt: { type: Date },
+      },
+    ],
+    default: [],
+  })
+  pushDevices: PushDevice[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

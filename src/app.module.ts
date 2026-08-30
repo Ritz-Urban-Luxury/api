@@ -11,6 +11,7 @@ import { AuthenticationModule } from './authentication';
 import { DatabaseModule } from './database/database.module';
 import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
+import { NotificationModule } from './notification';
 import { PaymentModule } from './payments/payment.module';
 import { RidesModule } from './rides/rides.module';
 import config from './shared/config';
@@ -21,6 +22,7 @@ import { WebsocketModule } from './websocket/websocket.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [config] }),
     LoggerModule,
+    NotificationModule,
     AuthenticationModule,
     MongooseModule.forRoot(config().database.url, {
       connectionFactory(connection) {

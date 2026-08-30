@@ -64,6 +64,9 @@ const config = () => ({
     url: process.env.PAYSTACK_API_URL,
     secretKey: process.env.PAYSTACK_SECRET_KEY,
   },
+  firebase: {
+    serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;

@@ -18,6 +18,7 @@ import { Response } from '../shared/response';
 import {
   AcceptRideDTO,
   CreateRideDTO,
+  GetDrivingRouteDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
   HireRideDTO,
@@ -27,6 +28,7 @@ import {
   UpdateRideDTO,
   UpdateTripDTO,
 } from './dto/rides.dto';
+import { GeolocationService } from './geolocation.service';
 import { RidesService } from './rides.service';
 
 @Controller('rides')
@@ -46,6 +48,17 @@ export class RidesController {
     const brands = await this.ridesService.getCarBrands();
 
     return Response.json('car brands', brands);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('directions')
+  async getDrivingRoute(@Query() payload: GetDrivingRouteDTO) {
+    const route = await GeolocationService.getDrivingRoute(
+      [Number(payload.fromLat), Number(payload.fromLon)],
+      [Number(payload.toLat), Number(payload.toLon)],
+    );
+
+    return Response.json('driving route', route);
   }
 
   @UseGuards(JwtGuard)
@@ -114,6 +127,25 @@ export class RidesController {
     const ongoingTrip = await this.ridesService.getOngoingTrip(user);
 
     return Response.json('ongoing trip', ongoingTrip);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('trips/ongoing/location')
+  async getOngoingTripLocation(@CurrentUser() user: UserDocument) {
+    const location = await this.ridesService.getOngoingTripLocation(user);
+
+    return Response.json('ongoing trip location', location);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('trips/:trip')
+  async getUserTrip(
+    @CurrentUser() user: UserDocument,
+    @Param('trip') trip: string,
+  ) {
+    const _trip = await this.ridesService.getUserTrip(user, trip);
+
+    return Response.json('trip', _trip);
   }
 
   @UseGuards(JwtGuard)

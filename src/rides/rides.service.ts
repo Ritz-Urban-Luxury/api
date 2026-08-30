@@ -29,6 +29,7 @@ import {
   TripStopStatus,
 } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
+import { PushNotificationService } from '../notification/push-notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
@@ -58,6 +59,7 @@ export class RidesService {
     private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
     private readonly activityLedger: ActivityLedgerService,
+    private readonly push: PushNotificationService,
   ) {}
 
   async getAvailableRides(payload: GetRidesDTO) {
@@ -100,9 +102,9 @@ export class RidesService {
       return { trackingId };
     }
 
-    return this.db.trips
+    const trip = await this.db.trips
       .findOne({
-        user: user.id,
+        $or: [{ user: user.id }, { driver: user.id }],
         status: { $nin: InactiveTripStatuses },
         deleted: { $ne: true },
       })
@@ -110,7 +112,64 @@ export class RidesService {
         path: 'ride',
         populate: { path: 'driver' },
       })
+      .populate('user')
       .populate('driver');
+
+    // Driver closed the app mid-trip earlier and the trip was cancelled/completed
+    // elsewhere — free a stuck Busy ride so they can go online again.
+    if (!trip) {
+      await this.db.rides.updateOne(
+        {
+          driver: user.id,
+          deleted: { $ne: true },
+          status: { $in: [RideStatus.Busy, RideStatus.FinishingTrip] },
+        },
+        { $set: { status: RideStatus.Offline } },
+      );
+    }
+
+    return trip;
+  }
+
+  async getOngoingTripLocation(user: UserDocument) {
+    const ongoing = await this.getOngoingTrip(user);
+
+    if (
+      !ongoing ||
+      typeof ongoing !== 'object' ||
+      !('id' in ongoing) ||
+      !ongoing.id
+    ) {
+      return null;
+    }
+
+    const live = this.websocket.getLastRideLocation(ongoing.id);
+    if (live) {
+      return live;
+    }
+
+    const ride =
+      ongoing.ride && typeof ongoing.ride !== 'string' ? ongoing.ride : null;
+    const [latitude, longitude] = ride?.location?.coordinates ?? [];
+
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return null;
+    }
+
+    return {
+      accuracy: ride?.location?.accuracy,
+      tripId: ongoing.id,
+      rideId: ride.id,
+      lat: latitude,
+      lon: longitude,
+      heading: ride?.location?.heading,
+      recordedAt: ride?.location?.recordedAt
+        ? new Date(ride.location.recordedAt).toISOString()
+        : new Date().toISOString(),
+      sequence: ride?.location?.sequence,
+      speed: ride?.location?.speed,
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
@@ -230,74 +289,104 @@ export class RidesService {
       const ride = available[i];
       const driver = ride.driver as UserDocument;
 
+      if (!driver?.id) {
+        continue;
+      }
+
       trackingId = Math.random().toString(32).substring(2);
 
-      // Driver not connected — skip wait and try next (emit would be silent)
-      if (driver?.id && this.websocket.getUserRoomSize(driver.id) >= 1) {
-        this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
-        this.websocket.emitToUser(driver, 'RideRequest', {
+      this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
+      this.websocket.emitToUser(driver, 'RideRequest', {
+        trackingId,
+        user,
+        payload,
+      });
+      this.push.sendToUser(driver, {
+        title: 'New ride request',
+        body: payload.fromAddress
+          ? `Pickup near ${payload.fromAddress}`
+          : 'A rider is requesting a ride nearby',
+        app: 'driver',
+        data: {
+          type: 'RideRequest',
           trackingId,
-          user,
-          payload,
-        });
+        },
+      });
 
-        await this.cache.set(trackingId, false, offerTtl);
-        await new Promise((resolve) => {
-          setTimeout(resolve, this.WAIT_TIME);
-        });
+      await this.cache.set(trackingId, false, offerTtl);
+      await new Promise((resolve) => {
+        setTimeout(resolve, this.WAIT_TIME);
+      });
 
-        const [accepted, waiting] = await Promise.all([
-          this.cache.get<boolean>(trackingId),
-          this.cache.get<boolean>(connectionId),
-        ]);
-        if (!waiting) {
-          this.websocket.emitToUser(user, 'RideRequestCancelled', {
-            trackingId: connectionId,
-          });
-          this.websocket.emitToUser(driver, 'RideRequestCancelled', {
+      const [accepted, waiting] = await Promise.all([
+        this.cache.get<boolean>(trackingId),
+        this.cache.get<boolean>(connectionId),
+      ]);
+      if (!waiting) {
+        this.websocket.emitToUser(user, 'RideRequestCancelled', {
+          trackingId: connectionId,
+        });
+        this.websocket.emitToUser(driver, 'RideRequestCancelled', {
+          trackingId,
+        });
+        this.push.sendToUser(driver, {
+          title: 'Ride request cancelled',
+          body: 'The rider cancelled this request',
+          app: 'driver',
+          data: {
+            type: 'RideRequestCancelled',
             trackingId,
-          });
+          },
+        });
 
-          await Promise.all([
-            this.cache.del(connectionId),
-            this.cache.del(`${user.id}`),
-          ]);
-          return;
-        }
+        await Promise.all([
+          this.cache.del(connectionId),
+          this.cache.del(`${user.id}`),
+        ]);
+        return;
+      }
 
-        if (accepted === true) {
-          const [trip] = await Promise.all([
-            this.db.trips.create({
-              ...payload,
-              to: {
-                type: 'Point',
-                coordinates: [payload.toLat, payload.toLon],
-              },
-              from: {
-                type: 'Point',
-                coordinates: [payload.fromLat, payload.fromLon],
-              },
-              user,
-              ride,
-              driver,
-              stops: (payload.stops || []).map((stop) => ({
-                to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
-                toAddress: stop.toAddress,
-              })),
-            }),
-            this.db.rides.updateOne(
-              { _id: ride.id },
-              { status: RideStatus.Busy },
-            ),
-            this.cache.del(connectionId),
-            this.cache.del(`${user.id}`),
-          ]);
+      if (accepted === true) {
+        const [trip] = await Promise.all([
+          this.db.trips.create({
+            ...payload,
+            to: {
+              type: 'Point',
+              coordinates: [payload.toLat, payload.toLon],
+            },
+            from: {
+              type: 'Point',
+              coordinates: [payload.fromLat, payload.fromLon],
+            },
+            user,
+            ride,
+            driver,
+            stops: (payload.stops || []).map((stop) => ({
+              to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
+              toAddress: stop.toAddress,
+            })),
+          }),
+          this.db.rides.updateOne(
+            { _id: ride.id },
+            { status: RideStatus.Busy },
+          ),
+          this.cache.del(connectionId),
+          this.cache.del(`${user.id}`),
+        ]);
 
-          this.websocket.emitToUser(user, 'TripStarted', trip);
-          this.websocket.emitToUser(driver, 'TripStarted', trip);
+        this.websocket.emitToUser(user, 'TripStarted', trip);
+        this.websocket.emitToUser(driver, 'TripStarted', trip);
+        this.push.sendToUser(user, {
+          title: 'Driver on the way',
+          body: 'Your driver accepted the ride',
+          app: 'rider',
+          data: {
+            type: 'TripStarted',
+            tripId: String(trip.id),
+          },
+        });
 
-          return;
-        }
+        return;
       }
     }
 
@@ -346,6 +435,22 @@ export class RidesService {
       trip,
     );
 
+    const rider = trip.user as UserDocument;
+    const driver = trip.driver as UserDocument;
+    const cancelledByRider = String(user.id) === String(rider.id);
+    const recipient = cancelledByRider ? driver : rider;
+    this.push.sendToUser(recipient, {
+      title: 'Trip cancelled',
+      body: cancelledByRider
+        ? 'The rider cancelled the trip'
+        : 'The driver cancelled the trip',
+      app: cancelledByRider ? 'driver' : 'rider',
+      data: {
+        type: 'TripCancelled',
+        tripId: String(trip.id),
+      },
+    });
+
     return trip;
   }
 
@@ -372,6 +477,21 @@ export class RidesService {
 
     this.websocket.emitToUser(driver, 'NewMessage', message);
     this.websocket.emitToUser(user, 'NewMessage', message);
+
+    const recipient = String(_user.id) === String(user.id) ? driver : user;
+    const preview =
+      payload.text.length > 80
+        ? `${payload.text.slice(0, 77)}...`
+        : payload.text;
+    this.push.sendToUser(recipient, {
+      title: 'New message',
+      body: preview,
+      app: String(recipient.id) === String(driver.id) ? 'driver' : 'rider',
+      data: {
+        type: 'NewMessage',
+        tripId: String(trip.id),
+      },
+    });
 
     return message;
   }
@@ -444,6 +564,15 @@ export class RidesService {
       'DriverArrival',
       trip,
     );
+    this.push.sendToUser(trip.user as UserDocument, {
+      title: 'Driver has arrived',
+      body: 'Your driver is waiting at the pickup',
+      app: 'rider',
+      data: {
+        type: 'DriverArrival',
+        tripId: String(trip.id),
+      },
+    });
 
     return trip;
   }
@@ -474,6 +603,15 @@ export class RidesService {
       'TripInProgress',
       trip,
     );
+    this.push.sendToUser(trip.user as UserDocument, {
+      title: 'Trip started',
+      body: 'Your trip is now in progress',
+      app: 'rider',
+      data: {
+        type: 'TripInProgress',
+        tripId: String(trip.id),
+      },
+    });
 
     return trip;
   }
@@ -563,6 +701,37 @@ export class RidesService {
     this.websocket.emitToUser(user, event, trip);
     this.websocket.emitToUser(driver, event, trip);
 
+    if (paymentSucceeded) {
+      this.push.sendToUser(user, {
+        title: 'Trip completed',
+        body: 'Thanks for riding with Ritz',
+        app: 'rider',
+        data: {
+          type: 'TripEnded',
+          tripId: String(trip.id),
+        },
+      });
+      this.push.sendToUser(driver, {
+        title: 'Trip completed',
+        body: 'Trip finished successfully',
+        app: 'driver',
+        data: {
+          type: 'TripEnded',
+          tripId: String(trip.id),
+        },
+      });
+    } else {
+      this.push.sendToUser(user, {
+        title: 'Payment failed',
+        body: 'We could not charge your payment method',
+        app: 'rider',
+        data: {
+          type: 'PaymentFailed',
+          tripId: String(trip.id),
+        },
+      });
+    }
+
     return trip;
   }
 
@@ -574,8 +743,33 @@ export class RidesService {
         user: user.id,
         deleted: { $ne: true },
       },
-      { page, limit },
+      {
+        page,
+        limit,
+        sort: { createdAt: -1 },
+        populate: [
+          { path: 'driver' },
+          { path: 'ride', populate: { path: 'driver' } },
+        ],
+      },
     );
+  }
+
+  async getUserTrip(user: UserDocument, tripId: string) {
+    const trip = await this.db.trips
+      .findOne({
+        _id: tripId,
+        user: user.id,
+        deleted: { $ne: true },
+      })
+      .populate('driver')
+      .populate({ path: 'ride', populate: { path: 'driver' } });
+
+    if (!trip) {
+      throw new NotFoundException('trip not found');
+    }
+
+    return trip;
   }
 
   async rateTrip(user: UserDocument, tripId: string, rating: Rating) {
@@ -812,9 +1006,24 @@ export class RidesService {
   }
 
   async createRide(user: UserDocument, payload: CreateRideDTO) {
+    const requestedSeats = Number(payload.specs?.seats);
+    const seats =
+      Number.isFinite(requestedSeats) && requestedSeats > 0
+        ? Math.min(12, Math.round(requestedSeats))
+        : 4;
+
     return this.db.rides.findOneAndUpdate(
       { driver: user.id },
-      { ...payload, driver: user.id },
+      {
+        ...payload,
+        driver: user.id,
+        type: payload.type || RideType.Classic,
+        status: RideStatus.Offline,
+        specs: {
+          ...(payload.specs || {}),
+          seats,
+        },
+      },
       { new: true, upsert: true },
     );
   }
