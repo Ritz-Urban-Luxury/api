@@ -21,8 +21,18 @@ export class DriverEarning extends BaseSchema {
   })
   trip: string | TripDocument;
 
+  /** Net amount paid to the driver (gross − commission). */
   @Prop({ required: true })
   amount: number;
+
+  @Prop()
+  grossAmount?: number;
+
+  @Prop()
+  commissionAmount?: number;
+
+  @Prop({ type: String })
+  paymentMethod?: string;
 
   @Prop({ required: true, default: () => new Date() })
   earnedAt: Date;

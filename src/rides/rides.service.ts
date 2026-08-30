@@ -16,6 +16,7 @@ import {
 import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { DatabaseService } from '../database/database.service';
 import { ActivityType } from '../database/schemas/activities.schema';
+import { RideOfferOutcome } from '../database/schemas/driver-ride-offer.schema';
 import {
   RidesDocument,
   RideStatus,
@@ -297,6 +298,12 @@ export class RidesService {
 
       trackingId = Math.random().toString(32).substring(2);
 
+      await this.recordRideOffer({
+        driverId: driver.id,
+        userId: user.id,
+        trackingId,
+      });
+
       this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
       this.websocket.emitToUser(driver, 'RideRequest', {
         trackingId,
@@ -325,6 +332,10 @@ export class RidesService {
         this.cache.get<boolean>(connectionId),
       ]);
       if (!waiting) {
+        await this.resolveRideOffer(
+          trackingId,
+          RideOfferOutcome.CancelledByRider,
+        );
         this.websocket.emitToUser(user, 'RideRequestCancelled', {
           trackingId: connectionId,
         });
@@ -372,9 +383,14 @@ export class RidesService {
             { _id: ride.id },
             { status: RideStatus.Busy },
           ),
+          this.closeOnlineSession(driver.id),
           this.cache.del(connectionId),
           this.cache.del(`${user.id}`),
         ]);
+
+        await this.resolveRideOffer(trackingId, RideOfferOutcome.Accepted, {
+          tripId: trip.id,
+        });
 
         this.websocket.emitToUser(user, 'TripStarted', trip);
         this.websocket.emitToUser(driver, 'TripStarted', trip);
@@ -390,6 +406,8 @@ export class RidesService {
 
         return;
       }
+
+      await this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut);
     }
 
     await Promise.all([
@@ -430,15 +448,13 @@ export class RidesService {
       { $set: { status: RideStatus.Online } },
     );
 
-    this.websocket.emitToUser(trip.user as UserDocument, 'TripCancelled', trip);
-    this.websocket.emitToUser(
-      trip.driver as UserDocument,
-      'TripCancelled',
-      trip,
-    );
-
     const rider = trip.user as UserDocument;
     const driver = trip.driver as UserDocument;
+    await this.openOnlineSession(driver.id, String(trip.ride));
+
+    this.websocket.emitToUser(rider, 'TripCancelled', trip);
+    this.websocket.emitToUser(driver, 'TripCancelled', trip);
+
     const cancelledByRider = String(user.id) === String(rider.id);
     const recipient = cancelledByRider ? driver : rider;
     this.push.sendToUser(recipient, {
@@ -587,7 +603,12 @@ export class RidesService {
         status: TripStatus.DriverArrived,
         driver: user.id,
       },
-      { $set: { status: TripStatus.InProgress } },
+      {
+        $set: {
+          status: TripStatus.InProgress,
+          startedAt: new Date(),
+        },
+      },
       {
         populate: { path: 'user driver' },
         options: { upsert: false, new: true },
@@ -664,6 +685,7 @@ export class RidesService {
         {
           $set: {
             status,
+            endedAt: new Date(),
             meta: { paymentResponse, paymentError, amount, distance },
           },
         },
@@ -674,6 +696,8 @@ export class RidesService {
         { $set: { status: RideStatus.Online } },
       ),
     ]);
+
+    await this.openOnlineSession(driver.id, String(trip.ride));
 
     const paymentSucceeded = status === TripStatus.Completed;
     await this.activityLedger.recordActivity({
@@ -695,6 +719,7 @@ export class RidesService {
         driver: driver.id,
         trip: trip.id,
         amount,
+        paymentMethod: trip.paymentMethod,
       });
     }
 
@@ -1073,11 +1098,92 @@ export class RidesService {
       return ride;
     }
 
-    return this.db.rides.findOneAndUpdate(
+    const updated = await this.db.rides.findOneAndUpdate(
       { _id: ride.id },
       { $set: { status } },
       { new: true },
     );
+
+    if (status === RideStatus.Online) {
+      await this.openOnlineSession(user.id, ride.id);
+    } else if (status === RideStatus.Offline) {
+      await this.closeOnlineSession(user.id);
+    }
+
+    return updated;
+  }
+
+  private async recordRideOffer(payload: {
+    driverId: string;
+    userId: string;
+    trackingId: string;
+  }) {
+    try {
+      await this.db.driverRideOffers.updateOne(
+        { trackingId: payload.trackingId },
+        {
+          $setOnInsert: {
+            driver: payload.driverId,
+            user: payload.userId,
+            trackingId: payload.trackingId,
+            offeredAt: new Date(),
+            outcome: RideOfferOutcome.Pending,
+          },
+        },
+        { upsert: true },
+      );
+    } catch {
+      // best-effort stats persistence
+    }
+  }
+
+  private async resolveRideOffer(
+    trackingId: string,
+    outcome: RideOfferOutcome,
+    extras: { tripId?: string } = {},
+  ) {
+    try {
+      const update: Record<string, unknown> = {
+        outcome,
+        resolvedAt: new Date(),
+      };
+      if (extras.tripId) {
+        update.trip = extras.tripId;
+      }
+      await this.db.driverRideOffers.updateOne(
+        {
+          trackingId,
+          outcome: RideOfferOutcome.Pending,
+        },
+        { $set: update },
+      );
+    } catch {
+      // best-effort stats persistence
+    }
+  }
+
+  private async openOnlineSession(driverId: string, rideId: string) {
+    try {
+      await this.closeOnlineSession(driverId);
+      await this.db.driverOnlineSessions.create({
+        driver: driverId,
+        ride: rideId,
+        startedAt: new Date(),
+      });
+    } catch {
+      // best-effort stats persistence
+    }
+  }
+
+  private async closeOnlineSession(driverId: string) {
+    try {
+      await this.db.driverOnlineSessions.updateMany(
+        { driver: driverId, endedAt: { $exists: false } },
+        { $set: { endedAt: new Date() } },
+      );
+    } catch {
+      // best-effort stats persistence
+    }
   }
 
   async getCarBrands() {

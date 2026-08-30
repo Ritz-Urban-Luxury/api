@@ -134,6 +134,12 @@ export class Trip extends BaseSchema {
   @Prop({ type: RatingSchema })
   rating: Rating;
 
+  @Prop()
+  startedAt?: Date;
+
+  @Prop()
+  endedAt?: Date;
+
   nextDestination?: { to: Location; toAddress: string };
 }
 

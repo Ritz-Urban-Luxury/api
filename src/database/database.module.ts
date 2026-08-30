@@ -9,6 +9,9 @@ import { AuthTokenSchema } from './schemas/auth-tokens.schema';
 import { CardSchema } from './schemas/card.schema';
 import { CarBrandSchema } from './schemas/car-brands.schema';
 import { DriverEarningSchema } from './schemas/driver-earnings.schema';
+import { DriverLedgerEntrySchema } from './schemas/driver-ledger.schema';
+import { DriverOnlineSessionSchema } from './schemas/driver-online-session.schema';
+import { DriverRideOfferSchema } from './schemas/driver-ride-offer.schema';
 import { MessageSchema } from './schemas/messages.schema';
 import { RentalSchema } from './schemas/rentals.schema';
 import { RideSchema } from './schemas/rides.schema';
@@ -29,6 +32,12 @@ import { UserSchema } from './schemas/user.schema';
       { name: DB_TABLES.RENTALS, schema: RentalSchema },
       { name: DB_TABLES.CAR_BRANDS, schema: CarBrandSchema },
       { name: DB_TABLES.DRIVER_EARNINGS, schema: DriverEarningSchema },
+      { name: DB_TABLES.DRIVER_LEDGER_ENTRIES, schema: DriverLedgerEntrySchema },
+      { name: DB_TABLES.DRIVER_RIDE_OFFERS, schema: DriverRideOfferSchema },
+      {
+        name: DB_TABLES.DRIVER_ONLINE_SESSIONS,
+        schema: DriverOnlineSessionSchema,
+      },
       { name: DB_TABLES.ACTIVITIES, schema: ActivitySchema },
     ]),
   ],

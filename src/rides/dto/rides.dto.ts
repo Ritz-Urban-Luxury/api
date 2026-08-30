@@ -305,3 +305,19 @@ export class AdminRefundRentalDTO {
   @IsOptional()
   amount?: number;
 }
+
+export class DriverEarningsQueryDTO {
+  @IsIn(['daily', 'weekly', 'monthly'])
+  @IsOptional()
+  timeRange?: 'daily' | 'weekly' | 'monthly';
+
+  @IsString()
+  @IsOptional()
+  period?: string;
+}
+
+export class DriverActivityQueryDTO {
+  @IsIn(['week', 'months'])
+  @IsOptional()
+  period?: 'week' | 'months';
+}

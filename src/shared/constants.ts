@@ -9,5 +9,8 @@ export const DB_TABLES = {
   RENTALS: 'rentals',
   CAR_BRANDS: 'car_brands',
   DRIVER_EARNINGS: 'driver_earnings',
+  DRIVER_LEDGER_ENTRIES: 'driver_ledger_entries',
+  DRIVER_RIDE_OFFERS: 'driver_ride_offers',
+  DRIVER_ONLINE_SESSIONS: 'driver_online_sessions',
   ACTIVITIES: 'activities',
 };

@@ -1,15 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
-import {
-  ActivityType,
-} from '../database/schemas/activities.schema';
+import { ActivityType } from '../database/schemas/activities.schema';
+import { DriverLedgerType } from '../database/schemas/driver-ledger.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
+import { Configuration } from '../shared/config';
 
 @Injectable()
 export class ActivityLedgerService {
   private readonly logger = new Logger(ActivityLedgerService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly config: ConfigService<Configuration>,
+  ) {}
+
+  commissionRate() {
+    const rate = this.config.get('driverCommissionRate', { infer: true });
+    if (!Number.isFinite(rate) || rate < 0 || rate >= 1) {
+      return 0.2;
+    }
+    return rate as number;
+  }
+
+  splitFare(gross: number) {
+    const rate = this.commissionRate();
+    const commissionAmount = Math.round(gross * rate * 100) / 100;
+    const netAmount = Math.round((gross - commissionAmount) * 100) / 100;
+    return { grossAmount: gross, commissionAmount, netAmount };
+  }
 
   async recordActivity(payload: {
     type: ActivityType;
@@ -34,10 +53,15 @@ export class ActivityLedgerService {
     driver: string;
     trip: string;
     amount: number;
+    paymentMethod?: PaymentMethod;
   }) {
     if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
       return;
     }
+
+    const { grossAmount, commissionAmount, netAmount } = this.splitFare(
+      payload.amount,
+    );
 
     try {
       await this.db.driverEarnings.updateOne(
@@ -46,7 +70,10 @@ export class ActivityLedgerService {
           $setOnInsert: {
             driver: payload.driver,
             trip: payload.trip,
-            amount: payload.amount,
+            amount: netAmount,
+            grossAmount,
+            commissionAmount,
+            paymentMethod: payload.paymentMethod,
             earnedAt: new Date(),
           },
         },
@@ -55,6 +82,49 @@ export class ActivityLedgerService {
     } catch (error) {
       this.logger.warn(
         `failed to record driver earning for trip ${payload.trip}: ${
+          (error as Error)?.message || error
+        }`,
+      );
+    }
+
+    if (
+      payload.paymentMethod === PaymentMethod.Cash &&
+      commissionAmount > 0
+    ) {
+      await this.recordCommissionOwed({
+        driver: payload.driver,
+        trip: payload.trip,
+        amount: commissionAmount,
+      });
+    }
+  }
+
+  async recordCommissionOwed(payload: {
+    driver: string;
+    trip: string;
+    amount: number;
+  }) {
+    if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+      return;
+    }
+
+    try {
+      await this.db.driverLedgerEntries.updateOne(
+        { trip: payload.trip, type: DriverLedgerType.CommissionOwed },
+        {
+          $setOnInsert: {
+            driver: payload.driver,
+            trip: payload.trip,
+            type: DriverLedgerType.CommissionOwed,
+            amount: payload.amount,
+            earnedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `failed to record commission owed for trip ${payload.trip}: ${
           (error as Error)?.message || error
         }`,
       );

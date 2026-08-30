@@ -67,6 +67,9 @@ const config = () => ({
   firebase: {
     serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
   },
+  driverCommissionRate: Number.parseFloat(
+    process.env.DRIVER_COMMISSION_RATE || '0.2',
+  ),
 });
 
 export type Configuration = ReturnType<typeof config>;

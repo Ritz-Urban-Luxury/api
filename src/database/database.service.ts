@@ -18,6 +18,9 @@ import { AuthTokenDocument } from './schemas/auth-tokens.schema';
 import { CardDocument } from './schemas/card.schema';
 import { CarBrandDocument } from './schemas/car-brands.schema';
 import { DriverEarningDocument } from './schemas/driver-earnings.schema';
+import { DriverLedgerEntryDocument } from './schemas/driver-ledger.schema';
+import { DriverOnlineSessionDocument } from './schemas/driver-online-session.schema';
+import { DriverRideOfferDocument } from './schemas/driver-ride-offer.schema';
 import { MessageDocument } from './schemas/messages.schema';
 import { RentalDocument } from './schemas/rentals.schema';
 import { RidesDocument } from './schemas/rides.schema';
@@ -47,6 +50,12 @@ export class DatabaseService {
     public readonly carBrands: Model<CarBrandDocument>,
     @InjectModel(DB_TABLES.DRIVER_EARNINGS)
     public readonly driverEarnings: Model<DriverEarningDocument>,
+    @InjectModel(DB_TABLES.DRIVER_LEDGER_ENTRIES)
+    public readonly driverLedgerEntries: Model<DriverLedgerEntryDocument>,
+    @InjectModel(DB_TABLES.DRIVER_RIDE_OFFERS)
+    public readonly driverRideOffers: Model<DriverRideOfferDocument>,
+    @InjectModel(DB_TABLES.DRIVER_ONLINE_SESSIONS)
+    public readonly driverOnlineSessions: Model<DriverOnlineSessionDocument>,
     @InjectModel(DB_TABLES.ACTIVITIES)
     public readonly activities: Model<ActivityDocument>,
   ) {}
