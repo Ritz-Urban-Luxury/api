@@ -12,6 +12,7 @@ import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
 import { Response } from 'src/shared/response';
 import { RidesService } from './rides.service';
 import {
+  AdminGetFleetDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
   AdminRefundRentalDTO,
@@ -28,6 +29,18 @@ export class AdminRideController {
     const { docs, ...meta } = await this.ridesService.getTrips(query);
 
     return Response.json('trips', docs, meta);
+  }
+
+  @Get('/fleet')
+  async getFleet(@Query() query: AdminGetFleetDTO) {
+    const { docs, ...meta } = await this.ridesService.getAdminFleet(query);
+    return Response.json('fleet', docs, meta);
+  }
+
+  @Get('/fleet/:rideId')
+  async getFleetRide(@Param('rideId') rideId: string) {
+    const data = await this.ridesService.getAdminFleetRide(rideId);
+    return Response.json('fleet ride', data);
   }
 
   @Get('/rentals')

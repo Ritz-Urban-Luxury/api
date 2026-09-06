@@ -30,6 +30,7 @@ import {
   RideType,
   RideTypes,
   RideStatus,
+  RideStatuses,
 } from '../../database/schemas/rides.schema';
 import {
   PaymentMethod,
@@ -267,12 +268,86 @@ export class CreateRideDTO {
   @IsObject()
   @IsOptional()
   specs?: Record<string, unknown>;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  hourlyRate?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  dailyRate?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  insuranceFee?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  cautionDeposit?: number;
+
+  @ValidateNested()
+  @Type(() => LocationDTO)
+  @IsOptional()
+  location?: LocationDTO;
 }
 
 export class UpdateRideDTO {
+  @IsString()
+  @IsOptional()
+  model?: string;
+
+  @IsString()
+  @IsOptional()
+  brand?: string;
+
+  @IsString()
+  @IsOptional()
+  registration?: string;
+
+  @IsString()
+  @IsOptional()
+  color?: string;
+
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+
+  @IsIn(RideTypes)
+  @IsOptional()
+  type?: RideType;
+
+  @IsObject()
+  @IsOptional()
+  specs?: Record<string, unknown>;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  hourlyRate?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  dailyRate?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  insuranceFee?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  cautionDeposit?: number;
+
+  @ValidateNested()
+  @Type(() => LocationDTO)
+  @IsOptional()
+  location?: LocationDTO;
 }
 
 /** Explicit Online/Offline — idempotent when the same status is sent again. */
@@ -280,6 +355,37 @@ export class SetRideAvailabilityDTO {
   @IsIn([RideStatus.Online, RideStatus.Offline])
   @IsNotEmpty()
   status: RideStatus.Online | RideStatus.Offline;
+
+  /** Required for Hire cars; Classic trip toggle may omit and use the owner's trip vehicle. */
+  @IsMongoId()
+  @IsOptional()
+  rideId?: string;
+}
+
+export class GetMyRidesDTO {
+  @IsIn(RideTypes)
+  @IsOptional()
+  type?: RideType;
+}
+
+export class AdminGetFleetDTO extends PaginationRequestDTO {
+  @IsIn(RideTypes)
+  @IsOptional()
+  type?: RideType;
+
+  @IsIn(RideStatuses)
+  @IsOptional()
+  status?: RideStatus;
+
+  @IsString()
+  @IsOptional()
+  brand?: string;
+}
+
+export class OwnerUpdateRentalStatusDTO {
+  @IsIn(RentalStatuses)
+  @IsNotEmpty()
+  status: RentalStatus;
 }
 
 export class AdminGetTripsDTO extends PaginationRequestDTO {

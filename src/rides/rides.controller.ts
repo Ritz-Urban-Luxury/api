@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -17,12 +18,15 @@ import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { Response } from '../shared/response';
 import {
   AcceptRideDTO,
+  AdminGetRentalsDTO,
   CreateRideDTO,
   GetDrivingRouteDTO,
+  GetMyRidesDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
   HireRideDTO,
   MessageDTO,
+  OwnerUpdateRentalStatusDTO,
   RequestRideDTO,
   SetRideAvailabilityDTO,
   UpdateRideDTO,
@@ -30,6 +34,7 @@ import {
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 import { RidesService } from './rides.service';
+import { RideType } from '../database/schemas/rides.schema';
 
 @Controller('rides')
 export class RidesController {
@@ -59,6 +64,67 @@ export class RidesController {
     );
 
     return Response.json('driving route', route);
+  }
+
+  @UseVerifiedDriver()
+  @Get('me')
+  async getMyRides(
+    @CurrentUser() user: UserDocument,
+    @Query() query: GetMyRidesDTO,
+  ) {
+    const rides = await this.ridesService.getMyRides(
+      user,
+      query.type || RideType.Hire,
+    );
+    return Response.json('my rides', rides);
+  }
+
+  @UseVerifiedDriver()
+  @Get('me/rentals')
+  async getOwnerRentals(
+    @CurrentUser() user: UserDocument,
+    @Query() query: AdminGetRentalsDTO,
+  ) {
+    const { docs, ...meta } = await this.ridesService.getOwnerRentals(
+      user,
+      query,
+    );
+    return Response.json('owner rentals', docs, meta);
+  }
+
+  @UseVerifiedDriver()
+  @Get('me/rentals/:rentalId')
+  async getOwnerRental(
+    @CurrentUser() user: UserDocument,
+    @Param('rentalId') rentalId: string,
+  ) {
+    const rental = await this.ridesService.getOwnerRental(user, rentalId);
+    return Response.json('owner rental', rental);
+  }
+
+  @UseVerifiedDriver()
+  @Patch('me/rentals/:rentalId/status')
+  async updateOwnerRentalStatus(
+    @CurrentUser() user: UserDocument,
+    @Param('rentalId') rentalId: string,
+    @Body() payload: OwnerUpdateRentalStatusDTO,
+  ) {
+    const rental = await this.ridesService.updateOwnerRentalStatus(
+      user,
+      rentalId,
+      payload.status,
+    );
+    return Response.json('rental updated', rental);
+  }
+
+  @UseVerifiedDriver()
+  @Get('me/:rideId')
+  async getMyRide(
+    @CurrentUser() user: UserDocument,
+    @Param('rideId') rideId: string,
+  ) {
+    const ride = await this.ridesService.getMyRide(user, rideId);
+    return Response.json('my ride', ride);
   }
 
   @UseGuards(JwtGuard)
@@ -242,8 +308,24 @@ export class RidesController {
     const ride = await this.ridesService.setRideAvailability(
       user,
       payload.status,
+      payload.rideId,
     );
 
+    return Response.json('ride status updated', ride);
+  }
+
+  @UseVerifiedDriver()
+  @Put(':rideId/availability')
+  async setRideAvailability(
+    @CurrentUser() user: UserDocument,
+    @Param('rideId') rideId: string,
+    @Body() payload: SetRideAvailabilityDTO,
+  ) {
+    const ride = await this.ridesService.setRideAvailability(
+      user,
+      payload.status,
+      rideId,
+    );
     return Response.json('ride status updated', ride);
   }
 
@@ -257,5 +339,15 @@ export class RidesController {
     const ride = await this.ridesService.updateRide(user, rideid, payload);
 
     return Response.json('Ride updated', ride);
+  }
+
+  @UseVerifiedDriver()
+  @Delete(':rideId')
+  async deleteRide(
+    @CurrentUser() user: UserDocument,
+    @Param('rideId') rideId: string,
+  ) {
+    const ride = await this.ridesService.deleteMyRide(user, rideId);
+    return Response.json('Ride deleted', ride);
   }
 }
