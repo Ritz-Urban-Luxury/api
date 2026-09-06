@@ -37,6 +37,7 @@ import { PaginationRequestDTO } from '../shared/pagination.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { WebsocketEvent } from '../websocket/types';
 import {
+  MAX_HIRE_RIDE_IMAGES,
   AcceptRideDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
@@ -1069,6 +1070,35 @@ export class RidesService {
     return rental;
   }
 
+  private assertHireImages(
+    images: string[] | undefined,
+    { required }: { required: boolean },
+  ) {
+    if (!required && images === undefined) {
+      return;
+    }
+
+    if (!Array.isArray(images) || images.length < 1) {
+      throw new BadRequestException(
+        'Hire cars require at least 1 photo',
+      );
+    }
+
+    if (images.length > MAX_HIRE_RIDE_IMAGES) {
+      throw new BadRequestException(
+        `Hire cars allow at most ${MAX_HIRE_RIDE_IMAGES} photos`,
+      );
+    }
+
+    if (
+      !images.every(
+        (url) => typeof url === 'string' && url.trim().length > 0,
+      )
+    ) {
+      throw new BadRequestException('Each car photo must be a valid URL');
+    }
+  }
+
   private buildRidePayload(
     user: UserDocument,
     payload: CreateRideDTO | UpdateRideDTO,
@@ -1091,6 +1121,27 @@ export class RidesService {
       },
     };
 
+    if (type === RideType.Hire) {
+      const dailyRate = Number(payload.dailyRate);
+      const hourlyRate = Number(payload.hourlyRate);
+      const baseRate =
+        Number.isFinite(dailyRate) && dailyRate > 0
+          ? dailyRate
+          : Number.isFinite(hourlyRate) && hourlyRate > 0
+            ? hourlyRate
+            : 0;
+      // Platform rule: caution is always 20% of the owner's listed rate.
+      doc.cautionDeposit = Math.round(baseRate * 0.2 * 100) / 100;
+      // Insurance is optional — default to 0 when omitted.
+      if (
+        payload.insuranceFee === undefined ||
+        payload.insuranceFee === null ||
+        !Number.isFinite(Number(payload.insuranceFee))
+      ) {
+        doc.insuranceFee = 0;
+      }
+    }
+
     if (defaults.status) {
       doc.status = defaults.status;
     }
@@ -1100,6 +1151,9 @@ export class RidesService {
 
   async createRide(user: UserDocument, payload: CreateRideDTO) {
     const type = payload.type || RideType.Classic;
+    if (type === RideType.Hire) {
+      this.assertHireImages(payload.images, { required: true });
+    }
     const doc = this.buildRidePayload(user, payload, {
       type,
       status: RideStatus.Offline,
@@ -1154,6 +1208,19 @@ export class RidesService {
 
   async updateRide(user: UserDocument, rideId: string, payload: UpdateRideDTO) {
     const ride = await this.getMyRide(user, rideId);
+    if (ride.type === RideType.Hire) {
+      this.assertHireImages(payload.images, {
+        required: payload.images !== undefined,
+      });
+      if (
+        payload.images === undefined &&
+        (!ride.images || ride.images.length < 1)
+      ) {
+        throw new BadRequestException(
+          'Hire cars require at least 1 photo',
+        );
+      }
+    }
     const $set = this.buildRidePayload(user, payload, { type: ride.type });
     // Never overwrite ownership or soft-delete via update
     delete $set.driver;

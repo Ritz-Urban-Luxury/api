@@ -1,6 +1,7 @@
 /* eslint-disable max-classes-per-file */
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDate,
   IsIn,
@@ -19,6 +20,9 @@ import {
   registerDecorator,
   isLatLong,
 } from 'class-validator';
+
+/** Max photos for a hire listing (Classic trip cars may still omit images). */
+export const MAX_HIRE_RIDE_IMAGES = 6;
 import {
   RentalBillingType,
   RentalBillingTypes,
@@ -257,6 +261,8 @@ export class CreateRideDTO {
   @IsNotEmpty()
   color: string;
 
+  @IsArray()
+  @ArrayMaxSize(MAX_HIRE_RIDE_IMAGES)
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
@@ -312,6 +318,8 @@ export class UpdateRideDTO {
   @IsOptional()
   color?: string;
 
+  @IsArray()
+  @ArrayMaxSize(MAX_HIRE_RIDE_IMAGES)
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
