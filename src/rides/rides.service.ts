@@ -67,23 +67,41 @@ export class RidesService {
 
   async getAvailableRides(payload: GetRidesDTO) {
     const { lat, lon, type } = payload;
+    const types = type
+      ? Array.isArray(type)
+        ? type
+        : [type]
+      : null;
+    const isHireOnly =
+      types?.length === 1 && types[0] === RideType.Hire;
+
     const query: FilterQuery<RidesDocument> = {
+      deleted: { $ne: true },
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
-      type: { $ne: RideType.Hire },
-      location: {
+    };
+
+    if (types) {
+      query.type = { $in: types };
+    } else {
+      // Default trip catalogue excludes Hire fleet cars
+      query.type = { $ne: RideType.Hire };
+    }
+
+    // Trip cars are nearby; hire fleet is city-wide (cars often lack live GPS).
+    if (!isHireOnly) {
+      query.location = {
         $near: {
+          // Stored as [lat, lon] to match existing ride documents / clients.
           $geometry: { type: 'Point', coordinates: [lat, lon] },
           $maxDistance: payload.radius || 5000,
         },
-      },
-    };
-    if (type) {
-      query.type = { $in: Array.isArray(type) ? type : [type] };
+      };
     }
 
     return this.db.rides
       .find(query)
-      .populate({ path: 'driver', select: 'avatar' });
+      .populate({ path: 'driver', select: 'avatar firstName lastName' })
+      .sort(isHireOnly ? { createdAt: -1 } : undefined);
   }
 
   async getRideQuotes(payload: GetRideQuoteDTO) {
@@ -1089,6 +1107,17 @@ export class RidesService {
 
     // Hire fleet: many cars per owner. Classic/Luxury: one trip vehicle.
     if (type === RideType.Hire) {
+      if (!payload.location) {
+        const tripVehicle = await this.db.rides.findOne({
+          driver: user.id,
+          type: { $ne: RideType.Hire },
+          deleted: { $ne: true },
+          location: { $exists: true },
+        });
+        if (tripVehicle?.location) {
+          doc.location = tripVehicle.location;
+        }
+      }
       return this.db.rides.create(doc);
     }
 
@@ -1216,9 +1245,26 @@ export class RidesService {
       return ride;
     }
 
+    const $set: Record<string, unknown> = { status };
+    if (
+      status === RideStatus.Online &&
+      ride.type === RideType.Hire &&
+      !ride.location
+    ) {
+      const tripVehicle = await this.db.rides.findOne({
+        driver: user.id,
+        type: { $ne: RideType.Hire },
+        deleted: { $ne: true },
+        location: { $exists: true },
+      });
+      if (tripVehicle?.location) {
+        $set.location = tripVehicle.location;
+      }
+    }
+
     const updated = await this.db.rides.findOneAndUpdate(
       { _id: ride.id },
-      { $set: { status } },
+      { $set },
       { new: true },
     );
 
