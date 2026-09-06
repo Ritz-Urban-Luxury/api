@@ -177,7 +177,6 @@ export class PaymentService {
       {
         _id: cardId,
         user: user.id,
-        isDefault: true,
         deleted: { $ne: true },
       },
       { error },
@@ -193,7 +192,7 @@ export class PaymentService {
 
   async chargeUser(
     user: UserDocument,
-    payload: { amount: number; method: PaymentMethod },
+    payload: { amount: number; method: PaymentMethod | string },
   ) {
     const { amount, method } = payload;
     switch (method) {

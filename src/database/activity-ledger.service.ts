@@ -51,11 +51,17 @@ export class ActivityLedgerService {
 
   async recordDriverEarning(payload: {
     driver: string;
-    trip: string;
+    trip?: string;
+    rental?: string;
     amount: number;
-    paymentMethod?: PaymentMethod;
+    paymentMethod?: PaymentMethod | string;
   }) {
     if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+      return;
+    }
+
+    if (!payload.trip && !payload.rental) {
+      this.logger.warn('recordDriverEarning called without trip or rental');
       return;
     }
 
@@ -63,13 +69,18 @@ export class ActivityLedgerService {
       payload.amount,
     );
 
+    const filter = payload.rental
+      ? { rental: payload.rental }
+      : { trip: payload.trip };
+
     try {
       await this.db.driverEarnings.updateOne(
-        { trip: payload.trip },
+        filter,
         {
           $setOnInsert: {
             driver: payload.driver,
-            trip: payload.trip,
+            ...(payload.trip ? { trip: payload.trip } : {}),
+            ...(payload.rental ? { rental: payload.rental } : {}),
             amount: netAmount,
             grossAmount,
             commissionAmount,
@@ -81,15 +92,16 @@ export class ActivityLedgerService {
       );
     } catch (error) {
       this.logger.warn(
-        `failed to record driver earning for trip ${payload.trip}: ${
-          (error as Error)?.message || error
-        }`,
+        `failed to record driver earning for ${
+          payload.rental ? `rental ${payload.rental}` : `trip ${payload.trip}`
+        }: ${(error as Error)?.message || error}`,
       );
     }
 
     if (
       payload.paymentMethod === PaymentMethod.Cash &&
-      commissionAmount > 0
+      commissionAmount > 0 &&
+      payload.trip
     ) {
       await this.recordCommissionOwed({
         driver: payload.driver,

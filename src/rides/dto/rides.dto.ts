@@ -233,7 +233,7 @@ export class HireRideDTO {
 
   @IsString()
   @IsNotEmpty()
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentMethod | string;
 
   @ValidateNested()
   @IsNotEmpty()

@@ -1008,24 +1008,31 @@ export class RidesService {
       throw new NotFoundException('Ride not found');
     }
 
-    const isDailyBilling = billingType === RentalBillingType.Daily;
-
-    if (isDailyBilling && (!checkInAt || !checkOutAt)) {
+    if (!checkInAt || !checkOutAt) {
       throw new BadRequestException(
-        'Provide check in and out dates for daily rentals',
+        'Provide check in and out dates for hire bookings',
       );
+    }
+
+    const checkIn = new Date(checkInAt);
+    const checkOut = new Date(checkOutAt);
+    if (
+      Number.isNaN(checkIn.getTime()) ||
+      Number.isNaN(checkOut.getTime()) ||
+      checkOut.getTime() <= checkIn.getTime()
+    ) {
+      throw new BadRequestException('Invalid check in / check out window');
     }
 
     const query: FilterQuery<RentalDocument> = {
       ride: ride.id,
-      status: { $nin: [RentalStatus.Cancelled, RentalStatus.Completed] },
+      status: { $nin: [RentalStatus.Cancelled, RentalStatus.Completed, RentalStatus.Rejected] },
+      $or: [
+        { checkInAt: { $lte: checkIn }, checkOutAt: { $gte: checkIn } },
+        { checkInAt: { $lte: checkOut }, checkOutAt: { $gte: checkOut } },
+        { checkInAt: { $gte: checkIn }, checkOutAt: { $lte: checkOut } },
+      ],
     };
-    if (checkInAt && checkOutAt) {
-      query.$or = [
-        { checkInAt: { $lte: checkInAt }, checkOutAt: { $gte: checkInAt } },
-        { checkInAt: { $lte: checkOutAt }, checkOutAt: { $gte: checkOutAt } },
-      ];
-    }
 
     const rideRented = await this.db.rentals.exists(query);
     if (rideRented) {
@@ -1034,11 +1041,23 @@ export class RidesService {
       );
     }
 
-    const price = isDailyBilling ? ride.dailyRate : ride.hourlyRate;
+    const pricing = this.calculateHireBookingTotals(ride, {
+      billingType,
+      checkInAt: checkIn,
+      checkOutAt: checkOut,
+    });
+    if (pricing.price <= 0) {
+      throw new BadRequestException('Invalid hire price for this booking');
+    }
+
+    const chargeMethod = await this.resolveHireChargeMethod(
+      user,
+      payload.paymentMethod,
+    );
 
     const paymentResponse = await this.paymentService.chargeUser(user, {
-      amount: price,
-      method: payload.paymentMethod,
+      amount: pricing.price,
+      method: chargeMethod.chargeWith,
     });
 
     const rental = await this.db.rentals.create({
@@ -1046,8 +1065,18 @@ export class RidesService {
       ride,
       user: user.id,
       driver: ride.driver,
-      price,
-      meta: { paymentResponse },
+      paymentMethod: chargeMethod.storedMethod,
+      price: pricing.price,
+      hireFee: pricing.hireFee,
+      cautionAmount: pricing.cautionAmount,
+      insuranceFee: pricing.insuranceFee,
+      checkInAt: checkIn,
+      checkOutAt: checkOut,
+      meta: {
+        paymentResponse,
+        durationUnits: pricing.durationUnits,
+        unitRate: pricing.unitRate,
+      },
     });
 
     const ownerId =
@@ -1068,6 +1097,86 @@ export class RidesService {
     }
 
     return rental;
+  }
+
+  private calculateHireBookingTotals(
+    ride: RidesDocument,
+    payload: {
+      billingType: RentalBillingType;
+      checkInAt: Date;
+      checkOutAt: Date;
+    },
+  ) {
+    const ms =
+      payload.checkOutAt.getTime() - payload.checkInAt.getTime();
+    const durationUnits =
+      payload.billingType === RentalBillingType.Daily
+        ? Math.ceil(ms / (1000 * 3600 * 24))
+        : Math.ceil(ms / (1000 * 3600));
+
+    const units = Math.max(1, durationUnits);
+    const unitRate =
+      payload.billingType === RentalBillingType.Daily
+        ? Number(ride.dailyRate) || 0
+        : Number(ride.hourlyRate) || 0;
+    const hireFee = Math.round(unitRate * units * 100) / 100;
+    const cautionAmount = Math.round(hireFee * 0.2 * 100) / 100;
+    const insuranceFee = Math.max(0, Number(ride.insuranceFee) || 0);
+    const price =
+      Math.round((hireFee + cautionAmount + insuranceFee) * 100) / 100;
+
+    return {
+      durationUnits: units,
+      unitRate,
+      hireFee,
+      cautionAmount,
+      insuranceFee,
+      price,
+    };
+  }
+
+  private async resolveHireChargeMethod(
+    user: UserDocument,
+    paymentMethod: PaymentMethod | string,
+  ) {
+    if (paymentMethod === PaymentMethod.Cash) {
+      throw new BadRequestException('Cash is not supported for hire bookings');
+    }
+
+    if (paymentMethod === PaymentMethod.RULBalance) {
+      return {
+        chargeWith: PaymentMethod.RULBalance,
+        storedMethod: PaymentMethod.RULBalance,
+      };
+    }
+
+    let cardId = String(paymentMethod);
+    if (paymentMethod === PaymentMethod.Card || !isMongoId(cardId)) {
+      const card = await this.db.cards.findOne({
+        user: user.id,
+        isDefault: true,
+        deleted: { $ne: true },
+      });
+      if (!card) {
+        throw new BadRequestException('no/invalid card setup');
+      }
+      cardId = String(card.id);
+    } else {
+      const card = await this.db.cards.findOne({
+        _id: cardId,
+        user: user.id,
+        deleted: { $ne: true },
+      });
+      if (!card) {
+        throw new BadRequestException('no/invalid card setup');
+      }
+      cardId = String(card.id);
+    }
+
+    return {
+      chargeWith: cardId,
+      storedMethod: PaymentMethod.Card,
+    };
   }
 
   private assertHireImages(
@@ -1792,16 +1901,26 @@ export class RidesService {
 
     this.assertRentalTransition(rental.status, status);
 
-    if (status === RentalStatus.Rejected) {
-      const refunded = await this.applyRentalRefund(
-        rental,
-        undefined,
-        `Rental ${rental.id} rejected`,
-      );
-      if (!refunded) {
-        throw new NotFoundException('Rental not found');
+    if (
+      status === RentalStatus.Rejected ||
+      status === RentalStatus.Cancelled
+    ) {
+      const remaining = this.getRefundableAmount(rental);
+      if (remaining > 0) {
+        const refunded = await this.applyRentalRefund(
+          rental,
+          remaining,
+          `Rental ${rental.id} ${status.toLowerCase()}`,
+        );
+        if (!refunded) {
+          throw new NotFoundException('Rental not found');
+        }
+        rental = refunded;
       }
-      rental = refunded;
+    }
+
+    if (status === RentalStatus.Completed && !rental.settledAt) {
+      rental = (await this.settleCompletedRental(rental)) as typeof rental;
     }
 
     const $set: Record<string, unknown> = { status };
@@ -1810,6 +1929,21 @@ export class RidesService {
     }
     if (status === RentalStatus.Completed) {
       $set.endedAt = new Date();
+      if (rental.settledAt) {
+        $set.settledAt = rental.settledAt;
+      }
+      if (rental.cautionRefundedAt) {
+        $set.cautionRefundedAt = rental.cautionRefundedAt;
+      }
+      if (rental.refundedAmount != null) {
+        $set.refundedAmount = rental.refundedAmount;
+      }
+      if (rental.refundedAt) {
+        $set.refundedAt = rental.refundedAt;
+      }
+      if (rental.meta) {
+        $set.meta = rental.meta;
+      }
     }
 
     const updated = await this.db.rentals
@@ -1824,6 +1958,82 @@ export class RidesService {
     await this.emitRentalStatusUpdated(updated);
     this.notifyRentalRider(updated, 'status');
     return updated;
+  }
+
+  private async settleCompletedRental(rental: RentalDocument) {
+    if (rental.settledAt) {
+      return rental;
+    }
+
+    let current = rental;
+    const cautionAmount = Math.max(0, Number(rental.cautionAmount) || 0);
+    const hireFee = Math.max(0, Number(rental.hireFee) || 0);
+
+    // Legacy bookings may only have `price` — treat full price as hire fee, no caution.
+    const effectiveHireFee =
+      hireFee > 0
+        ? hireFee
+        : cautionAmount > 0
+          ? Math.max(0, Number(rental.price || 0) - cautionAmount)
+          : Number(rental.price || 0);
+    const effectiveCaution =
+      cautionAmount > 0
+        ? cautionAmount
+        : 0;
+
+    if (effectiveCaution > 0 && !rental.cautionRefundedAt) {
+      const remaining = this.getRefundableAmount(current);
+      const refundCaution = Math.min(effectiveCaution, remaining);
+      if (refundCaution > 0) {
+        const refunded = await this.applyRentalRefund(
+          current,
+          refundCaution,
+          `Rental ${rental.id} caution release`,
+        );
+        if (refunded) {
+          current = refunded;
+        }
+      }
+    }
+
+    const ownerId = this.getRentalDriverId(current);
+    if (ownerId && effectiveHireFee > 0) {
+      await this.activityLedger.recordDriverEarning({
+        driver: ownerId,
+        rental: String(current.id),
+        amount: effectiveHireFee,
+        paymentMethod: current.paymentMethod as PaymentMethod,
+      });
+    }
+
+    return this.db.rentals
+      .findOneAndUpdate(
+        { _id: current.id },
+        {
+          $set: {
+            settledAt: new Date(),
+            ...(effectiveCaution > 0
+              ? { cautionRefundedAt: new Date() }
+              : {}),
+            refundedAmount: current.refundedAmount,
+            refundedAt: current.refundedAt,
+            meta: current.meta,
+          },
+        },
+        { new: true },
+      )
+      .populate('user driver ride')
+      .then((doc) => doc || current);
+  }
+
+  private getRentalDriverId(rental: RentalDocument): string | null {
+    if (!rental.driver) {
+      return null;
+    }
+    if (typeof rental.driver === 'object' && 'id' in rental.driver) {
+      return String((rental.driver as UserDocument).id);
+    }
+    return String(rental.driver);
   }
 
   async getOwnerRentals(
