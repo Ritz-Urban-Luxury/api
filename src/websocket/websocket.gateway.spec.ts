@@ -155,6 +155,23 @@ describe('WebsocketGateway', () => {
       expect(updateOne).not.toHaveBeenCalled();
     });
 
+    it('contains location persistence failures when there is no active trip', async () => {
+      const populate = jest.fn().mockResolvedValue(null);
+      findOne.mockReturnValue({ populate });
+      findOneAndUpdate.mockRejectedValueOnce(new Error('database unavailable'));
+
+      await expect(
+        gateway.updateRideLocation(driver, {
+          lat: 9.067114,
+          lon: 7.397462,
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'failed to persist ride location for driver driver-id: database unavailable',
+      );
+    });
+
     it('marks an in-progress ride as finishing when it is near the destination', async () => {
       const trip = {
         id: 'trip-id',
