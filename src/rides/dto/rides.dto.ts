@@ -7,6 +7,8 @@ import {
   IsIn,
   IsLatitude,
   IsLongitude,
+  Max,
+  Min,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
@@ -180,6 +182,17 @@ export class MessageDTO {
   @IsString()
   @IsNotEmpty()
   text: string;
+}
+
+export class RatePassengerDTO {
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  rating: number;
+
+  @IsString()
+  @IsOptional()
+  comment?: string;
 }
 
 export class UpdateTripDTO {

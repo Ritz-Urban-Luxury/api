@@ -27,6 +27,7 @@ import {
   HireRideDTO,
   MessageDTO,
   OwnerUpdateRentalStatusDTO,
+  RatePassengerDTO,
   RequestRideDTO,
   SetRideAvailabilityDTO,
   UpdateRideDTO,
@@ -259,6 +260,18 @@ export class RidesController {
     const trip = await this.ridesService.updateTrip(user, tripId, payload);
 
     return Response.json('trip updated', trip);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('trips/:trip/passenger-rating')
+  async ratePassenger(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: RatePassengerDTO,
+    @Param('trip') tripId: string,
+  ) {
+    const trip = await this.ridesService.ratePassenger(user, tripId, payload);
+
+    return Response.json('passenger rated', trip);
   }
 
   @UseGuards(JwtGuard)

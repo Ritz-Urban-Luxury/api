@@ -50,6 +50,7 @@ import {
   RideStopsDTO,
   UpdateRideDTO,
   UpdateTripDTO,
+  RatePassengerDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 
@@ -68,13 +69,8 @@ export class RidesService {
 
   async getAvailableRides(payload: GetRidesDTO) {
     const { lat, lon, type } = payload;
-    const types = type
-      ? Array.isArray(type)
-        ? type
-        : [type]
-      : null;
-    const isHireOnly =
-      types?.length === 1 && types[0] === RideType.Hire;
+    const types = type ? (Array.isArray(type) ? type : [type]) : null;
+    const isHireOnly = types?.length === 1 && types[0] === RideType.Hire;
 
     const query: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
@@ -543,9 +539,7 @@ export class RidesService {
       { error: new NotFoundException('trip not found') },
     );
 
-    return this.db.messages.find({
-      trip: trip.id,
-    });
+    return this.db.messages.find({ trip: trip.id }).sort({ createdAt: 1 });
   }
 
   async updateTrip(user: UserDocument, tripId: string, payload: UpdateTripDTO) {
@@ -587,7 +581,7 @@ export class RidesService {
         status: TripStatus.Started,
         driver: user.id,
       },
-      { $set: { status: TripStatus.DriverArrived } },
+      { $set: { arrivedAt: new Date(), status: TripStatus.DriverArrived } },
       {
         populate: { path: 'user driver' },
         options: { upsert: false, new: true },
@@ -805,7 +799,7 @@ export class RidesService {
     const trip = await this.db.trips
       .findOne({
         _id: tripId,
-        user: user.id,
+        $or: [{ user: user.id }, { driver: user.id }],
         deleted: { $ne: true },
       })
       .populate('driver')
@@ -830,6 +824,29 @@ export class RidesService {
       { $set: { rating } },
       {
         error: new NotFoundException('trip not found'),
+        options: { upsert: false, new: true },
+      },
+    );
+  }
+
+  async ratePassenger(
+    driver: UserDocument,
+    tripId: string,
+    rating: RatePassengerDTO,
+  ) {
+    return this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      {
+        _id: tripId,
+        driver: driver.id,
+        status: { $in: [TripStatus.Completed, TripStatus.PaymentFailed] },
+        passengerRating: { $exists: false },
+      },
+      { $set: { passengerRating: rating } },
+      {
+        error: new NotFoundException(
+          'completed trip not found or passenger already rated',
+        ),
         options: { upsert: false, new: true },
       },
     );
@@ -1026,7 +1043,13 @@ export class RidesService {
 
     const query: FilterQuery<RentalDocument> = {
       ride: ride.id,
-      status: { $nin: [RentalStatus.Cancelled, RentalStatus.Completed, RentalStatus.Rejected] },
+      status: {
+        $nin: [
+          RentalStatus.Cancelled,
+          RentalStatus.Completed,
+          RentalStatus.Rejected,
+        ],
+      },
       $or: [
         { checkInAt: { $lte: checkIn }, checkOutAt: { $gte: checkIn } },
         { checkInAt: { $lte: checkOut }, checkOutAt: { $gte: checkOut } },
@@ -1107,8 +1130,7 @@ export class RidesService {
       checkOutAt: Date;
     },
   ) {
-    const ms =
-      payload.checkOutAt.getTime() - payload.checkInAt.getTime();
+    const ms = payload.checkOutAt.getTime() - payload.checkInAt.getTime();
     const durationUnits =
       payload.billingType === RentalBillingType.Daily
         ? Math.ceil(ms / (1000 * 3600 * 24))
@@ -1188,9 +1210,7 @@ export class RidesService {
     }
 
     if (!Array.isArray(images) || images.length < 1) {
-      throw new BadRequestException(
-        'Hire cars require at least 1 photo',
-      );
+      throw new BadRequestException('Hire cars require at least 1 photo');
     }
 
     if (images.length > MAX_HIRE_RIDE_IMAGES) {
@@ -1200,9 +1220,7 @@ export class RidesService {
     }
 
     if (
-      !images.every(
-        (url) => typeof url === 'string' && url.trim().length > 0,
-      )
+      !images.every((url) => typeof url === 'string' && url.trim().length > 0)
     ) {
       throw new BadRequestException('Each car photo must be a valid URL');
     }
@@ -1237,8 +1255,8 @@ export class RidesService {
         Number.isFinite(dailyRate) && dailyRate > 0
           ? dailyRate
           : Number.isFinite(hourlyRate) && hourlyRate > 0
-            ? hourlyRate
-            : 0;
+          ? hourlyRate
+          : 0;
       // Platform rule: caution is always 20% of the owner's listed rate.
       doc.cautionDeposit = Math.round(baseRate * 0.2 * 100) / 100;
       // Insurance is optional — default to 0 when omitted.
@@ -1325,9 +1343,7 @@ export class RidesService {
         payload.images === undefined &&
         (!ride.images || ride.images.length < 1)
       ) {
-        throw new BadRequestException(
-          'Hire cars require at least 1 photo',
-        );
+        throw new BadRequestException('Hire cars require at least 1 photo');
       }
     }
     const $set = this.buildRidePayload(user, payload, { type: ride.type });
@@ -1460,7 +1476,8 @@ export class RidesService {
     rideId: string | RidesDocument,
     rentalStatus: RentalStatus,
   ) {
-    const id = typeof rideId === 'string' ? rideId : rideId?.id || String(rideId);
+    const id =
+      typeof rideId === 'string' ? rideId : rideId?.id || String(rideId);
     if (!id) {
       return;
     }
@@ -1679,17 +1696,21 @@ export class RidesService {
       return;
     }
 
-    await this.websocket.emitToUser(userId, WebsocketEvent.RentalStatusUpdated, {
-      rentalId: rental.id,
-      status: rental.status,
-      startedAt: rental.startedAt ?? null,
-      endedAt: rental.endedAt ?? null,
-      refundedAmount: rental.refundedAmount ?? 0,
-      checkInAt: rental.checkInAt ?? null,
-      checkOutAt: rental.checkOutAt ?? null,
-      billingType: rental.billingType,
-      price: rental.price,
-    });
+    await this.websocket.emitToUser(
+      userId,
+      WebsocketEvent.RentalStatusUpdated,
+      {
+        rentalId: rental.id,
+        status: rental.status,
+        startedAt: rental.startedAt ?? null,
+        endedAt: rental.endedAt ?? null,
+        refundedAmount: rental.refundedAmount ?? 0,
+        checkInAt: rental.checkInAt ?? null,
+        checkOutAt: rental.checkOutAt ?? null,
+        billingType: rental.billingType,
+        price: rental.price,
+      },
+    );
   }
 
   private notifyRentalRider(
@@ -1831,9 +1852,7 @@ export class RidesService {
 
     const userId = this.getRentalUserId(rental);
     const user =
-      userId && isMongoId(userId)
-        ? await this.db.users.findById(userId)
-        : null;
+      userId && isMongoId(userId) ? await this.db.users.findById(userId) : null;
 
     const paymentResponse = (rental.meta as Record<string, unknown> | undefined)
       ?.paymentResponse;
@@ -1901,10 +1920,7 @@ export class RidesService {
 
     this.assertRentalTransition(rental.status, status);
 
-    if (
-      status === RentalStatus.Rejected ||
-      status === RentalStatus.Cancelled
-    ) {
+    if (status === RentalStatus.Rejected || status === RentalStatus.Cancelled) {
       const remaining = this.getRefundableAmount(rental);
       if (remaining > 0) {
         const refunded = await this.applyRentalRefund(
@@ -1954,7 +1970,10 @@ export class RidesService {
       throw new NotFoundException('Rental not found');
     }
 
-    await this.syncHireRideAvailability(updated.ride as RidesDocument | string, status);
+    await this.syncHireRideAvailability(
+      updated.ride as RidesDocument | string,
+      status,
+    );
     await this.emitRentalStatusUpdated(updated);
     this.notifyRentalRider(updated, 'status');
     return updated;
@@ -1974,12 +1993,9 @@ export class RidesService {
       hireFee > 0
         ? hireFee
         : cautionAmount > 0
-          ? Math.max(0, Number(rental.price || 0) - cautionAmount)
-          : Number(rental.price || 0);
-    const effectiveCaution =
-      cautionAmount > 0
-        ? cautionAmount
-        : 0;
+        ? Math.max(0, Number(rental.price || 0) - cautionAmount)
+        : Number(rental.price || 0);
+    const effectiveCaution = cautionAmount > 0 ? cautionAmount : 0;
 
     if (effectiveCaution > 0 && !rental.cautionRefundedAt) {
       const remaining = this.getRefundableAmount(current);
@@ -2012,9 +2028,7 @@ export class RidesService {
         {
           $set: {
             settledAt: new Date(),
-            ...(effectiveCaution > 0
-              ? { cautionRefundedAt: new Date() }
-              : {}),
+            ...(effectiveCaution > 0 ? { cautionRefundedAt: new Date() } : {}),
             refundedAmount: current.refundedAmount,
             refundedAt: current.refundedAt,
             meta: current.meta,
@@ -2036,10 +2050,7 @@ export class RidesService {
     return String(rental.driver);
   }
 
-  async getOwnerRentals(
-    owner: UserDocument,
-    query: AdminGetRentalsDTO,
-  ) {
+  async getOwnerRentals(owner: UserDocument, query: AdminGetRentalsDTO) {
     const { page = 1, limit = 100, status } = query;
     const q: FilterQuery<RentalDocument> = {
       driver: owner.id,
@@ -2091,7 +2102,13 @@ export class RidesService {
     status?: RideStatus;
     brand?: string;
   }) {
-    const { page = 1, limit = 100, type = RideType.Hire, status, brand } = query;
+    const {
+      page = 1,
+      limit = 100,
+      type = RideType.Hire,
+      status,
+      brand,
+    } = query;
     const q: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
       type,
