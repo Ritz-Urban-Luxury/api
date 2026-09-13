@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { isMongoId } from 'class-validator';
@@ -18,6 +19,7 @@ import { DatabaseService } from '../database/database.service';
 import { ActivityType } from '../database/schemas/activities.schema';
 import { RideOfferOutcome } from '../database/schemas/driver-ride-offer.schema';
 import {
+  RideApprovalStatus,
   RidesDocument,
   RideStatus,
   RideType,
@@ -44,6 +46,7 @@ import {
   CreateRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
+  GetTripHistoryDTO,
   HireRideDTO,
   MessageDTO,
   RequestRideDTO,
@@ -55,7 +58,7 @@ import {
 import { GeolocationService } from './geolocation.service';
 
 @Injectable()
-export class RidesService {
+export class RidesService implements OnModuleInit {
   private readonly WAIT_TIME = 20 * 1000;
 
   constructor(
@@ -66,6 +69,21 @@ export class RidesService {
     private readonly activityLedger: ActivityLedgerService,
     private readonly push: PushNotificationService,
   ) {}
+
+  async onModuleInit() {
+    // Grandfather existing trip vehicles so current drivers keep working.
+    await this.db.rides.updateMany(
+      {
+        type: { $ne: RideType.Hire },
+        deleted: { $ne: true },
+        $or: [
+          { approvalStatus: { $exists: false } },
+          { approvalStatus: null },
+        ],
+      },
+      { $set: { approvalStatus: RideApprovalStatus.Approved } },
+    );
+  }
 
   async getAvailableRides(payload: GetRidesDTO) {
     const { lat, lon, type } = payload;
@@ -84,8 +102,8 @@ export class RidesService {
       query.type = { $ne: RideType.Hire };
     }
 
-    // Trip cars are nearby; hire fleet is city-wide (cars often lack live GPS).
     if (!isHireOnly) {
+      query.approvalStatus = RideApprovalStatus.Approved;
       query.location = {
         $near: {
           // Stored as [lat, lon] to match existing ride documents / clients.
@@ -775,12 +793,14 @@ export class RidesService {
     return trip;
   }
 
-  async getTripHistory(user: UserDocument, payload: PaginationRequestDTO) {
-    const { page = 1, limit = 100 } = payload;
+  async getTripHistory(user: UserDocument, payload: GetTripHistoryDTO) {
+    const { page = 1, limit = 100, role } = payload;
+    const ownership =
+      role === 'driver' ? { driver: user.id } : { user: user.id };
 
     return this.db.trips.paginate(
       {
-        user: user.id,
+        ...ownership,
         deleted: { $ne: true },
       },
       {
@@ -788,6 +808,7 @@ export class RidesService {
         limit,
         sort: { createdAt: -1 },
         populate: [
+          { path: 'user' },
           { path: 'driver' },
           { path: 'ride', populate: { path: 'driver' } },
         ],
@@ -802,6 +823,7 @@ export class RidesService {
         $or: [{ user: user.id }, { driver: user.id }],
         deleted: { $ne: true },
       })
+      .populate('user')
       .populate('driver')
       .populate({ path: 'ride', populate: { path: 'driver' } });
 
@@ -1201,7 +1223,7 @@ export class RidesService {
     };
   }
 
-  private assertHireImages(
+  private assertRideImages(
     images: string[] | undefined,
     { required }: { required: boolean },
   ) {
@@ -1210,12 +1232,12 @@ export class RidesService {
     }
 
     if (!Array.isArray(images) || images.length < 1) {
-      throw new BadRequestException('Hire cars require at least 1 photo');
+      throw new BadRequestException('Cars require at least 1 photo');
     }
 
     if (images.length > MAX_HIRE_RIDE_IMAGES) {
       throw new BadRequestException(
-        `Hire cars allow at most ${MAX_HIRE_RIDE_IMAGES} photos`,
+        `Cars allow at most ${MAX_HIRE_RIDE_IMAGES} photos`,
       );
     }
 
@@ -1229,7 +1251,11 @@ export class RidesService {
   private buildRidePayload(
     user: UserDocument,
     payload: CreateRideDTO | UpdateRideDTO,
-    defaults: { type?: RideType; status?: RideStatus } = {},
+    defaults: {
+      type?: RideType;
+      status?: RideStatus;
+      approvalStatus?: RideApprovalStatus;
+    } = {},
   ) {
     const requestedSeats = Number(payload.specs?.seats);
     const seats =
@@ -1247,6 +1273,13 @@ export class RidesService {
         seats,
       },
     };
+
+    if (defaults.status) {
+      doc.status = defaults.status;
+    }
+    if (defaults.approvalStatus) {
+      doc.approvalStatus = defaults.approvalStatus;
+    }
 
     if (type === RideType.Hire) {
       const dailyRate = Number(payload.dailyRate);
@@ -1272,41 +1305,39 @@ export class RidesService {
     if (defaults.status) {
       doc.status = defaults.status;
     }
+    if (defaults.approvalStatus) {
+      doc.approvalStatus = defaults.approvalStatus;
+    }
 
     return doc;
   }
 
   async createRide(user: UserDocument, payload: CreateRideDTO) {
     const type = payload.type || RideType.Classic;
-    if (type === RideType.Hire) {
-      this.assertHireImages(payload.images, { required: true });
-    }
+    this.assertRideImages(payload.images, { required: true });
     const doc = this.buildRidePayload(user, payload, {
       type,
       status: RideStatus.Offline,
+      approvalStatus:
+        type === RideType.Hire
+          ? RideApprovalStatus.Approved
+          : RideApprovalStatus.Pending,
     });
 
-    // Hire fleet: many cars per owner. Classic/Luxury: one trip vehicle.
-    if (type === RideType.Hire) {
-      if (!payload.location) {
-        const tripVehicle = await this.db.rides.findOne({
-          driver: user.id,
-          type: { $ne: RideType.Hire },
-          deleted: { $ne: true },
-          location: { $exists: true },
-        });
-        if (tripVehicle?.location) {
-          doc.location = tripVehicle.location;
-        }
+    // Hire fleet and trip vehicles: many cars per owner (insert, not upsert).
+    if (type === RideType.Hire && !payload.location) {
+      const tripVehicle = await this.db.rides.findOne({
+        driver: user.id,
+        type: { $ne: RideType.Hire },
+        deleted: { $ne: true },
+        location: { $exists: true },
+      });
+      if (tripVehicle?.location) {
+        doc.location = tripVehicle.location;
       }
-      return this.db.rides.create(doc);
     }
 
-    return this.db.rides.findOneAndUpdate(
-      { driver: user.id, type: { $ne: RideType.Hire }, deleted: { $ne: true } },
-      doc,
-      { new: true, upsert: true },
-    );
+    return this.db.rides.create(doc);
   }
 
   async getMyRides(user: UserDocument, type?: RideType) {
@@ -1335,16 +1366,14 @@ export class RidesService {
 
   async updateRide(user: UserDocument, rideId: string, payload: UpdateRideDTO) {
     const ride = await this.getMyRide(user, rideId);
-    if (ride.type === RideType.Hire) {
-      this.assertHireImages(payload.images, {
-        required: payload.images !== undefined,
-      });
-      if (
-        payload.images === undefined &&
-        (!ride.images || ride.images.length < 1)
-      ) {
-        throw new BadRequestException('Hire cars require at least 1 photo');
-      }
+    this.assertRideImages(payload.images, {
+      required: payload.images !== undefined,
+    });
+    if (
+      payload.images === undefined &&
+      (!ride.images || ride.images.length < 1)
+    ) {
+      throw new BadRequestException('Cars require at least 1 photo');
     }
     const $set = this.buildRidePayload(user, payload, { type: ride.type });
     // Never overwrite ownership or soft-delete via update
@@ -1360,25 +1389,46 @@ export class RidesService {
   async deleteMyRide(user: UserDocument, rideId: string) {
     const ride = await this.getMyRide(user, rideId);
 
-    if (ride.type !== RideType.Hire) {
-      throw new BadRequestException('Only hire cars can be removed this way');
+    if (
+      ride.status === RideStatus.Busy ||
+      ride.status === RideStatus.FinishingTrip ||
+      ride.status === RideStatus.Online
+    ) {
+      throw new BadRequestException(
+        ride.type === RideType.Hire
+          ? 'Cannot delete a car that is listed or rented'
+          : 'Cannot delete a vehicle that is online or on a trip',
+      );
     }
 
-    const activeRental = await this.db.rentals.exists({
-      ride: ride.id,
-      status: {
-        $in: [
-          RentalStatus.Pending,
-          RentalStatus.Accepted,
-          RentalStatus.InProgress,
-        ],
-      },
-      deleted: { $ne: true },
-    });
-    if (activeRental) {
-      throw new BadRequestException(
-        'Cannot delete a car with an active rental booking',
-      );
+    if (ride.type === RideType.Hire) {
+      const activeRental = await this.db.rentals.exists({
+        ride: ride.id,
+        status: {
+          $in: [
+            RentalStatus.Pending,
+            RentalStatus.Accepted,
+            RentalStatus.InProgress,
+          ],
+        },
+        deleted: { $ne: true },
+      });
+      if (activeRental) {
+        throw new BadRequestException(
+          'Cannot delete a car with an active rental booking',
+        );
+      }
+    } else {
+      const activeTrip = await this.db.trips.exists({
+        ride: ride.id,
+        status: { $nin: InactiveTripStatuses },
+        deleted: { $ne: true },
+      });
+      if (activeTrip) {
+        throw new BadRequestException(
+          'Cannot delete a vehicle with an active trip',
+        );
+      }
     }
 
     return this.db.rides.findOneAndUpdate(
@@ -1393,18 +1443,15 @@ export class RidesService {
     status: RideStatus.Online | RideStatus.Offline,
     rideId?: string,
   ) {
-    const query: FilterQuery<RidesDocument> = {
-      deleted: { $ne: true },
-      driver: user.id,
-    };
-    if (rideId) {
-      query._id = rideId;
-    } else {
-      // Trip-driving toggle: Classic/Luxury vehicle only
-      query.type = { $ne: RideType.Hire };
+    if (!rideId) {
+      throw new BadRequestException('rideId is required');
     }
 
-    const ride = await this.db.rides.findOne(query);
+    const ride = await this.db.rides.findOne({
+      _id: rideId,
+      deleted: { $ne: true },
+      driver: user.id,
+    });
     if (!ride) {
       throw new BadRequestException('Ride not found');
     }
@@ -1431,6 +1478,15 @@ export class RidesService {
           'cannot change availability while this car is rented',
         );
       }
+    } else if (
+      status === RideStatus.Online &&
+      ride.approvalStatus !== RideApprovalStatus.Approved
+    ) {
+      throw new BadRequestException(
+        ride.approvalStatus === RideApprovalStatus.Rejected
+          ? 'this vehicle was rejected and cannot go online'
+          : 'this vehicle is awaiting admin approval',
+      );
     }
 
     if (ride.status === status) {
@@ -1460,13 +1516,20 @@ export class RidesService {
       { new: true },
     );
 
-    // Online sessions track trip-driving wait time, not Hire listings
-    if (ride.type !== RideType.Hire) {
-      if (status === RideStatus.Online) {
-        await this.openOnlineSession(user.id, ride.id);
-      } else if (status === RideStatus.Offline) {
-        await this.closeOnlineSession(user.id);
-      }
+    if (ride.type !== RideType.Hire && status === RideStatus.Online) {
+      await this.db.rides.updateMany(
+        {
+          driver: user.id,
+          type: { $ne: RideType.Hire },
+          deleted: { $ne: true },
+          _id: { $ne: ride.id },
+          status: RideStatus.Online,
+        },
+        { $set: { status: RideStatus.Offline } },
+      );
+      await this.openOnlineSession(user.id, ride.id);
+    } else if (ride.type !== RideType.Hire && status === RideStatus.Offline) {
+      await this.closeOnlineSession(user.id);
     }
 
     return updated;
@@ -2071,6 +2134,46 @@ export class RidesService {
     });
   }
 
+  async getRiderRentals(user: UserDocument, query: AdminGetRentalsDTO) {
+    const { page = 1, limit = 100, status } = query;
+    const q: FilterQuery<RentalDocument> = {
+      user: user.id,
+      deleted: { $ne: true },
+    };
+    if (status) {
+      q.status = { $in: Array.isArray(status) ? status : [status] };
+    }
+
+    return this.db.rentals.paginate(q, {
+      page,
+      limit,
+      populate: [
+        {
+          path: 'driver',
+          select: 'firstName lastName email phoneNumber avatar',
+        },
+        { path: 'ride' },
+      ],
+      sort: { createdAt: -1 },
+    });
+  }
+
+  async getRiderRental(user: UserDocument, rentalId: string) {
+    const rental = await this.db.rentals
+      .findOne({
+        _id: rentalId,
+        user: user.id,
+        deleted: { $ne: true },
+      })
+      .populate('user driver ride');
+
+    if (!rental) {
+      throw new NotFoundException('Rental not found');
+    }
+
+    return rental;
+  }
+
   async getOwnerRental(owner: UserDocument, rentalId: string) {
     const rental = await this.db.rentals
       .findOne({
@@ -2100,6 +2203,7 @@ export class RidesService {
     limit?: number;
     type?: RideType;
     status?: RideStatus;
+    approvalStatus?: RideApprovalStatus;
     brand?: string;
   }) {
     const {
@@ -2107,6 +2211,7 @@ export class RidesService {
       limit = 100,
       type = RideType.Hire,
       status,
+      approvalStatus,
       brand,
     } = query;
     const q: FilterQuery<RidesDocument> = {
@@ -2115,6 +2220,9 @@ export class RidesService {
     };
     if (status) {
       q.status = status;
+    }
+    if (approvalStatus) {
+      q.approvalStatus = approvalStatus;
     }
     if (brand) {
       q.brand = new RegExp(brand, 'i');
@@ -2131,6 +2239,45 @@ export class RidesService {
       ],
       sort: { createdAt: -1 },
     });
+  }
+
+  async setAdminFleetApproval(
+    rideId: string,
+    status: RideApprovalStatus.Approved | RideApprovalStatus.Rejected,
+    reason?: string,
+  ) {
+    const ride = await this.db.rides.findOne({
+      _id: rideId,
+      deleted: { $ne: true },
+    });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+    if (ride.type === RideType.Hire) {
+      throw new BadRequestException(
+        'Hire listings do not use trip-vehicle approval',
+      );
+    }
+
+    const $set: Record<string, unknown> = { approvalStatus: status };
+    if (reason !== undefined) {
+      $set.approvalReason = reason;
+    }
+    if (status === RideApprovalStatus.Rejected) {
+      $set.status = RideStatus.Offline;
+    }
+
+    const updated = await this.db.rides.findOneAndUpdate(
+      { _id: ride.id },
+      { $set },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Ride not found');
+    }
+
+    return updated;
   }
 
   async getAdminFleetRide(rideId: string) {

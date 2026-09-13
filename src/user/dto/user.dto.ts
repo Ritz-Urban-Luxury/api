@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -9,6 +10,12 @@ import {
   IsUrl,
 } from 'class-validator';
 import { PaginationRequestDTO } from '../../shared/pagination.dto';
+
+export class ApplyReferralDTO {
+  @IsString()
+  @IsNotEmpty()
+  referralCode: string;
+}
 
 export class UpdateUserDTO {
   @IsString()
@@ -101,6 +108,24 @@ export class SetUserVerificationDTO {
 }
 
 export class AdminGetDriversDTO extends PaginationRequestDTO {
+  /**
+   * Query strings arrive as "true"/"false". Nest's enableImplicitConversion
+   * turns Boolean("false") into true before field transforms — read the raw
+   * query value from `obj` instead.
+   */
+  @Transform(({ obj }) => {
+    const value = (obj as { verified?: unknown })?.verified;
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === true || value === 'true' || value === '1') {
+      return true;
+    }
+    if (value === false || value === 'false' || value === '0') {
+      return false;
+    }
+    return value;
+  })
   @IsBoolean()
   @IsOptional()
   verified?: boolean;

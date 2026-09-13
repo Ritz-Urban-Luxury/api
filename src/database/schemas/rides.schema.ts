@@ -20,8 +20,15 @@ export enum RideType {
   Hire = 'Hire',
 }
 
+export enum RideApprovalStatus {
+  Pending = 'Pending',
+  Approved = 'Approved',
+  Rejected = 'Rejected',
+}
+
 export const RideStatuses = Object.values(RideStatus);
 export const RideTypes = Object.values(RideType);
+export const RideApprovalStatuses = Object.values(RideApprovalStatus);
 
 @EmbeddedSchema()
 export class Location {
@@ -85,6 +92,16 @@ export class Ride extends BaseSchema {
 
   @Prop({ type: String, enum: RideStatuses, default: RideStatus.Offline })
   status?: RideStatus;
+
+  @Prop({
+    type: String,
+    enum: RideApprovalStatuses,
+    default: RideApprovalStatus.Pending,
+  })
+  approvalStatus?: RideApprovalStatus;
+
+  @Prop()
+  approvalReason?: string;
 
   @Prop({ default: 0 })
   hourlyRate: number;

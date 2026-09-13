@@ -2,6 +2,7 @@ import { Prop, SchemaFactory } from '@nestjs/mongoose';
 import { compare, hash } from 'bcryptjs';
 import { SchemaTypes } from 'mongoose';
 import { BaseSchema, Schema } from '../../shared/base.schema';
+import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
 
 export enum OAuthProvider {
@@ -88,6 +89,17 @@ export class User extends BaseSchema {
 
   @Prop()
   isVerified?: boolean;
+
+  /** True when the account was created via the driver app signup. */
+  @Prop({ default: false })
+  isDriver?: boolean;
+
+  /** Unique driver invite / referral code (not company registration). */
+  @Prop({ sparse: true, unique: true, uppercase: true, trim: true })
+  inviteCode?: string;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  referredBy?: string;
 
   @Prop()
   billingType?: string;

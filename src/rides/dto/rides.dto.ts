@@ -23,7 +23,7 @@ import {
   isLatLong,
 } from 'class-validator';
 
-/** Max photos for a hire listing (Classic trip cars may still omit images). */
+/** Max photos for a vehicle listing (Hire and trip cars). */
 export const MAX_HIRE_RIDE_IMAGES = 6;
 import {
   RentalBillingType,
@@ -33,6 +33,8 @@ import {
 } from 'src/database/schemas/rentals.schema';
 import { PaginationRequestDTO } from 'src/shared/pagination.dto';
 import {
+  RideApprovalStatus,
+  RideApprovalStatuses,
   RideType,
   RideTypes,
   RideStatus,
@@ -377,7 +379,7 @@ export class SetRideAvailabilityDTO {
   @IsNotEmpty()
   status: RideStatus.Online | RideStatus.Offline;
 
-  /** Required for Hire cars; Classic trip toggle may omit and use the owner's trip vehicle. */
+  /** Required for trip vehicles and Hire cars when selecting a specific ride. */
   @IsMongoId()
   @IsOptional()
   rideId?: string;
@@ -398,9 +400,23 @@ export class AdminGetFleetDTO extends PaginationRequestDTO {
   @IsOptional()
   status?: RideStatus;
 
+  @IsIn(RideApprovalStatuses)
+  @IsOptional()
+  approvalStatus?: RideApprovalStatus;
+
   @IsString()
   @IsOptional()
   brand?: string;
+}
+
+export class AdminUpdateFleetApprovalDTO {
+  @IsIn([RideApprovalStatus.Approved, RideApprovalStatus.Rejected])
+  @IsNotEmpty()
+  status: RideApprovalStatus.Approved | RideApprovalStatus.Rejected;
+
+  @IsString()
+  @IsOptional()
+  reason?: string;
 }
 
 export class OwnerUpdateRentalStatusDTO {
@@ -413,6 +429,12 @@ export class AdminGetTripsDTO extends PaginationRequestDTO {
   @IsIn(TripStatuses, { each: true })
   @IsOptional()
   status?: TripStatus | TripStatus[];
+}
+
+export class GetTripHistoryDTO extends PaginationRequestDTO {
+  @IsIn(['driver', 'rider'])
+  @IsOptional()
+  role?: 'driver' | 'rider';
 }
 
 export class AdminGetRentalsDTO extends PaginationRequestDTO {

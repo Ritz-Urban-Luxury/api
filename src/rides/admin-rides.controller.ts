@@ -16,6 +16,7 @@ import {
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
   AdminRefundRentalDTO,
+  AdminUpdateFleetApprovalDTO,
   AdminUpdateRentalStatusDTO,
 } from './dto/rides.dto';
 
@@ -41,6 +42,19 @@ export class AdminRideController {
   async getFleetRide(@Param('rideId') rideId: string) {
     const data = await this.ridesService.getAdminFleetRide(rideId);
     return Response.json('fleet ride', data);
+  }
+
+  @Patch('/fleet/:rideId/approval')
+  async updateFleetApproval(
+    @Param('rideId') rideId: string,
+    @Body() payload: AdminUpdateFleetApprovalDTO,
+  ) {
+    const ride = await this.ridesService.setAdminFleetApproval(
+      rideId,
+      payload.status,
+      payload.reason,
+    );
+    return Response.json('fleet approval updated', ride);
   }
 
   @Get('/rentals')

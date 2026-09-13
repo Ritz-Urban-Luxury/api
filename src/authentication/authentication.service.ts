@@ -14,6 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { Socket } from 'socket.io';
 import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { DatabaseService } from '../database/database.service';
+import { ReferralService } from '../database/referral.service';
 import { ActivityType } from '../database/schemas/activities.schema';
 import { OAuthProvider, UserDocument } from '../database/schemas/user.schema';
 import { FileService } from '../file/file.service';
@@ -26,6 +27,7 @@ import {
   LoginDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
+  ResetPasswordDTO,
   SignupDTO,
 } from './authentication.dto';
 
@@ -43,6 +45,7 @@ export class AuthenticationService {
     private readonly fileService: FileService,
     private readonly db: DatabaseService,
     private readonly activityLedger: ActivityLedgerService,
+    private readonly referralService: ReferralService,
   ) {
     this.googleOAuthClient = new OAuth2Client({
       redirectUri:
@@ -244,6 +247,25 @@ export class AuthenticationService {
     return otp;
   }
 
+  async getEmailOtpOrFail(email: string, emailOtp: string) {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const otp = await this.db.authTokens.findOne({
+      'meta.email': normalizedEmail,
+      'meta.type': 'email-otp',
+      token: emailOtp,
+      deleted: { $ne: true },
+      isUsed: { $ne: true },
+      expiresAt: { $gte: new Date() },
+    });
+
+    if (!otp) {
+      throw new BadRequestException('invalid email validation token');
+    }
+
+    return otp;
+  }
+
   async signUp(payload: SignupDTO) {
     const {
       oAuthIdentifier,
@@ -280,6 +302,7 @@ export class AuthenticationService {
             ...userObj,
             password: Crypto.randomBytes(32).toString('hex'),
             oAuthProvider,
+            isDriver: true,
           },
           { upsert: true, new: true },
         );
@@ -290,6 +313,7 @@ export class AuthenticationService {
           meta: user.email || user.phoneNumber || user.id,
           user: user.id,
         });
+        await this.referralService.ensureInviteCode(user);
       }
 
       return this.authorizeUser(user);
@@ -356,6 +380,7 @@ export class AuthenticationService {
       ...userObj,
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
+      isDriver: true,
     });
 
     await this.activityLedger.recordActivity({
@@ -364,6 +389,7 @@ export class AuthenticationService {
       meta: user.email || user.phoneNumber || user.id,
       user: user.id,
     });
+    await this.referralService.ensureInviteCode(user);
 
     return this.authorizeUser(user);
   }
@@ -375,6 +401,28 @@ export class AuthenticationService {
       const [user, otpDoc] = await Promise.all([
         this.db.users.findOne({ phoneNumber: _phoneNumber }),
         this.getPhoneOtpOrFail(phoneNumber, otp),
+      ]);
+      if (user) {
+        const [authUser] = await Promise.all([
+          this.authorizeUser(user),
+          this.db.authTokens.updateOne(
+            { _id: otpDoc.id },
+            { $set: { isUsed: true } },
+          ),
+        ]);
+
+        return authUser;
+      }
+    }
+
+    if (identifier && otp && !password) {
+      const email = identifier.toLowerCase().trim();
+      const [user, otpDoc] = await Promise.all([
+        this.db.users.findOne({
+          email,
+          deleted: { $ne: true },
+        }),
+        this.getEmailOtpOrFail(email, otp),
       ]);
       if (user) {
         const [authUser] = await Promise.all([
@@ -402,7 +450,7 @@ export class AuthenticationService {
           { phoneNumber: _phoneNumber },
           { email: identifier?.toLowerCase() },
         ],
-        isVerified: true,
+        deleted: { $ne: true },
       });
       if (user) {
         const passwordIsValid = await user.isValidPassword(password);
@@ -413,6 +461,34 @@ export class AuthenticationService {
     }
 
     throw new UnauthorizedException('invalid credentials');
+  }
+
+  async resetPassword(payload: ResetPasswordDTO) {
+    const email = payload.email.toLowerCase().trim();
+    const otpDoc = await this.getEmailOtpOrFail(email, payload.otp);
+    const user = await this.db.users.findOne({
+      email,
+      deleted: { $ne: true },
+    });
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+
+    if (!payload.password || payload.password.length < 8) {
+      throw new BadRequestException(
+        'password must be at least 8 characters',
+      );
+    }
+
+    user.password = payload.password;
+    await user.save();
+
+    await this.db.authTokens.updateOne(
+      { _id: otpDoc.id },
+      { $set: { isUsed: true } },
+    );
+
+    return this.authorizeUser(user);
   }
 
   async authorizeUser(user: UserDocument) {

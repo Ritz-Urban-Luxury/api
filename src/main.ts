@@ -13,7 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     cors,
-    bodyParser: true,
+    // Use explicit parsers below so large base64 image uploads are not capped at 100kb.
+    bodyParser: false,
   });
   const configService = app.get(ConfigService);
   const port = configService.get<string>('port');

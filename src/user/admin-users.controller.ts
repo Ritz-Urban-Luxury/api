@@ -36,6 +36,13 @@ export class AdminUserController {
     return Response.json('drivers', docs, meta);
   }
 
+  @Get('/drivers/:userId')
+  async getDriver(@Param('userId') userId: string) {
+    const detail = await this.userService.getDriverDetail(userId);
+
+    return Response.json('driver', detail);
+  }
+
   @Put('/:userId/admin')
   async setAdmin(
     @Param('userId') userId: string,

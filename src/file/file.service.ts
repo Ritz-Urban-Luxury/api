@@ -19,15 +19,25 @@ export class FileService {
   async uploadFile(fileUploandDTO: FileUploadDTO) {
     try {
       const { data, filename } = fileUploandDTO;
+      if (!data?.startsWith('data:')) {
+        throw new Error('invalid file payload');
+      }
+
       const result = await cloudinary.v2.uploader.upload(data, {
         resource_type: 'auto',
         public_id: filename,
       });
 
       return result.secure_url;
-    } catch (error) {
-      error.message = `FILE UPLOAD ERROR: ${error.message}`;
-      throw error;
+    } catch (error: any) {
+      const cloudinaryMessage =
+        error?.message ||
+        error?.error?.message ||
+        (typeof error?.error === 'string' ? error.error : undefined) ||
+        'unknown upload failure';
+      const wrapped = new Error(`FILE UPLOAD ERROR: ${cloudinaryMessage}`);
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
     }
   }
 

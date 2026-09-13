@@ -6,6 +6,7 @@ import {
 import { FilterQuery } from 'mongoose';
 import { DatabaseService } from '../database/database.service';
 import { UserDocument } from '../database/schemas/user.schema';
+import { PushNotificationService } from '../notification/push-notification.service';
 import { Util } from '../shared/util';
 import {
   AdminGetDriversDTO,
@@ -17,7 +18,10 @@ import {
 
 @Injectable()
 export class UserService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly push: PushNotificationService,
+  ) {}
 
   async updateUser(user: UserDocument, update: UpdateUserDTO) {
     const { email, emailOtp } = update;
@@ -68,15 +72,19 @@ export class UserService {
     return _user.preferences;
   }
 
+  async getUserById(userId: string) {
+    return this.db.users.findById(userId);
+  }
+
   async listDrivers(query: AdminGetDriversDTO) {
     const { page = 1, limit = 100, verified } = query;
-    const driverIds = await this.db.rides.distinct('driver', {
+    const rideDriverIds = await this.db.rides.distinct('driver', {
       deleted: { $ne: true },
     });
 
     const q: FilterQuery<UserDocument> = {
-      _id: { $in: driverIds },
       deleted: { $ne: true },
+      $or: [{ isDriver: true }, { _id: { $in: rideDriverIds } }],
     };
     if (typeof verified === 'boolean') {
       q.isVerified = verified ? true : { $ne: true };
@@ -90,14 +98,51 @@ export class UserService {
     });
   }
 
+  async getDriverDetail(userId: string) {
+    const user = await this.db.users
+      .findOne({
+        _id: userId,
+        deleted: { $ne: true },
+      })
+      .select('-password -oAuthIdentifier -oAuthProvider');
+
+    if (!user) {
+      throw new NotFoundException('driver not found');
+    }
+
+    const rides = await this.db.rides
+      .find({
+        driver: user.id,
+        deleted: { $ne: true },
+      })
+      .sort({ createdAt: -1 });
+
+    return {
+      user,
+      rides,
+    };
+  }
+
   async setVerification(userId: string, payload: SetUserVerificationDTO) {
     const user = await this.db.users.findOneAndUpdate(
       { _id: userId, deleted: { $ne: true } },
-      { $set: { isVerified: payload.isVerified } },
+      { $set: { isVerified: payload.isVerified, isDriver: true } },
       { new: true, upsert: false },
     );
     if (!user) {
       throw new NotFoundException('user not found');
+    }
+
+    if (payload.isVerified) {
+      this.push.sendToUser(user, {
+        title: 'Account approved',
+        body: 'You’re verified — open the app and go online to take rides.',
+        app: 'driver',
+        data: {
+          type: 'DriverVerified',
+          userId: String(user.id),
+        },
+      });
     }
 
     return user;

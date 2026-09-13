@@ -3,15 +3,18 @@ import {
   Controller,
   Delete,
   Get,
+  Post,
   Put,
   UseGuards,
 } from '@nestjs/common';
 import { JwtGuard } from '../authentication/guards/jwt.guard';
+import { ReferralService } from '../database/referral.service';
 import { UserDocument } from '../database/schemas/user.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
 import {
+  ApplyReferralDTO,
   RemovePushTokenDTO,
   UpdateUserDTO,
   UpsertPushTokenDTO,
@@ -23,6 +26,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly pushNotificationService: PushNotificationService,
+    private readonly referralService: ReferralService,
   ) {}
 
   @UseGuards(JwtGuard)
@@ -38,8 +42,30 @@ export class UserController {
 
   @UseGuards(JwtGuard)
   @Get('/me')
-  getUser(@CurrentUser() user: UserDocument) {
-    return Response.json('profile', user);
+  async getUser(@CurrentUser() user: UserDocument) {
+    await this.referralService.ensureInviteCode(user);
+    const refreshed = await this.userService.getUserById(user.id);
+    return Response.json('profile', refreshed || user);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('/me/invite')
+  async getInvite(@CurrentUser() user: UserDocument) {
+    const summary = await this.referralService.getInviteSummary(user);
+    return Response.json('invite', summary);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('/me/referral')
+  async applyReferral(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: ApplyReferralDTO,
+  ) {
+    const result = await this.referralService.applyReferralCode(
+      user,
+      payload.referralCode,
+    );
+    return Response.json('referral applied', result);
   }
 
   @UseGuards(JwtGuard)
@@ -65,7 +91,10 @@ export class UserController {
     @CurrentUser() user: UserDocument,
     @Body() payload: UpsertPushTokenDTO,
   ) {
-    const devices = await this.pushNotificationService.upsertDevice(user, payload);
+    const devices = await this.pushNotificationService.upsertDevice(
+      user,
+      payload,
+    );
 
     return Response.json('push token saved', { count: devices.length });
   }

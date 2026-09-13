@@ -87,3 +87,17 @@ export class LoginDTO {
   @IsOptional()
   password?: string;
 }
+
+export class ResetPasswordDTO {
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  otp: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}

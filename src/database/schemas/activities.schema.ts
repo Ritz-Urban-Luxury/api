@@ -12,6 +12,7 @@ export enum ActivityType {
   UserRegistered = 'UserRegistered',
   PaymentSucceeded = 'PaymentSucceeded',
   PaymentFailed = 'PaymentFailed',
+  ReferralBonusPaid = 'ReferralBonusPaid',
 }
 
 export const ActivityTypes = Object.values(ActivityType);

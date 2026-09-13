@@ -13,4 +13,5 @@ export const DB_TABLES = {
   DRIVER_RIDE_OFFERS: 'driver_ride_offers',
   DRIVER_ONLINE_SESSIONS: 'driver_online_sessions',
   ACTIVITIES: 'activities',
+  REFERRALS: 'referrals',
 };

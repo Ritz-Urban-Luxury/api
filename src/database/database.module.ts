@@ -1,9 +1,11 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BalanceSchema } from '../authentication/balance.schema';
+import { PaymentModule } from '../payments/payment.module';
 import { DB_TABLES } from '../shared/constants';
 import { DatabaseService } from './database.service';
 import { ActivityLedgerService } from './activity-ledger.service';
+import { ReferralService } from './referral.service';
 import { ActivitySchema } from './schemas/activities.schema';
 import { AuthTokenSchema } from './schemas/auth-tokens.schema';
 import { CardSchema } from './schemas/card.schema';
@@ -13,6 +15,7 @@ import { DriverLedgerEntrySchema } from './schemas/driver-ledger.schema';
 import { DriverOnlineSessionSchema } from './schemas/driver-online-session.schema';
 import { DriverRideOfferSchema } from './schemas/driver-ride-offer.schema';
 import { MessageSchema } from './schemas/messages.schema';
+import { ReferralSchema } from './schemas/referrals.schema';
 import { RentalSchema } from './schemas/rentals.schema';
 import { RideSchema } from './schemas/rides.schema';
 import { TripSchema } from './schemas/trips.schema';
@@ -21,6 +24,7 @@ import { UserSchema } from './schemas/user.schema';
 @Global()
 @Module({
   imports: [
+    forwardRef(() => PaymentModule),
     MongooseModule.forFeature([
       { name: DB_TABLES.AUTH_TOKENS, schema: AuthTokenSchema },
       { name: DB_TABLES.USERS, schema: UserSchema },
@@ -39,9 +43,10 @@ import { UserSchema } from './schemas/user.schema';
         schema: DriverOnlineSessionSchema,
       },
       { name: DB_TABLES.ACTIVITIES, schema: ActivitySchema },
+      { name: DB_TABLES.REFERRALS, schema: ReferralSchema },
     ]),
   ],
-  providers: [DatabaseService, ActivityLedgerService],
-  exports: [DatabaseService, ActivityLedgerService],
+  providers: [DatabaseService, ActivityLedgerService, ReferralService],
+  exports: [DatabaseService, ActivityLedgerService, ReferralService],
 })
 export class DatabaseModule {}

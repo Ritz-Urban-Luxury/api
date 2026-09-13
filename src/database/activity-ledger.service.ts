@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { ActivityType } from '../database/schemas/activities.schema';
 import { DriverLedgerType } from '../database/schemas/driver-ledger.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
 import { Configuration } from '../shared/config';
+import { ReferralService } from './referral.service';
 
 @Injectable()
 export class ActivityLedgerService {
@@ -13,6 +14,8 @@ export class ActivityLedgerService {
   constructor(
     private readonly db: DatabaseService,
     private readonly config: ConfigService<Configuration>,
+    @Inject(forwardRef(() => ReferralService))
+    private readonly referralService: ReferralService,
   ) {}
 
   commissionRate() {
@@ -73,8 +76,9 @@ export class ActivityLedgerService {
       ? { rental: payload.rental }
       : { trip: payload.trip };
 
+    let inserted = false;
     try {
-      await this.db.driverEarnings.updateOne(
+      const result = await this.db.driverEarnings.updateOne(
         filter,
         {
           $setOnInsert: {
@@ -90,6 +94,7 @@ export class ActivityLedgerService {
         },
         { upsert: true },
       );
+      inserted = (result.upsertedCount ?? 0) > 0;
     } catch (error) {
       this.logger.warn(
         `failed to record driver earning for ${
@@ -108,6 +113,13 @@ export class ActivityLedgerService {
         trip: payload.trip,
         amount: commissionAmount,
       });
+    }
+
+    if (inserted && commissionAmount > 0) {
+      await this.referralService.recordInviteeHouseRevenue(
+        payload.driver,
+        commissionAmount,
+      );
     }
   }
 

@@ -70,6 +70,9 @@ const config = () => ({
   driverCommissionRate: Number.parseFloat(
     process.env.DRIVER_COMMISSION_RATE || '0.2',
   ),
+  referralBonusAmount: Number.parseFloat(
+    process.env.REFERRAL_BONUS_AMOUNT || '7500',
+  ),
 });
 
 export type Configuration = ReturnType<typeof config>;

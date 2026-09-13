@@ -12,6 +12,7 @@ import {
   LoginDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
+  ResetPasswordDTO,
   SignupDTO,
 } from './authentication.dto';
 import { AuthenticationService } from './authentication.service';
@@ -55,6 +56,14 @@ export class AuthenticationController {
     const loggedInUser = await this.authenticationService.login(payload);
 
     return Response.json('login successful', loggedInUser);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() payload: ResetPasswordDTO) {
+    const loggedInUser =
+      await this.authenticationService.resetPassword(payload);
+
+    return Response.json('password updated', loggedInUser);
   }
 
   @Get('check-otp/:otp')

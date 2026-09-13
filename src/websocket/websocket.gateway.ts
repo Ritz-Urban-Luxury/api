@@ -275,7 +275,12 @@ export class WebsocketGateway {
       // Keep GeoJSON `type` + `coordinates` first. MongoDB 2dsphere rejects
       // Points when non-geo fields are serialized ahead of `type`.
       return await this.db.rides.findOneAndUpdate(
-        { driver: driverId },
+        {
+          driver: driverId,
+          deleted: { $ne: true },
+          type: { $ne: 'Hire' },
+          status: { $in: ['Online', 'Busy', 'FinishingTrip'] },
+        },
         {
           $set: {
             location: {

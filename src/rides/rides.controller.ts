@@ -24,6 +24,7 @@ import {
   GetMyRidesDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
+  GetTripHistoryDTO,
   HireRideDTO,
   MessageDTO,
   OwnerUpdateRentalStatusDTO,
@@ -148,7 +149,7 @@ export class RidesController {
   @Get('/trips')
   async getTrips(
     @CurrentUser() user: UserDocument,
-    @Query() payload: PaginationRequestDTO,
+    @Query() payload: GetTripHistoryDTO,
   ) {
     const { docs: data, ...meta } = await this.ridesService.getTripHistory(
       user,
@@ -291,6 +292,31 @@ export class RidesController {
     const ongoingRental = await this.ridesService.getOngoingRental(user, {});
 
     return Response.json('ongoing trip', ongoingRental);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('rentals')
+  async getRiderRentals(
+    @CurrentUser() user: UserDocument,
+    @Query() query: AdminGetRentalsDTO,
+  ) {
+    const { docs, ...meta } = await this.ridesService.getRiderRentals(
+      user,
+      query,
+    );
+
+    return Response.json('rentals', docs, meta);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('rentals/:rentalId')
+  async getRiderRental(
+    @CurrentUser() user: UserDocument,
+    @Param('rentalId') rentalId: string,
+  ) {
+    const rental = await this.ridesService.getRiderRental(user, rentalId);
+
+    return Response.json('rental', rental);
   }
 
   @UseGuards(JwtGuard)

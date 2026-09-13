@@ -22,6 +22,7 @@ import { DriverLedgerEntryDocument } from './schemas/driver-ledger.schema';
 import { DriverOnlineSessionDocument } from './schemas/driver-online-session.schema';
 import { DriverRideOfferDocument } from './schemas/driver-ride-offer.schema';
 import { MessageDocument } from './schemas/messages.schema';
+import { ReferralDocument } from './schemas/referrals.schema';
 import { RentalDocument } from './schemas/rentals.schema';
 import { RidesDocument } from './schemas/rides.schema';
 import { TripDocument } from './schemas/trips.schema';
@@ -58,6 +59,8 @@ export class DatabaseService {
     public readonly driverOnlineSessions: Model<DriverOnlineSessionDocument>,
     @InjectModel(DB_TABLES.ACTIVITIES)
     public readonly activities: Model<ActivityDocument>,
+    @InjectModel(DB_TABLES.REFERRALS)
+    public readonly referrals: Model<ReferralDocument>,
   ) {}
 
   async findOrFail<
