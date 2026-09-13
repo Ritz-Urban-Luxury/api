@@ -63,9 +63,14 @@ export class UserService {
       throw new BadRequestException('invalid payload');
     }
 
+    const nextPreferences = {
+      ...(user.preferences || {}),
+      ...preferences,
+    };
+
     const _user = await this.db.users.findOneAndUpdate(
       { _id: user.id },
-      { $set: { preferences } },
+      { $set: { preferences: nextPreferences } },
       { new: true, upsert: false },
     );
 

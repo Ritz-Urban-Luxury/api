@@ -295,7 +295,11 @@ export class RidesService implements OnModuleInit {
     const { trackingId } = payload;
     const value = await this.cache.get<string>(`${user.id}`);
     if (value !== trackingId) {
-      throw new BadRequestException('invalid tracking id');
+      // Already cancelled, expired, or closed by the other party — treat as success.
+      if (trackingId) {
+        await this.cache.set(trackingId, false, this.WAIT_TIME);
+      }
+      return;
     }
 
     await this.cache.del(`${user.id}`);
@@ -455,26 +459,60 @@ export class RidesService implements OnModuleInit {
   }
 
   async cancelTrip(user: UserDocument, tripId: string, reason: string) {
-    const trip = await this.db.findAndUpdateOrFail<TripDocument>(
-      this.db.trips,
-      {
+    const existing = await this.db.trips
+      .findOne({
         _id: tripId,
-        status: { $in: [TripStatus.Started, TripStatus.DriverArrived] },
         $or: [{ user: user.id }, { driver: user.id }],
-      },
-      {
-        $set: {
-          status: TripStatus.Cancelled,
-          cancellationReason: reason,
-          cancelledBy: user.id,
+      })
+      .populate('user driver');
+
+    if (!existing) {
+      throw new NotFoundException('trip not found');
+    }
+
+    if (existing.status === TripStatus.Cancelled) {
+      return existing;
+    }
+
+    if (
+      existing.status !== TripStatus.Started &&
+      existing.status !== TripStatus.DriverArrived
+    ) {
+      throw new BadRequestException(
+        `Cannot cancel trip in ${existing.status} status`,
+      );
+    }
+
+    const trip = await this.db.trips
+      .findOneAndUpdate(
+        {
+          _id: tripId,
+          status: { $in: [TripStatus.Started, TripStatus.DriverArrived] },
+          $or: [{ user: user.id }, { driver: user.id }],
         },
-      },
-      {
-        populate: { path: 'user driver' },
-        options: { upsert: false, new: true },
-        error: new NotFoundException('trip not found'),
-      },
-    );
+        {
+          $set: {
+            status: TripStatus.Cancelled,
+            cancellationReason: reason,
+            cancelledBy: user.id,
+          },
+        },
+        { new: true, upsert: false },
+      )
+      .populate('user driver');
+
+    if (!trip) {
+      const raced = await this.db.trips
+        .findOne({
+          _id: tripId,
+          $or: [{ user: user.id }, { driver: user.id }],
+        })
+        .populate('user driver');
+      if (raced?.status === TripStatus.Cancelled) {
+        return raced;
+      }
+      throw new NotFoundException('trip not found');
+    }
 
     await this.db.rides.updateOne(
       { _id: trip.ride },
