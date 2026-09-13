@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { compare, hash } from 'bcryptjs';
 import * as Crypto from 'crypto';
+import { isMongoId } from 'class-validator';
 import { OAuth2Client } from 'google-auth-library';
 // import moment from 'moment';
 import { Socket } from 'socket.io';
@@ -524,6 +525,10 @@ export class AuthenticationService {
     }>(token, secret ? { secret } : null);
     const { id: _id, payloadId = '' } = jwtPayload;
 
+    if (!_id || !isMongoId(String(_id))) {
+      return null;
+    }
+
     const user = await this.db.users.findOne({ _id });
     if (!user) {
       return null;
@@ -575,6 +580,10 @@ export class AuthenticationService {
   }
 
   async validateJwtPayload({ id: _id, payloadId = '' }) {
+    if (!_id || !isMongoId(String(_id))) {
+      return null;
+    }
+
     const user = await this.db.users.findOne({
       _id,
     });

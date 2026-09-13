@@ -34,10 +34,11 @@ export class PaystackService implements PaymentProvider {
     private readonly paymentService: PaymentService,
   ) {
     const { paystack } = config();
+    const baseURL = (paystack.url || '').trim() || 'https://api.paystack.co';
 
     this.client = new Http({
-      baseURL: paystack.url,
-      headers: { Authorization: `Bearer ${paystack.secretKey}` },
+      baseURL,
+      headers: { Authorization: `Bearer ${paystack.secretKey || ''}` },
     });
 
     this.webhookHandlers = {
@@ -51,15 +52,34 @@ export class PaystackService implements PaymentProvider {
     user: UserDocument;
     card: CardDocument;
     amount: number;
-    reference: string;
+    reference?: string;
   }) {
     try {
-      const { card, amount, reference } = payload;
+      const { paystack } = config();
+      if (!paystack.secretKey?.trim()) {
+        throw new Error(
+          'Paystack is not configured (missing PAYSTACK_SECRET_KEY)',
+        );
+      }
+
+      const { card, amount, user } = payload;
+      const authorization =
+        typeof card.meta?.authorization === 'string'
+          ? card.meta.authorization
+          : '';
+      if (!authorization) {
+        throw new Error('Saved card is missing a Paystack authorization code');
+      }
+
+      const reference =
+        payload.reference?.trim() ||
+        `rul_${user.id}_${Date.now().toString(36)}`;
+
       const res = await this.client.post('/transaction/charge_authorization', {
-        email: card.email,
-        amount: amount * 100,
+        email: card.email || user.email,
+        amount: Math.round(amount * 100),
         reference,
-        authorization_code: card.meta.authorization,
+        authorization_code: authorization,
       });
       const data = (res as Record<string, unknown>).data as Record<
         string,
@@ -69,12 +89,16 @@ export class PaystackService implements PaymentProvider {
       if (
         !['Approved', 'success', 'approved'].includes(data.status as string)
       ) {
-        throw new Error(data.gateway_response as string);
+        throw new Error(
+          (data.gateway_response as string) || 'Card charge was declined',
+        );
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException(
+        (error as Error)?.message || 'Unable to charge card',
+      );
     }
   }
 

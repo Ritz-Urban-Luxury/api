@@ -1,4 +1,5 @@
 import { BadRequestException, ValidationError } from '@nestjs/common';
+import { isMongoId } from 'class-validator';
 import {
   CountryCode,
   PhoneNumberFormat,
@@ -14,6 +15,47 @@ const countryPhoneFormat: Record<string, (x: string) => string> = {
 };
 
 export class Util {
+  /**
+   * Safely turn a mongoose ref (ObjectId | populated doc | string) into a hex id.
+   * Never use ObjectId.id — that is a 12-byte Buffer and String(buffer) is garbage.
+   */
+  static resolveDocumentId(ref: unknown): string | null {
+    if (ref == null) {
+      return null;
+    }
+
+    if (typeof ref === 'string') {
+      return isMongoId(ref) ? ref : null;
+    }
+
+    if (typeof ref !== 'object') {
+      return null;
+    }
+
+    const asHex =
+      typeof (ref as { toHexString?: () => string }).toHexString === 'function'
+        ? (ref as { toHexString: () => string }).toHexString()
+        : null;
+    if (asHex && isMongoId(asHex)) {
+      return asHex;
+    }
+
+    const asString = String(ref);
+    if (isMongoId(asString)) {
+      return asString;
+    }
+
+    const doc = ref as { id?: unknown; _id?: unknown };
+    if (typeof doc.id === 'string' && isMongoId(doc.id)) {
+      return doc.id;
+    }
+    if (doc._id != null && doc._id !== ref) {
+      return Util.resolveDocumentId(doc._id);
+    }
+
+    return null;
+  }
+
   static formatValidationErrors(errorsToFromat: ValidationError[]) {
     return errorsToFromat.reduce((accumulator, error: ValidationError) => {
       let constraints: string | Record<string, unknown>;

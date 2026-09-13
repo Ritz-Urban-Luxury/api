@@ -36,6 +36,7 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { PaginationRequestDTO } from '../shared/pagination.dto';
+import { Util } from '../shared/util';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { WebsocketEvent } from '../websocket/types';
 import {
@@ -1049,25 +1050,42 @@ export class RidesService implements OnModuleInit {
 
   async getOngoingRental(
     user: UserDocument,
-    payload: Pick<HireRideDTO, 'checkInAt' | 'checkOutAt'>,
+    payload: Pick<HireRideDTO, 'checkInAt' | 'checkOutAt'> = {},
   ) {
     const { checkInAt, checkOutAt } = payload;
+    const openStatuses = [
+      RentalStatus.Pending,
+      RentalStatus.Accepted,
+      RentalStatus.InProgress,
+    ];
 
-    return this.db.rentals.findOne({
+    const query: FilterQuery<RentalDocument> = {
       user: user.id,
-      status: {
-        $in: [
-          RentalStatus.Pending,
-          RentalStatus.Accepted,
-          RentalStatus.InProgress,
-        ],
-      },
-      $or: [
-        { checkInAt: { $lte: checkInAt }, checkOutAt: { $gte: checkInAt } },
-        { checkInAt: { $lte: checkOutAt }, checkOutAt: { $gte: checkOutAt } },
-        { billingType: RentalBillingType.Daily },
-      ],
-    });
+      deleted: { $ne: true },
+      status: { $in: openStatuses },
+    };
+
+    // Overlap check only when booking (dates provided). Listing "ongoing"
+    // must return any open rental — including Hourly Pending — without dates.
+    const checkIn = checkInAt ? new Date(checkInAt) : null;
+    const checkOut = checkOutAt ? new Date(checkOutAt) : null;
+    if (
+      checkIn &&
+      checkOut &&
+      !Number.isNaN(checkIn.getTime()) &&
+      !Number.isNaN(checkOut.getTime())
+    ) {
+      query.$or = [
+        { checkInAt: { $lte: checkIn }, checkOutAt: { $gte: checkIn } },
+        { checkInAt: { $lte: checkOut }, checkOutAt: { $gte: checkOut } },
+        { checkInAt: { $gte: checkIn }, checkOutAt: { $lte: checkOut } },
+      ];
+    }
+
+    return this.db.rentals
+      .findOne(query)
+      .sort({ createdAt: -1 })
+      .populate('ride driver');
   }
 
   async hireARide(user: UserDocument, payload: HireRideDTO) {
@@ -1162,21 +1180,20 @@ export class RidesService implements OnModuleInit {
       },
     });
 
-    const ownerId =
-      typeof ride.driver === 'object' && ride.driver && 'id' in ride.driver
-        ? String((ride.driver as UserDocument).id)
-        : String(ride.driver);
-    const owner = await this.db.users.findById(ownerId);
-    if (owner) {
-      this.push.sendToUser(owner, {
-        title: 'New car hire booking',
-        body: 'A rider booked one of your cars. Open Car hire to accept or reject.',
-        app: 'driver',
-        data: {
-          type: 'RentalPending',
-          rentalId: String(rental.id),
-        },
-      });
+    const ownerId = Util.resolveDocumentId(ride.driver);
+    if (ownerId) {
+      const owner = await this.db.users.findById(ownerId);
+      if (owner) {
+        this.push.sendToUser(owner, {
+          title: 'New car hire booking',
+          body: 'A rider booked one of your cars. Open Car hire to accept or reject.',
+          app: 'driver',
+          data: {
+            type: 'RentalPending',
+            rentalId: String(rental.id),
+          },
+        });
+      }
     }
 
     return rental;
@@ -2007,13 +2024,9 @@ export class RidesService implements OnModuleInit {
     let rental = await this.getRental(rentalId);
 
     if (options.ownerId) {
+      const driverId = Util.resolveDocumentId(rental.driver);
       const ownerMatch =
-        String(rental.driver) === String(options.ownerId) ||
-        (typeof rental.driver === 'object' &&
-          rental.driver &&
-          'id' in rental.driver &&
-          String((rental.driver as UserDocument).id) ===
-            String(options.ownerId));
+        driverId != null && driverId === String(options.ownerId);
       if (!ownerMatch) {
         throw new NotFoundException('Rental not found');
       }
@@ -2142,13 +2155,7 @@ export class RidesService implements OnModuleInit {
   }
 
   private getRentalDriverId(rental: RentalDocument): string | null {
-    if (!rental.driver) {
-      return null;
-    }
-    if (typeof rental.driver === 'object' && 'id' in rental.driver) {
-      return String((rental.driver as UserDocument).id);
-    }
-    return String(rental.driver);
+    return Util.resolveDocumentId(rental.driver);
   }
 
   async getOwnerRentals(owner: UserDocument, query: AdminGetRentalsDTO) {
