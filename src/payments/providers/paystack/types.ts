@@ -92,3 +92,29 @@ export type ChargeAuthorizationPayload = {
   authorization_code: string;
   reference?: string;
 };
+
+export type NigerianBank = {
+  code: string;
+  name: string;
+  slug: string;
+  type: string;
+};
+
+export type PaystackBank = NigerianBank & {
+  active: boolean;
+  country: string;
+  currency: string;
+  id: number;
+  is_deleted: boolean;
+};
+
+export type ListBanksResponse = {
+  status: boolean;
+  message: string;
+  data: PaystackBank[];
+  meta?: {
+    next?: string | null;
+    previous?: string | null;
+    perPage?: number;
+  };
+};

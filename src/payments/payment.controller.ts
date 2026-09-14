@@ -27,6 +27,13 @@ export class PaymentController {
     private readonly paystackService: PaystackService,
   ) {}
 
+  @Get('banks')
+  async getNigerianBanks() {
+    const banks = await this.paystackService.getNigerianBanks();
+
+    return Response.json('banks retrieved', banks);
+  }
+
   @UseGuards(JwtGuard)
   @Get('balances')
   async getUserBalance(@CurrentUser() user: UserDocument) {

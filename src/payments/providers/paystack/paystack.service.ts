@@ -1,4 +1,12 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  CACHE_MANAGER,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { Cache } from 'cache-manager';
 import * as Crypto from 'crypto';
 import { DatabaseService } from '../../../database/database.service';
 import { CardDocument } from '../../../database/schemas/card.schema';
@@ -12,6 +20,8 @@ import { Util } from '../../../shared/util';
 import {
   ChargeSuccessData,
   CustomerIdentificationSuccessData,
+  ListBanksResponse,
+  NigerianBank,
   TransferFailureData,
   TransferSuccessData,
   WebhookPayload,
@@ -21,6 +31,10 @@ import {
 export class PaystackService implements PaymentProvider {
   private readonly name = 'Paystack';
 
+  private readonly nigerianBanksCacheKey = 'paystack:nigerian-banks';
+
+  private readonly nigerianBanksCacheTtl = 24 * 60 * 60 * 1000;
+
   private readonly client: Http;
 
   private readonly webhookHandlers: Record<
@@ -29,6 +43,7 @@ export class PaystackService implements PaymentProvider {
   >;
 
   constructor(
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly logger: Logger,
     private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
@@ -46,6 +61,88 @@ export class PaystackService implements PaymentProvider {
     };
 
     this.paymentService.registerPaymentProvider(this.name, this);
+  }
+
+  async getNigerianBanks(): Promise<NigerianBank[]> {
+    try {
+      const cachedBanks = await this.cache.get<NigerianBank[]>(
+        this.nigerianBanksCacheKey,
+      );
+      if (cachedBanks?.length) {
+        return cachedBanks;
+      }
+    } catch (error) {
+      this.logger.warn('Unable to read Nigerian banks from cache', error);
+    }
+
+    if (!config().paystack.secretKey?.trim()) {
+      throw new ServiceUnavailableException(
+        'Paystack is not configured (missing PAYSTACK_SECRET_KEY)',
+      );
+    }
+
+    try {
+      const banksByCode = new Map<string, NigerianBank>();
+      const seenCursors = new Set<string>();
+      let nextCursor: string | null | undefined;
+
+      do {
+        const response = await this.client.get<ListBanksResponse>('/bank', {
+          params: {
+            country: 'nigeria',
+            currency: 'NGN',
+            perPage: 100,
+            type: 'nuban',
+            use_cursor: true,
+            ...(nextCursor ? { next: nextCursor } : {}),
+          },
+        });
+
+        if (!response.status || !Array.isArray(response.data)) {
+          throw new Error('Paystack returned an invalid bank list');
+        }
+
+        response.data
+          .filter((bank) => bank.active && !bank.is_deleted)
+          .forEach((bank) => {
+            banksByCode.set(bank.code, {
+              code: bank.code,
+              name: bank.name,
+              slug: bank.slug,
+              type: bank.type,
+            });
+          });
+
+        nextCursor = response.meta?.next;
+        if (nextCursor && seenCursors.has(nextCursor)) {
+          break;
+        }
+        if (nextCursor) {
+          seenCursors.add(nextCursor);
+        }
+      } while (nextCursor);
+
+      const banks = Array.from(banksByCode.values()).sort((first, second) =>
+        first.name.localeCompare(second.name),
+      );
+
+      try {
+        await this.cache.set(
+          this.nigerianBanksCacheKey,
+          banks,
+          this.nigerianBanksCacheTtl,
+        );
+      } catch (error) {
+        this.logger.warn('Unable to cache Nigerian banks', error);
+      }
+
+      return banks;
+    } catch (error) {
+      this.logger.error('Unable to retrieve Nigerian banks from Paystack', {
+        error,
+      });
+      throw new BadGatewayException('Unable to retrieve Nigerian banks');
+    }
   }
 
   async chargeCard(payload: {
