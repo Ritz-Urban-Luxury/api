@@ -301,6 +301,7 @@ export class AuthenticationService {
           },
           {
             ...userObj,
+            billingType: 'individual',
             password: Crypto.randomBytes(32).toString('hex'),
             oAuthProvider,
             isDriver: true,
@@ -379,6 +380,7 @@ export class AuthenticationService {
 
     const user = await this.db.users.create({
       ...userObj,
+      billingType: userObj.vehiclesInFleet ? 'company' : 'individual',
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
       isDriver: true,

@@ -48,9 +48,35 @@ export class UserService {
 
     update.email = update.email?.toLowerCase();
 
+    const isDriverAccount = user.isDriver || Boolean(user.vehiclesInFleet);
+    const isFleetOwner = Boolean(user.vehiclesInFleet?.trim());
+    const unsetIndividualCompanyFields =
+      isDriverAccount && !isFleetOwner
+        ? {
+            companyName: 1,
+            registrationCode: 1,
+            vatNumber: 1,
+          }
+        : undefined;
+
+    if (isDriverAccount) {
+      update.billingType = isFleetOwner ? 'company' : 'individual';
+
+      if (!isFleetOwner) {
+        delete update.companyName;
+        delete update.registrationCode;
+        delete update.vatNumber;
+      }
+    }
+
     return this.db.users.findOneAndUpdate(
       { _id: user.id },
-      { $set: update },
+      {
+        $set: update,
+        ...(unsetIndividualCompanyFields
+          ? { $unset: unsetIndividualCompanyFields }
+          : {}),
+      },
       { new: true, upsert: false },
     );
   }
