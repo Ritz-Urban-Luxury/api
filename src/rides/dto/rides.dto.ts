@@ -7,6 +7,7 @@ import {
   IsIn,
   IsLatitude,
   IsLongitude,
+  MaxLength,
   Max,
   Min,
   IsMongoId,
@@ -423,6 +424,13 @@ export class OwnerUpdateRentalStatusDTO {
   @IsIn(RentalStatuses)
   @IsNotEmpty()
   status: RentalStatus;
+}
+
+export class CancelRentalDTO {
+  @IsString()
+  @MaxLength(300)
+  @IsOptional()
+  reason?: string;
 }
 
 export class AdminGetTripsDTO extends PaginationRequestDTO {

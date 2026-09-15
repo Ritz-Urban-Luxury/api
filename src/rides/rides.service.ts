@@ -58,6 +58,18 @@ import {
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 
+const RIDER_RENTAL_POPULATE = [
+  {
+    path: 'user',
+    select: 'firstName lastName email phoneNumber avatar',
+  },
+  {
+    path: 'driver',
+    select: 'firstName lastName phoneNumber avatar isVerified languages',
+  },
+  { path: 'ride' },
+];
+
 @Injectable()
 export class RidesService implements OnModuleInit {
   private readonly WAIT_TIME = 20 * 1000;
@@ -1085,7 +1097,7 @@ export class RidesService implements OnModuleInit {
     return this.db.rentals
       .findOne(query)
       .sort({ createdAt: -1 })
-      .populate('ride driver');
+      .populate(RIDER_RENTAL_POPULATE);
   }
 
   async hireARide(user: UserDocument, payload: HireRideDTO) {
@@ -1919,7 +1931,11 @@ export class RidesService implements OnModuleInit {
     next: RentalStatus,
   ): void {
     const allowed: Record<RentalStatus, RentalStatus[]> = {
-      [RentalStatus.Pending]: [RentalStatus.Accepted, RentalStatus.Rejected],
+      [RentalStatus.Pending]: [
+        RentalStatus.Accepted,
+        RentalStatus.Cancelled,
+        RentalStatus.Rejected,
+      ],
       [RentalStatus.Accepted]: [
         RentalStatus.InProgress,
         RentalStatus.Cancelled,
@@ -2013,7 +2029,7 @@ export class RidesService implements OnModuleInit {
         },
         { new: true },
       )
-      .populate('user driver ride');
+      .populate(RIDER_RENTAL_POPULATE);
   }
 
   async updateRentalStatus(
@@ -2210,13 +2226,138 @@ export class RidesService implements OnModuleInit {
         user: user.id,
         deleted: { $ne: true },
       })
-      .populate('user driver ride');
+      .populate(RIDER_RENTAL_POPULATE);
 
     if (!rental) {
       throw new NotFoundException('Rental not found');
     }
 
     return rental;
+  }
+
+  async cancelRiderRental(
+    user: UserDocument,
+    rentalId: string,
+    reason?: string,
+  ) {
+    const existing = await this.db.rentals
+      .findOne({
+        _id: rentalId,
+        user: user.id,
+        deleted: { $ne: true },
+      })
+      .populate(RIDER_RENTAL_POPULATE);
+
+    if (!existing) {
+      throw new NotFoundException('Rental not found');
+    }
+
+    if (existing.status === RentalStatus.Cancelled) {
+      return existing;
+    }
+
+    if (existing.status !== RentalStatus.Pending) {
+      throw new BadRequestException(
+        'Only rentals awaiting owner approval can be cancelled',
+      );
+    }
+
+    const cancellationReason = reason?.trim();
+    let cancelled = await this.db.rentals
+      .findOneAndUpdate(
+        {
+          _id: rentalId,
+          user: user.id,
+          status: RentalStatus.Pending,
+          deleted: { $ne: true },
+        },
+        {
+          $set: {
+            status: RentalStatus.Cancelled,
+            cancelledAt: new Date(),
+            cancelledBy: user.id,
+            ...(cancellationReason ? { cancellationReason } : {}),
+          },
+        },
+        { new: true },
+      )
+      .populate(RIDER_RENTAL_POPULATE);
+
+    if (!cancelled) {
+      const raced = await this.getRiderRental(user, rentalId);
+      if (raced.status === RentalStatus.Cancelled) {
+        return raced;
+      }
+      throw new BadRequestException('Rental can no longer be cancelled');
+    }
+
+    const refundableAmount = this.getRefundableAmount(cancelled);
+    if (refundableAmount > 0) {
+      try {
+        const refunded = await this.applyRentalRefund(
+          cancelled,
+          refundableAmount,
+          `Rental ${cancelled.id} cancelled by rider`,
+        );
+        if (refunded) {
+          cancelled = refunded;
+        }
+      } catch (error) {
+        cancelled =
+          (await this.db.rentals
+            .findOneAndUpdate(
+              { _id: cancelled.id },
+              {
+                $set: {
+                  meta: {
+                    ...(cancelled.meta || {}),
+                    refundResponse: {
+                      status: 'failed',
+                      reason:
+                        error instanceof Error
+                          ? error.message
+                          : 'Unable to initiate refund',
+                    },
+                  },
+                },
+              },
+              { new: true },
+            )
+            .populate(RIDER_RENTAL_POPULATE)) || cancelled;
+      }
+    }
+
+    await this.syncHireRideAvailability(
+      cancelled.ride as RidesDocument | string,
+      RentalStatus.Cancelled,
+    );
+    await this.emitRentalStatusUpdated(cancelled);
+    this.notifyRentalRider(cancelled, 'status');
+
+    const refundResponse = (
+      cancelled.meta as
+        | { refundResponse?: { status?: string } }
+        | undefined
+    )?.refundResponse;
+    if (refundResponse?.status !== 'failed' && refundableAmount > 0) {
+      this.notifyRentalRider(cancelled, 'refund', refundableAmount);
+    }
+
+    const ownerId = this.getRentalDriverId(cancelled);
+    if (ownerId) {
+      this.push.sendToUser(ownerId, {
+        title: 'Car rental cancelled',
+        body: 'The rider cancelled a rental request that was awaiting your approval.',
+        app: 'driver',
+        data: {
+          type: 'RentalStatusUpdated',
+          rentalId: String(cancelled.id),
+          status: RentalStatus.Cancelled,
+        },
+      });
+    }
+
+    return cancelled;
   }
 
   async getOwnerRental(owner: UserDocument, rentalId: string) {

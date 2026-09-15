@@ -73,6 +73,15 @@ export class Rental extends BaseSchema {
   @Prop()
   endedAt?: Date;
 
+  @Prop()
+  cancelledAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  cancelledBy?: string | UserDocument;
+
+  @Prop()
+  cancellationReason?: string;
+
   @Prop({ type: Number, default: 0 })
   refundedAmount?: number;
 

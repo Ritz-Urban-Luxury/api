@@ -19,6 +19,7 @@ import { Response } from '../shared/response';
 import {
   AcceptRideDTO,
   AdminGetRentalsDTO,
+  CancelRentalDTO,
   CreateRideDTO,
   GetDrivingRouteDTO,
   GetMyRidesDTO,
@@ -317,6 +318,22 @@ export class RidesController {
     const rental = await this.ridesService.getRiderRental(user, rentalId);
 
     return Response.json('rental', rental);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('rentals/:rentalId/cancel')
+  async cancelRiderRental(
+    @CurrentUser() user: UserDocument,
+    @Param('rentalId') rentalId: string,
+    @Body() payload: CancelRentalDTO,
+  ) {
+    const rental = await this.ridesService.cancelRiderRental(
+      user,
+      rentalId,
+      payload.reason,
+    );
+
+    return Response.json('rental cancelled', rental);
   }
 
   @UseGuards(JwtGuard)
