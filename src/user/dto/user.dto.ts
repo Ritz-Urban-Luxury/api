@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsDateString,
   IsEmail,
@@ -99,6 +100,11 @@ export class RemovePushTokenDTO {
   @IsString()
   @IsNotEmpty()
   token: string;
+}
+
+export class DeleteAccountDTO {
+  @Equals(true, { message: 'account deletion must be confirmed' })
+  confirm: true;
 }
 
 export class SetUserVerificationDTO {

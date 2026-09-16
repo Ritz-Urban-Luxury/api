@@ -128,6 +128,12 @@ export class User extends BaseSchema {
   @Prop()
   isAppAdmin?: boolean;
 
+  @Prop()
+  deletionRequestedAt?: Date;
+
+  @Prop()
+  deletedAt?: Date;
+
   @Prop({
     type: [
       {

@@ -15,6 +15,7 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
 import {
   ApplyReferralDTO,
+  DeleteAccountDTO,
   RemovePushTokenDTO,
   UpdateUserDTO,
   UpsertPushTokenDTO,
@@ -97,6 +98,17 @@ export class UserController {
     );
 
     return Response.json('push token saved', { count: devices.length });
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('/me')
+  async deleteAccount(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: DeleteAccountDTO,
+  ) {
+    const result = await this.userService.deleteAccount(user, payload);
+
+    return Response.json('account deleted', result);
   }
 
   @UseGuards(JwtGuard)

@@ -588,6 +588,7 @@ export class AuthenticationService {
 
     const user = await this.db.users.findOne({
       _id,
+      deleted: { $ne: true },
     });
     if (user) {
       const isValid = await compare(
