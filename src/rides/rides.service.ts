@@ -111,6 +111,7 @@ export class RidesService implements OnModuleInit {
 
     const query: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
+      'specs.synthetic': { $ne: true },
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
     };
 
@@ -157,12 +158,17 @@ export class RidesService implements OnModuleInit {
       return { trackingId };
     }
 
+    const tripQuery: FilterQuery<TripDocument> = {
+      $or: [{ user: user.id }, { driver: user.id }],
+      status: { $nin: InactiveTripStatuses },
+      deleted: { $ne: true },
+    };
+    if (getPlayReviewAccount(user.email)?.kind === 'driver') {
+      tripQuery['meta.playReviewSynthetic'] = { $ne: true };
+    }
+
     const trip = await this.db.trips
-      .findOne({
-        $or: [{ user: user.id }, { driver: user.id }],
-        status: { $nin: InactiveTripStatuses },
-        deleted: { $ne: true },
-      })
+      .findOne(tripQuery)
       .populate({
         path: 'ride',
         populate: { path: 'driver' },
@@ -228,7 +234,6 @@ export class RidesService implements OnModuleInit {
   }
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
-    this.rejectPlayReviewerRealWorldAction(user);
     const { fromLat, fromLon, type, paymentMethod } = payload;
     const [ongoingTrip, ongoingRequest] = await Promise.all([
       this.db.trips.findOne({
@@ -245,10 +250,19 @@ export class RidesService implements OnModuleInit {
       throw new BadRequestException('previous request still pending');
     }
 
+    const reviewerAccount = getPlayReviewAccount(user.email);
+    if (reviewerAccount?.kind === 'rider') {
+      return this.createPlayReviewTrip(user, payload);
+    }
+    if (reviewerAccount) {
+      this.rejectPlayReviewerRealWorldAction(user);
+    }
+
     const trackingId = Math.random().toString(32).substring(2);
     const [_available, distance] = await Promise.all([
       this.db.rides
         .find({
+          'specs.synthetic': { $ne: true },
           status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
           type,
           location: {
@@ -287,9 +301,14 @@ export class RidesService implements OnModuleInit {
       }
     }
 
-    const available = _available.sort((a) =>
-      a.status === RideStatus.Online ? -1 : 1,
-    );
+    const available = _available
+      .filter(
+        (ride) =>
+          !getPlayReviewAccount(
+            (ride.driver as UserDocument | undefined)?.email,
+          ),
+      )
+      .sort((a) => (a.status === RideStatus.Online ? -1 : 1));
     if (!available.length) {
       throw new BadRequestException('All drivers are busy at this time');
     }
@@ -309,6 +328,71 @@ export class RidesService implements OnModuleInit {
     });
 
     return { ride: available[0], trackingId };
+  }
+
+  private async createPlayReviewTrip(
+    user: UserDocument,
+    payload: RequestRideDTO,
+  ) {
+    const ride = await this.db.rides
+      .findOne({
+        deleted: { $ne: true },
+        'specs.synthetic': true,
+        type: payload.type,
+      })
+      .populate('driver');
+    if (!ride || !ride.driver) {
+      throw new BadRequestException(
+        'The synthetic review vehicle is unavailable',
+      );
+    }
+
+    const distance = await GeolocationService.getDistance(
+      [payload.fromLat, payload.fromLon],
+      [payload.toLat, payload.toLon],
+    );
+    const quotes = await this.getRideQuotes({ distance });
+    const quotedAmount = quotes[payload.type.toLowerCase()] || 0;
+    const trip = await this.db.trips.create({
+      amount: 0,
+      distance,
+      driver: ride.driver,
+      from: {
+        type: 'Point',
+        coordinates: [payload.fromLat, payload.fromLon],
+      },
+      fromAddress: payload.fromAddress,
+      meta: {
+        playReviewSynthetic: true,
+        quotedAmount,
+      },
+      paymentMethod: payload.paymentMethod,
+      ride,
+      status: TripStatus.Started,
+      to: {
+        type: 'Point',
+        coordinates: [payload.toLat, payload.toLon],
+      },
+      toAddress: payload.toAddress,
+      tripStops: (payload.stops || []).map((stop) => ({
+        status: TripStopStatus.Pending,
+        to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
+        toAddress: stop.toAddress,
+      })),
+      user,
+    });
+    const tripObject =
+      typeof trip.toObject === 'function' ? trip.toObject() : trip;
+    const responseTrip = {
+      ...tripObject,
+      driver: ride.driver,
+      ride,
+      user,
+    };
+
+    this.websocket.emitToUser(user, 'TripStarted', responseTrip);
+
+    return { ride, trackingId: String(trip.id), trip: responseTrip };
   }
 
   async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
@@ -534,13 +618,19 @@ export class RidesService implements OnModuleInit {
       throw new NotFoundException('trip not found');
     }
 
+    const rider = trip.user as UserDocument;
+    const driver = trip.driver as UserDocument;
+    const isPlayReviewSynthetic = trip.meta?.playReviewSynthetic === true;
+
+    if (isPlayReviewSynthetic) {
+      this.websocket.emitToUser(rider, 'TripCancelled', trip);
+      return trip;
+    }
+
     await this.db.rides.updateOne(
       { _id: trip.ride },
       { $set: { status: RideStatus.Online } },
     );
-
-    const rider = trip.user as UserDocument;
-    const driver = trip.driver as UserDocument;
     await this.openOnlineSession(driver.id, String(trip.ride));
 
     this.websocket.emitToUser(rider, 'TripCancelled', trip);
@@ -855,10 +945,15 @@ export class RidesService implements OnModuleInit {
     const { page = 1, limit = 100, role } = payload;
     const ownership =
       role === 'driver' ? { driver: user.id } : { user: user.id };
+    const hideSyntheticReviewerTrips =
+      role === 'driver' && getPlayReviewAccount(user.email)?.kind === 'driver'
+        ? { 'meta.playReviewSynthetic': { $ne: true } }
+        : {};
 
     return this.db.trips.paginate(
       {
         ...ownership,
+        ...hideSyntheticReviewerTrips,
         deleted: { $ne: true },
       },
       {
@@ -1013,6 +1108,7 @@ export class RidesService implements OnModuleInit {
       {
         $match: {
           deleted: { $ne: true },
+          'specs.synthetic': { $ne: true },
           status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
           type: RideType.Hire,
         },
@@ -1108,7 +1204,13 @@ export class RidesService implements OnModuleInit {
   }
 
   async hireARide(user: UserDocument, payload: HireRideDTO) {
-    this.rejectPlayReviewerRealWorldAction(user);
+    const reviewerAccount = getPlayReviewAccount(user.email);
+    if (reviewerAccount?.kind === 'rider') {
+      return this.createPlayReviewRental(user, payload);
+    }
+    if (reviewerAccount) {
+      this.rejectPlayReviewerRealWorldAction(user);
+    }
     const { ride: rideId, checkInAt, checkOutAt, billingType } = payload;
     const ongoingRental = await this.getOngoingRental(user, payload);
     if (ongoingRental) {
@@ -1140,6 +1242,7 @@ export class RidesService implements OnModuleInit {
     }
 
     const query: FilterQuery<RentalDocument> = {
+      'meta.playReviewSynthetic': { $ne: true },
       ride: ride.id,
       status: {
         $nin: [
@@ -1217,6 +1320,63 @@ export class RidesService implements OnModuleInit {
     }
 
     return rental;
+  }
+
+  private async createPlayReviewRental(
+    user: UserDocument,
+    payload: HireRideDTO,
+  ) {
+    const ongoingRental = await this.getOngoingRental(user, payload);
+    if (ongoingRental) {
+      return ongoingRental;
+    }
+
+    const ride = await this.db.rides.findOne({
+      _id: payload.ride,
+      deleted: { $ne: true },
+      'specs.synthetic': { $ne: true },
+      type: RideType.Hire,
+    });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+
+    const checkIn = payload.checkInAt ? new Date(payload.checkInAt) : null;
+    const checkOut = payload.checkOutAt ? new Date(payload.checkOutAt) : null;
+    if (
+      !checkIn ||
+      !checkOut ||
+      Number.isNaN(checkIn.getTime()) ||
+      Number.isNaN(checkOut.getTime()) ||
+      checkOut.getTime() <= checkIn.getTime()
+    ) {
+      throw new BadRequestException('Invalid check in / check out window');
+    }
+
+    const quotedPricing = this.calculateHireBookingTotals(ride, {
+      billingType: payload.billingType,
+      checkInAt: checkIn,
+      checkOutAt: checkOut,
+    });
+
+    return this.db.rentals.create({
+      ...payload,
+      cautionAmount: 0,
+      checkInAt: checkIn,
+      checkOutAt: checkOut,
+      driver: user.id,
+      hireFee: 0,
+      insuranceFee: 0,
+      meta: {
+        playReviewSynthetic: true,
+        quotedPricing,
+      },
+      paymentMethod: payload.paymentMethod,
+      price: 0,
+      ride,
+      status: RentalStatus.Pending,
+      user: user.id,
+    });
   }
 
   private calculateHireBookingTotals(
@@ -1346,6 +1506,7 @@ export class RidesService implements OnModuleInit {
       specs: {
         ...(payload.specs || {}),
         seats,
+        ...(getPlayReviewAccount(user.email) ? { synthetic: true } : {}),
       },
     };
 
@@ -1518,9 +1679,6 @@ export class RidesService implements OnModuleInit {
     status: RideStatus.Online | RideStatus.Offline,
     rideId?: string,
   ) {
-    if (status === RideStatus.Online) {
-      this.rejectPlayReviewerRealWorldAction(user);
-    }
     if (!rideId) {
       throw new BadRequestException('rideId is required');
     }
@@ -1572,6 +1730,9 @@ export class RidesService implements OnModuleInit {
     }
 
     const $set: Record<string, unknown> = { status };
+    if (getPlayReviewAccount(user.email)) {
+      $set['specs.synthetic'] = true;
+    }
     if (
       status === RideStatus.Online &&
       ride.type === RideType.Hire &&

@@ -22,9 +22,18 @@ npm run provision:play-reviewers -- --confirm
 ```
 
 The command is idempotent. It creates a normal rider, a verified non-admin
-driver, and an approved synthetic trip vehicle. Payments, live ride/rental
-bookings, driver online availability, reviewer-email changes, and in-app account
-deletion are blocked for these accounts.
+driver, and an approved synthetic trip vehicle. Reviewer-email changes and
+in-app account deletion are blocked.
+
+Reviewer activity runs in an isolated sandbox:
+
+- The reviewer driver can toggle the synthetic vehicle online and offline, but
+  synthetic vehicles are excluded from real catalogues and driver matching.
+- Rider trip requests create a zero-charge synthetic trip without dispatching,
+  notifying, or paying a real driver.
+- Rider hire requests create a zero-charge synthetic booking without reserving
+  the real owner's vehicle, charging a payment method, or notifying the owner.
+- Reviewer-created vehicles are automatically marked synthetic.
 
 ## Play Console: rider app
 
@@ -37,7 +46,7 @@ Instructions:
 2. Tap Continue.
 3. Enter the reusable four-digit OTP provided above.
 4. The OTP does not expire and no access to the email inbox is required.
-5. This is a dedicated account containing synthetic data. Payments and live bookings are disabled.
+5. This is a dedicated account containing synthetic data. Trips and hire requests are simulated without real charges or dispatch.
 ```
 
 ## Play Console: driver app
@@ -51,5 +60,5 @@ Instructions:
 2. Tap Continue.
 3. Enter the reusable four-digit OTP provided above.
 4. The OTP does not expire and no access to the email inbox is required.
-5. The synthetic account and vehicle are already approved. Going online and real-world transactions are disabled.
+5. The synthetic account and vehicle are already approved. Online status is isolated from real riders and no real-world transactions occur.
 ```
