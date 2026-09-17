@@ -7,6 +7,7 @@ import {
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { FilterQuery } from 'mongoose';
+import { getPlayReviewAccount } from '../authentication/play-review-accounts';
 import { DatabaseService } from '../database/database.service';
 import { UserDocument } from '../database/schemas/user.schema';
 import { RentalStatus } from '../database/schemas/rentals.schema';
@@ -31,6 +32,15 @@ export class UserService {
   ) {}
 
   async updateUser(user: UserDocument, update: UpdateUserDTO) {
+    if (
+      getPlayReviewAccount(user.email) &&
+      update.email &&
+      update.email.toLowerCase().trim() !== user.email.toLowerCase().trim()
+    ) {
+      throw new BadRequestException(
+        'The reviewer account email cannot be changed',
+      );
+    }
     const { email, emailOtp } = update;
     if (email) {
       const _email = email.toLocaleLowerCase();
@@ -111,6 +121,11 @@ export class UserService {
   }
 
   async deleteAccount(user: UserDocument, payload: DeleteAccountDTO) {
+    if (getPlayReviewAccount(user.email)) {
+      throw new BadRequestException(
+        'Play reviewer accounts cannot be deleted in the app',
+      );
+    }
     if (!payload.confirm) {
       throw new BadRequestException('account deletion must be confirmed');
     }

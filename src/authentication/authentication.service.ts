@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -31,13 +33,24 @@ import {
   ResetPasswordDTO,
   SignupDTO,
 } from './authentication.dto';
+import {
+  getPlayReviewAccounts,
+  PlayReviewAccount,
+  playReviewOtpMatches,
+} from './play-review-accounts';
+import { generateOtp } from './otp';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const moment = require('moment');
 
+const PLAY_REVIEW_ATTEMPT_WINDOW_MINUTES = 15;
+const PLAY_REVIEW_MAX_FAILED_ATTEMPTS = 5;
+
 @Injectable()
 export class AuthenticationService {
   private readonly googleOAuthClient: OAuth2Client;
+
+  private readonly playReviewAccounts = getPlayReviewAccounts();
 
   constructor(
     private readonly notificationService: NotificationService,
@@ -65,7 +78,7 @@ export class AuthenticationService {
       },
     });
     if (!previousAuthToken) {
-      const token = Math.random().toString().substring(2, 6);
+      const token = generateOtp();
 
       await this.db.authTokens.create({
         expiresAt: moment().add(10, 'minute').toDate(),
@@ -89,16 +102,36 @@ export class AuthenticationService {
 
   async requestEmailOtp(payload: RequestEmailOTPDTO) {
     const { email: _email, name } = payload;
-    const email = _email.toLowerCase();
+    const email = _email.toLowerCase().trim();
+    const reviewerAccount = this.getReviewerAccount(email);
+    const tokenType = reviewerAccount
+      ? 'play-review-email-otp-request'
+      : 'email-otp';
     const previousAuthToken = await this.db.authTokens.findOne({
-      'meta.type': 'email-otp',
+      'meta.type': tokenType,
       'meta.email': email,
       createdAt: {
         $gte: moment().subtract(100, 'seconds').toDate(),
       },
     });
     if (!previousAuthToken) {
-      const token = Math.random().toString().substring(2, 6);
+      if (reviewerAccount) {
+        await this.db.authTokens.create({
+          expiresAt: moment().add(1, 'day').toDate(),
+          token: Crypto.randomBytes(32).toString('hex'),
+          meta: {
+            email,
+            type: tokenType,
+          },
+        });
+        this.logger.log('Play reviewer OTP requested', {
+          email,
+          reviewerType: reviewerAccount.kind,
+        });
+        return;
+      }
+
+      const token = generateOtp();
 
       await this.db.authTokens.create({
         expiresAt: moment().add(10, 'minute').toDate(),
@@ -124,10 +157,84 @@ export class AuthenticationService {
     }
   }
 
+  private getReviewerAccount(email: string): PlayReviewAccount | null {
+    const normalizedEmail = email.toLowerCase().trim();
+    return (
+      this.playReviewAccounts.find(
+        (account) => account.email === normalizedEmail,
+      ) || null
+    );
+  }
+
+  private reviewerRoleIsValid(
+    account: PlayReviewAccount,
+    user: UserDocument,
+  ): boolean {
+    if (user.isAppAdmin) {
+      return false;
+    }
+
+    return account.kind === 'driver'
+      ? user.isDriver === true && user.isVerified === true
+      : user.isDriver !== true;
+  }
+
+  private async verifyReviewerOtp(
+    account: PlayReviewAccount,
+    otp: string,
+  ): Promise<boolean> {
+    const attemptedSince = moment()
+      .subtract(PLAY_REVIEW_ATTEMPT_WINDOW_MINUTES, 'minutes')
+      .toDate();
+    const failedAttempts = await this.db.authTokens.countDocuments({
+      'meta.email': account.email,
+      'meta.type': 'play-review-otp-attempt',
+      'meta.success': false,
+      createdAt: { $gte: attemptedSince },
+    });
+
+    if (failedAttempts >= PLAY_REVIEW_MAX_FAILED_ATTEMPTS) {
+      this.logger.warn('Play reviewer OTP rate limit reached', {
+        email: account.email,
+        reviewerType: account.kind,
+      });
+      throw new HttpException(
+        'Too many OTP attempts. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const success = playReviewOtpMatches(account, otp);
+    await this.db.authTokens.create({
+      expiresAt: moment()
+        .add(PLAY_REVIEW_ATTEMPT_WINDOW_MINUTES, 'minutes')
+        .toDate(),
+      token: Crypto.randomBytes(32).toString('hex'),
+      meta: {
+        email: account.email,
+        reviewerType: account.kind,
+        success,
+        type: 'play-review-otp-attempt',
+      },
+    });
+
+    this.logger[success ? 'log' : 'warn'](
+      `Play reviewer authentication ${success ? 'succeeded' : 'failed'}`,
+      {
+        email: account.email,
+        reviewerType: account.kind,
+      },
+    );
+    return success;
+  }
+
   async checkOtp(otp: string) {
     const token = await this.db.authTokens.findOne({
       $or: [{ 'meta.type': 'email-otp' }, { 'meta.type': 'phone-otp' }],
       token: otp,
+      deleted: { $ne: true },
+      isUsed: { $ne: true },
+      expiresAt: { $gte: new Date() },
     });
 
     return !!token;
@@ -420,6 +527,32 @@ export class AuthenticationService {
 
     if (identifier && otp && !password) {
       const email = identifier.toLowerCase().trim();
+      const reviewerAccount = this.getReviewerAccount(email);
+      if (reviewerAccount) {
+        const [user, otpIsValid] = await Promise.all([
+          this.db.users.findOne({
+            email,
+            deleted: { $ne: true },
+          }),
+          this.verifyReviewerOtp(reviewerAccount, otp),
+        ]);
+        if (
+          user &&
+          otpIsValid &&
+          this.reviewerRoleIsValid(reviewerAccount, user)
+        ) {
+          return this.authorizeUser(user);
+        }
+
+        if (user && otpIsValid) {
+          this.logger.error('Play reviewer account has an invalid role', {
+            email,
+            reviewerType: reviewerAccount.kind,
+          });
+        }
+        throw new UnauthorizedException('invalid credentials');
+      }
+
       const [user, otpDoc] = await Promise.all([
         this.db.users.findOne({
           email,
@@ -478,9 +611,7 @@ export class AuthenticationService {
     }
 
     if (!payload.password || payload.password.length < 8) {
-      throw new BadRequestException(
-        'password must be at least 8 characters',
-      );
+      throw new BadRequestException('password must be at least 8 characters');
     }
 
     user.password = payload.password;

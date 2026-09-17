@@ -73,6 +73,16 @@ const config = () => ({
   referralBonusAmount: Number.parseFloat(
     process.env.REFERRAL_BONUS_AMOUNT || '7500',
   ),
+  playReview: {
+    rider: {
+      email: process.env.PLAY_RIDER_REVIEW_EMAIL,
+      otp: process.env.PLAY_RIDER_REVIEW_OTP,
+    },
+    driver: {
+      email: process.env.PLAY_DRIVER_REVIEW_EMAIL,
+      otp: process.env.PLAY_DRIVER_REVIEW_OTP,
+    },
+  },
 });
 
 export type Configuration = ReturnType<typeof config>;

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isMongoId } from 'class-validator';
+import { getPlayReviewAccount } from '../authentication/play-review-accounts';
 import { DatabaseService } from '../database/database.service';
 import { CardDocument } from '../database/schemas/card.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
@@ -17,6 +18,14 @@ export class PaymentService {
   private readonly providers: Record<string, PaymentProvider> = {};
 
   constructor(private readonly db: DatabaseService) {}
+
+  private rejectPlayReviewerPayment(user: UserDocument) {
+    if (getPlayReviewAccount(user.email)) {
+      throw new BadRequestException(
+        'Payments are disabled for Play reviewer accounts',
+      );
+    }
+  }
 
   registerPaymentProvider(name: string, service: PaymentProvider) {
     this.providers[name] = service;
@@ -40,6 +49,7 @@ export class PaymentService {
   }
 
   async generateReference(user: UserDocument, payload: RequestReferenceDTO) {
+    this.rejectPlayReviewerPayment(user);
     let meta = { type: 'payment-reference', user: user.id };
     if (Util.isPriObj(payload.meta)) {
       meta = { ...payload.meta, ...meta };
@@ -56,6 +66,7 @@ export class PaymentService {
   }
 
   async debitUserRULBalance(user: UserDocument, amount: number) {
+    this.rejectPlayReviewerPayment(user);
     const balance = await this.getUserBalance(user);
     if ((balance?.amount || 0) < Math.abs(amount)) {
       throw new BadRequestException('insufficient funds in RUL balance');
@@ -165,6 +176,7 @@ export class PaymentService {
   }
 
   async debitUserCard(user: UserDocument, amount: number, cardId: string) {
+    this.rejectPlayReviewerPayment(user);
     const error = new BadRequestException(
       `Cannot charge ${cardId} payment method`,
     );
@@ -194,6 +206,7 @@ export class PaymentService {
     user: UserDocument,
     payload: { amount: number; method: PaymentMethod | string },
   ) {
+    this.rejectPlayReviewerPayment(user);
     const { amount, method } = payload;
     switch (method) {
       case PaymentMethod.RULBalance:

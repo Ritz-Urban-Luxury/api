@@ -9,6 +9,7 @@ import {
 import { Cache } from 'cache-manager';
 import { isMongoId } from 'class-validator';
 import { FilterQuery, Types } from 'mongoose';
+import { getPlayReviewAccount } from '../authentication/play-review-accounts';
 import {
   RentalBillingType,
   RentalDocument,
@@ -83,16 +84,21 @@ export class RidesService implements OnModuleInit {
     private readonly push: PushNotificationService,
   ) {}
 
+  private rejectPlayReviewerRealWorldAction(user: UserDocument) {
+    if (getPlayReviewAccount(user.email)) {
+      throw new BadRequestException(
+        'Live bookings and driver availability are disabled for Play reviewer accounts',
+      );
+    }
+  }
+
   async onModuleInit() {
     // Grandfather existing trip vehicles so current drivers keep working.
     await this.db.rides.updateMany(
       {
         type: { $ne: RideType.Hire },
         deleted: { $ne: true },
-        $or: [
-          { approvalStatus: { $exists: false } },
-          { approvalStatus: null },
-        ],
+        $or: [{ approvalStatus: { $exists: false } }, { approvalStatus: null }],
       },
       { $set: { approvalStatus: RideApprovalStatus.Approved } },
     );
@@ -222,6 +228,7 @@ export class RidesService implements OnModuleInit {
   }
 
   async requestRide(user: UserDocument, payload: RequestRideDTO) {
+    this.rejectPlayReviewerRealWorldAction(user);
     const { fromLat, fromLon, type, paymentMethod } = payload;
     const [ongoingTrip, ongoingRequest] = await Promise.all([
       this.db.trips.findOne({
@@ -1101,6 +1108,7 @@ export class RidesService implements OnModuleInit {
   }
 
   async hireARide(user: UserDocument, payload: HireRideDTO) {
+    this.rejectPlayReviewerRealWorldAction(user);
     const { ride: rideId, checkInAt, checkOutAt, billingType } = payload;
     const ongoingRental = await this.getOngoingRental(user, payload);
     if (ongoingRental) {
@@ -1510,6 +1518,9 @@ export class RidesService implements OnModuleInit {
     status: RideStatus.Online | RideStatus.Offline,
     rideId?: string,
   ) {
+    if (status === RideStatus.Online) {
+      this.rejectPlayReviewerRealWorldAction(user);
+    }
     if (!rideId) {
       throw new BadRequestException('rideId is required');
     }
@@ -2335,9 +2346,7 @@ export class RidesService implements OnModuleInit {
     this.notifyRentalRider(cancelled, 'status');
 
     const refundResponse = (
-      cancelled.meta as
-        | { refundResponse?: { status?: string } }
-        | undefined
+      cancelled.meta as { refundResponse?: { status?: string } } | undefined
     )?.refundResponse;
     if (refundResponse?.status !== 'failed' && refundableAmount > 0) {
       this.notifyRentalRider(cancelled, 'refund', refundableAmount);
