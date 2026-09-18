@@ -62,7 +62,10 @@ const config = () => ({
     process.env.TURN_OFF_GEOLOCATOIN?.toLocaleLowerCase() === 'true',
   paystack: {
     url: process.env.PAYSTACK_API_URL,
-    secretKey: process.env.PAYSTACK_SECRET_KEY,
+    secretKey:
+      process.env.NODE_ENV === 'production'
+        ? process.env.PAYSTACK_SECRET_KEY_LIVE
+        : process.env.PAYSTACK_SECRET_KEY,
   },
   firebase: {
     serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
