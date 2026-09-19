@@ -7,6 +7,7 @@ import {
   IsIn,
   IsNotEmpty,
   IsOptional,
+  IsPhoneNumber,
   IsString,
   IsUrl,
 } from 'class-validator';
@@ -34,6 +35,14 @@ export class UpdateUserDTO {
   @IsString()
   @IsOptional()
   emailOtp: string;
+
+  @IsPhoneNumber('NG')
+  @IsOptional()
+  phoneNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  phoneOtp?: string;
 
   @IsUrl()
   @IsOptional()

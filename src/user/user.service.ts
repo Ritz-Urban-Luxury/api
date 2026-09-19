@@ -41,7 +41,7 @@ export class UserService {
         'The reviewer account email cannot be changed',
       );
     }
-    const { email, emailOtp } = update;
+    const { email, emailOtp, phoneNumber, phoneOtp } = update;
     if (email) {
       const _email = email.toLocaleLowerCase();
       const otp = await this.db.authTokens.findOne({
@@ -55,6 +55,36 @@ export class UserService {
       if (!otp) {
         throw new BadRequestException('invalid email validation token');
       }
+    }
+
+    if (phoneNumber) {
+      const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
+      const otp = await this.db.authTokens.findOne({
+        'meta.phoneNumber': _phoneNumber,
+        'meta.type': 'phone-otp',
+        token: phoneOtp,
+        deleted: { $ne: true },
+        isUsed: { $ne: true },
+        expiresAt: { $gte: new Date() },
+      });
+      if (!otp) {
+        throw new BadRequestException('invalid phone validation token');
+      }
+
+      const phoneNumberTaken = await this.db.users.exists({
+        _id: { $ne: user.id },
+        phoneNumber: _phoneNumber,
+        deleted: { $ne: true },
+      });
+      if (phoneNumberTaken) {
+        throw new ConflictException('user with phone number already exists');
+      }
+
+      await this.db.authTokens.updateOne(
+        { _id: otp.id },
+        { $set: { isUsed: true } },
+      );
+      update.phoneNumber = _phoneNumber;
     }
 
     ['licenseNumber', 'license', 'licenseExpiry'].forEach((key) => {
