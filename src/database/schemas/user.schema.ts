@@ -8,6 +8,7 @@ import { Document } from '../../shared/types';
 export enum OAuthProvider {
   Google = 'Google',
   Facebook = 'Facebook',
+  Apple = 'Apple',
 }
 
 export const OAuthProviders = Object.values(OAuthProvider);

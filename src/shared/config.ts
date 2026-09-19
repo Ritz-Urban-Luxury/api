@@ -35,6 +35,17 @@ const config = () => ({
     appId: process.env.FACEBOOK_APP_ID,
     accessToken: process.env.FACEBOOK_ACCESS_TOKEN,
   },
+  apple: {
+    // Bundle IDs allowed as the identity token's `aud` claim for native
+    // Sign in with Apple (one per app variant: dev/preview/production).
+    bundleIds: (
+      process.env.APPLE_APP_BUNDLE_IDS ||
+      'com.ritz.riderapp,com.ritz.riderapp.preview,com.ritz.riderapp.dev'
+    )
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  },
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN,

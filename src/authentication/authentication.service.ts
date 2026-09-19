@@ -13,6 +13,7 @@ import { compare, hash } from 'bcryptjs';
 import * as Crypto from 'crypto';
 import { isMongoId } from 'class-validator';
 import { OAuth2Client } from 'google-auth-library';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 // import moment from 'moment';
 import { Socket } from 'socket.io';
 import { ActivityLedgerService } from '../database/activity-ledger.service';
@@ -49,6 +50,12 @@ const PLAY_REVIEW_MAX_FAILED_ATTEMPTS = 5;
 @Injectable()
 export class AuthenticationService {
   private readonly googleOAuthClient: OAuth2Client;
+
+  // Cached across requests; `jose` refreshes the keys under the hood
+  // when it hits an unrecognized `kid`.
+  private readonly appleJwks = createRemoteJWKSet(
+    new URL('https://appleid.apple.com/auth/keys'),
+  );
 
   private readonly playReviewAccounts = getPlayReviewAccounts();
 
@@ -275,6 +282,46 @@ export class AuthenticationService {
     }
   }
 
+  async validateAppleIdentityToken(identityToken: string): Promise<{
+    avatar?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    oAuthIdentifier: string;
+  }> {
+    try {
+      const { apple } = config();
+
+      if (!apple.bundleIds.length) {
+        throw new Error('no Apple bundle IDs configured');
+      }
+
+      const { payload } = await jwtVerify(identityToken, this.appleJwks, {
+        issuer: 'https://appleid.apple.com',
+        audience: apple.bundleIds,
+      });
+
+      if (!payload.sub) {
+        throw new Error('apple identity token is missing a subject claim');
+      }
+
+      // Apple only puts `sub` (a stable, per-app user id) and `email` in the
+      // identity token - never the user's name. Name is only ever handed to
+      // the client, once, on the very first authorization, so it has to be
+      // supplied separately by the caller and merged in by `signUp`.
+      return {
+        email: typeof payload.email === 'string' ? payload.email : undefined,
+        oAuthIdentifier: payload.sub,
+      };
+    } catch (error) {
+      this.logger.error(
+        `error validating apple identity token - ${error.message}`,
+        { identityToken },
+      );
+      throw new BadRequestException('invalid apple identity token');
+    }
+  }
+
   async validateFacebookAccessToken(accessToken: string) {
     try {
       const { accessToken: appAccesstoken } = config().facebook;
@@ -331,6 +378,8 @@ export class AuthenticationService {
         return this.validateFacebookAccessToken(identifier);
       case OAuthProvider.Google:
         return this.validateGoogleIdToken(identifier);
+      case OAuthProvider.Apple:
+        return this.validateAppleIdentityToken(identifier);
       default:
         throw new BadRequestException('unsupported oauth provider');
     }
@@ -399,6 +448,13 @@ export class AuthenticationService {
           userObj.avatar = await this.fileService.uploadUrl(userObj.avatar);
         }
 
+        // Apple never puts a name in the identity token - it's only handed
+        // to the client once, on first authorization - so fall back to
+        // whatever the client sent us. Google/Facebook already resolve a
+        // name from the token, so this is a no-op for them.
+        const firstName = userObj.firstName || rest.firstName;
+        const lastName = userObj.lastName || rest.lastName;
+
         user = await this.db.users.findOneAndUpdate(
           {
             $or: [
@@ -408,6 +464,8 @@ export class AuthenticationService {
           },
           {
             ...userObj,
+            firstName,
+            lastName,
             billingType: 'individual',
             password: Crypto.randomBytes(32).toString('hex'),
             oAuthProvider,
