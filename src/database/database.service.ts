@@ -27,6 +27,11 @@ import { RentalDocument } from './schemas/rentals.schema';
 import { RidesDocument } from './schemas/rides.schema';
 import { TripDocument } from './schemas/trips.schema';
 import { UserDocument } from './schemas/user.schema';
+import { WalletTransactionDocument } from './schemas/wallet-transaction.schema';
+import { BankAccountDocument } from './schemas/bank-account.schema';
+import { PayoutRequestDocument } from './schemas/payout-request.schema';
+import { FinancialSettingsDocument } from './schemas/financial-settings.schema';
+import { DriverFinancialStateDocument } from './schemas/driver-financial-state.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -61,6 +66,16 @@ export class DatabaseService {
     public readonly activities: Model<ActivityDocument>,
     @InjectModel(DB_TABLES.REFERRALS)
     public readonly referrals: Model<ReferralDocument>,
+    @InjectModel(DB_TABLES.WALLET_TRANSACTIONS)
+    public readonly walletTransactions: Model<WalletTransactionDocument>,
+    @InjectModel(DB_TABLES.BANK_ACCOUNTS)
+    public readonly bankAccounts: Model<BankAccountDocument>,
+    @InjectModel(DB_TABLES.PAYOUT_REQUESTS)
+    public readonly payoutRequests: Model<PayoutRequestDocument>,
+    @InjectModel(DB_TABLES.FINANCIAL_SETTINGS)
+    public readonly financialSettings: Model<FinancialSettingsDocument>,
+    @InjectModel(DB_TABLES.DRIVER_FINANCIAL_STATES)
+    public readonly driverFinancialStates: Model<DriverFinancialStateDocument>,
   ) {}
 
   async findOrFail<

@@ -33,8 +33,17 @@ describe('UserService.deleteAccount', () => {
       },
     };
 
+    db.rides.exists = jest.fn().mockResolvedValue(false);
+
     service = Object.create(UserService.prototype);
-    Object.assign(service as any, { db, push: {} });
+    Object.assign(service as any, {
+      db,
+      finance: {
+        prepareAccountClosure: jest.fn().mockResolvedValue(null),
+        getDriverFinancialPosition: jest.fn(),
+      },
+      push: {},
+    });
   });
 
   it('blocks deletion while a trip is active', async () => {
@@ -55,13 +64,13 @@ describe('UserService.deleteAccount', () => {
     expect(db.users.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it('blocks deletion while wallet funds remain', async () => {
-    db.balances.findOne.mockResolvedValue({ amount: 5000 });
+  it('prepares an account-closure withdrawal before anonymising', async () => {
+    await service.deleteAccount(user, { confirm: true });
 
-    await expect(
-      service.deleteAccount(user, { confirm: true }),
-    ).rejects.toThrow('Withdraw or use your wallet balance');
-    expect(db.users.findOneAndUpdate).not.toHaveBeenCalled();
+    expect((service as any).finance.prepareAccountClosure).toHaveBeenCalledWith(
+      user,
+      { bankAccountId: undefined, destinationType: undefined },
+    );
   });
 
   it('removes private records and anonymises the account', async () => {
@@ -100,6 +109,7 @@ describe('UserService.deleteAccount', () => {
     expect(result).toEqual({
       deleted: true,
       deletedAt: expect.any(Date),
+      closureRequest: null,
     });
   });
 });

@@ -58,6 +58,7 @@ import {
   RatePassengerDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
+import { FinanceService } from '../finance/finance.service';
 
 const RIDER_RENTAL_POPULATE = [
   {
@@ -82,6 +83,7 @@ export class RidesService implements OnModuleInit {
     private readonly paymentService: PaymentService,
     private readonly activityLedger: ActivityLedgerService,
     private readonly push: PushNotificationService,
+    private readonly finance: FinanceService,
   ) {}
 
   private rejectPlayReviewerRealWorldAction(user: UserDocument) {
@@ -301,13 +303,24 @@ export class RidesService implements OnModuleInit {
       }
     }
 
+    const eligibility = await Promise.all(
+      _available.map(async (ride) => {
+        const candidate = ride.driver as UserDocument | undefined;
+        if (!candidate?.id || getPlayReviewAccount(candidate.email)) {
+          return false;
+        }
+        const eligible = await this.finance.canDriverReceiveRides(candidate.id);
+        if (!eligible) {
+          await this.db.rides.updateOne(
+            { _id: ride.id, status: RideStatus.Online },
+            { $set: { status: RideStatus.Offline } },
+          );
+        }
+        return eligible;
+      }),
+    );
     const available = _available
-      .filter(
-        (ride) =>
-          !getPlayReviewAccount(
-            (ride.driver as UserDocument | undefined)?.email,
-          ),
-      )
+      .filter((_ride, index) => eligibility[index])
       .sort((a) => (a.status === RideStatus.Online ? -1 : 1));
     if (!available.length) {
       throw new BadRequestException('All drivers are busy at this time');
@@ -410,7 +423,12 @@ export class RidesService implements OnModuleInit {
     await this.cache.set(payload.trackingId, false, this.WAIT_TIME);
   }
 
-  async acceptRide(payload: AcceptRideDTO) {
+  async acceptRide(driver: UserDocument, payload: AcceptRideDTO) {
+    if (!(await this.finance.canDriverReceiveRides(driver.id))) {
+      throw new BadRequestException(
+        'Pay the required cash-trip commission deposit before accepting rides',
+      );
+    }
     const { trackingId } = payload;
     const value = await this.cache.get<boolean>(trackingId);
     if (typeof value !== 'boolean') {
@@ -434,6 +452,14 @@ export class RidesService implements OnModuleInit {
       const driver = ride.driver as UserDocument;
 
       if (!driver?.id) {
+        continue;
+      }
+
+      if (!(await this.finance.canDriverReceiveRides(driver.id))) {
+        await this.db.rides.updateOne(
+          { _id: ride.id },
+          { $set: { status: RideStatus.Offline } },
+        );
         continue;
       }
 
@@ -900,6 +926,23 @@ export class RidesService implements OnModuleInit {
         amount,
         paymentMethod: trip.paymentMethod,
       });
+      if (trip.paymentMethod === PaymentMethod.Cash) {
+        const financialState =
+          await this.finance.ensureDriverRestrictionState(driver.id);
+        if (financialState.restricted) {
+          await Promise.all([
+            this.db.rides.updateMany(
+              {
+                driver: driver.id,
+                type: { $ne: RideType.Hire },
+                deleted: { $ne: true },
+              },
+              { $set: { status: RideStatus.Offline } },
+            ),
+            this.closeOnlineSession(driver.id),
+          ]);
+        }
+      }
     }
 
     const event = paymentSucceeded ? 'TripEnded' : 'PaymentFailed';
@@ -1690,6 +1733,16 @@ export class RidesService implements OnModuleInit {
     });
     if (!ride) {
       throw new BadRequestException('Ride not found');
+    }
+
+    if (
+      status === RideStatus.Online &&
+      ride.type !== RideType.Hire &&
+      !(await this.finance.canDriverReceiveRides(user.id))
+    ) {
+      throw new BadRequestException(
+        'Pay the required cash-trip commission deposit before going online',
+      );
     }
 
     if (

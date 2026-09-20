@@ -20,6 +20,11 @@ import { RentalSchema } from './schemas/rentals.schema';
 import { RideSchema } from './schemas/rides.schema';
 import { TripSchema } from './schemas/trips.schema';
 import { UserSchema } from './schemas/user.schema';
+import { WalletTransactionSchema } from './schemas/wallet-transaction.schema';
+import { BankAccountSchema } from './schemas/bank-account.schema';
+import { PayoutRequestSchema } from './schemas/payout-request.schema';
+import { FinancialSettingsSchema } from './schemas/financial-settings.schema';
+import { DriverFinancialStateSchema } from './schemas/driver-financial-state.schema';
 
 @Global()
 @Module({
@@ -44,6 +49,14 @@ import { UserSchema } from './schemas/user.schema';
       },
       { name: DB_TABLES.ACTIVITIES, schema: ActivitySchema },
       { name: DB_TABLES.REFERRALS, schema: ReferralSchema },
+      { name: DB_TABLES.WALLET_TRANSACTIONS, schema: WalletTransactionSchema },
+      { name: DB_TABLES.BANK_ACCOUNTS, schema: BankAccountSchema },
+      { name: DB_TABLES.PAYOUT_REQUESTS, schema: PayoutRequestSchema },
+      { name: DB_TABLES.FINANCIAL_SETTINGS, schema: FinancialSettingsSchema },
+      {
+        name: DB_TABLES.DRIVER_FINANCIAL_STATES,
+        schema: DriverFinancialStateSchema,
+      },
     ]),
   ],
   providers: [DatabaseService, ActivityLedgerService, ReferralService],

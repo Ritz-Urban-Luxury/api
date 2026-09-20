@@ -12,6 +12,7 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { Util } from '../shared/util';
 import { RequestReferenceDTO } from './dto/payment.dto';
 import { PaymentProvider } from './types';
+import { WalletTransactionType } from '../database/schemas/wallet-transaction.schema';
 
 @Injectable()
 export class PaymentService {
@@ -43,7 +44,16 @@ export class PaymentService {
   async getUserBalance(user: UserDocument) {
     return this.db.balances.findOneAndUpdate(
       { user: user.id },
-      { user: user.id, deleted: false },
+      {
+        $set: { deleted: false },
+        $setOnInsert: {
+          user: user.id,
+          amount: 0,
+          cashAmount: 0,
+          rideCreditAmount: 0,
+          reservedAmount: 0,
+        },
+      },
       { new: true, upsert: true },
     );
   }
@@ -72,22 +82,77 @@ export class PaymentService {
       throw new BadRequestException('insufficient funds in RUL balance');
     }
 
-    return this.db.balances.findOneAndUpdate(
+    const debit = Math.abs(amount);
+    const rideCreditAmount = Math.max(0, Number(balance.rideCreditAmount || 0));
+    const legacyCashAmount = Math.max(
+      0,
+      Number(balance.amount || 0) -
+        rideCreditAmount -
+        Number(balance.reservedAmount || 0),
+    );
+    const cashAmount = Math.max(
+      0,
+      balance.cashAmount === undefined
+        ? legacyCashAmount
+        : Number(balance.cashAmount || 0),
+    );
+    const rideCreditDebit = Math.min(rideCreditAmount, debit);
+    const cashDebit = debit - rideCreditDebit;
+    const updated = await this.db.balances.findOneAndUpdate(
       { _id: balance?.id },
-      { $set: { amount: balance.amount - Math.abs(amount) } },
+      {
+        $set: {
+          amount: Math.max(0, Number(balance.amount || 0) - debit),
+          rideCreditAmount: rideCreditAmount - rideCreditDebit,
+          cashAmount: Math.max(0, cashAmount - cashDebit),
+        },
+      },
       { new: true },
     );
+    await this.db.walletTransactions.create({
+      user: user.id,
+      type: WalletTransactionType.Debit,
+      amountKobo: -Math.round(debit * 100),
+      purpose: 'wallet-payment',
+      meta: {
+        rideCreditKobo: Math.round(rideCreditDebit * 100),
+        cashKobo: Math.round(cashDebit * 100),
+      },
+    });
+    return updated;
   }
 
-  async creditUserRULBalance(user: UserDocument, amount: number) {
+  async creditUserRULBalance(
+    user: UserDocument,
+    amount: number,
+    kind: 'cash' | 'ride-credit' = 'cash',
+    purpose = 'wallet-credit',
+  ) {
     const balance = await this.getUserBalance(user);
     const credit = Math.abs(amount);
 
-    return this.db.balances.findOneAndUpdate(
+    const updated = await this.db.balances.findOneAndUpdate(
       { _id: balance?.id },
-      { $inc: { amount: credit } },
+      {
+        $inc: {
+          amount: credit,
+          ...(kind === 'ride-credit'
+            ? { rideCreditAmount: credit }
+            : { cashAmount: credit }),
+        },
+      },
       { new: true },
     );
+    await this.db.walletTransactions.create({
+      user: user.id,
+      type:
+        kind === 'ride-credit'
+          ? WalletTransactionType.RideCredit
+          : WalletTransactionType.CashCredit,
+      amountKobo: Math.round(credit * 100),
+      purpose,
+    });
+    return updated;
   }
 
   extractChargeTransaction(paymentResponse: unknown): string | number | null {

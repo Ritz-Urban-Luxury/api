@@ -6,7 +6,7 @@ import { PaystackService } from './providers/paystack/paystack.service';
 
 @Module({
   providers: [PaymentService, MonnifyService, PaystackService],
-  exports: [PaymentService],
+  exports: [PaymentService, PaystackService],
   controllers: [PaymentController],
 })
 export class PaymentModule {}

@@ -225,6 +225,7 @@ describe('RidesService Play reviewer sandbox', () => {
     Object.assign(service as any, {
       cache,
       db,
+      finance: { canDriverReceiveRides: jest.fn().mockResolvedValue(true) },
       paymentService,
       push,
       websocket,

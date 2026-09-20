@@ -14,4 +14,9 @@ export const DB_TABLES = {
   DRIVER_ONLINE_SESSIONS: 'driver_online_sessions',
   ACTIVITIES: 'activities',
   REFERRALS: 'referrals',
+  WALLET_TRANSACTIONS: 'wallet_transactions',
+  BANK_ACCOUNTS: 'bank_accounts',
+  PAYOUT_REQUESTS: 'payout_requests',
+  FINANCIAL_SETTINGS: 'financial_settings',
+  DRIVER_FINANCIAL_STATES: 'driver_financial_states',
 };

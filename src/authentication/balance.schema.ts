@@ -14,6 +14,18 @@ export class Balance extends BaseSchema {
 
   @Prop({ default: 0 })
   amount: number;
+
+  /** Cash-backed funds that can be returned during account closure. */
+  @Prop()
+  cashAmount?: number;
+
+  /** Non-withdrawable promotional and referral ride credit. */
+  @Prop({ default: 0 })
+  rideCreditAmount?: number;
+
+  /** Cash-backed funds reserved for an in-flight withdrawal. */
+  @Prop({ default: 0 })
+  reservedAmount?: number;
 }
 
 export const BalanceSchema = SchemaFactory.createForClass(Balance);

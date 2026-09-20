@@ -4,6 +4,7 @@ import { DatabaseService } from '../../../database/database.service';
 import { Logger } from '../../../logger/logger.service';
 import { PaymentService } from '../../payment.service';
 import { PaystackService } from './paystack.service';
+import { NotificationService } from '../../../notification';
 
 describe('PaystackService.getNigerianBanks', () => {
   const originalSecretKey = process.env.PAYSTACK_SECRET_KEY;
@@ -28,6 +29,7 @@ describe('PaystackService.getNigerianBanks', () => {
       {
         registerPaymentProvider: jest.fn(),
       } as unknown as PaymentService,
+      {} as NotificationService,
     );
     Object.defineProperty(service, 'client', {
       value: { get: clientGet },

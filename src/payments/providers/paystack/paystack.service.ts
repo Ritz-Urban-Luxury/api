@@ -14,6 +14,7 @@ import { UserDocument } from '../../../database/schemas/user.schema';
 import { Logger } from '../../../logger/logger.service';
 import { PaymentService } from '../../payment.service';
 import { PaymentProvider } from '../../types';
+import { NotificationService } from '../../../notification';
 import config from '../../../shared/config';
 import { Http } from '../../../shared/http';
 import { Util } from '../../../shared/util';
@@ -22,6 +23,10 @@ import {
   CustomerIdentificationSuccessData,
   ListBanksResponse,
   NigerianBank,
+  ResolveAccountResponse,
+  TransferRecipientResponse,
+  InitiateTransferResponse,
+  InitializeTransactionResponse,
   TransferFailureData,
   TransferSuccessData,
   WebhookPayload,
@@ -47,6 +52,7 @@ export class PaystackService implements PaymentProvider {
     private readonly logger: Logger,
     private readonly db: DatabaseService,
     private readonly paymentService: PaymentService,
+    private readonly notifications: NotificationService,
   ) {
     const { paystack } = config();
     const baseURL = (paystack.url || '').trim() || 'https://api.paystack.co';
@@ -58,6 +64,14 @@ export class PaystackService implements PaymentProvider {
 
     this.webhookHandlers = {
       'charge.success': this.handleChargeSuccessEvent,
+      'transfer.success': this.handleTransferSuccessEvent,
+      'transfer.failed': this.handleTransferFailedEvent,
+      'transfer.reversed': this.handleTransferReversedEvent,
+      'refund.pending': this.handleRefundEvent,
+      'refund.processing': this.handleRefundEvent,
+      'refund.needs-attention': this.handleRefundEvent,
+      'refund.failed': this.handleRefundEvent,
+      'refund.processed': this.handleRefundEvent,
     };
 
     this.paymentService.registerPaymentProvider(this.name, this);
@@ -142,6 +156,111 @@ export class PaystackService implements PaymentProvider {
         error,
       });
       throw new BadGatewayException('Unable to retrieve Nigerian banks');
+    }
+  }
+
+  async resolveBankAccount(accountNumber: string, bankCode: string) {
+    try {
+      const response = await this.client.get<ResolveAccountResponse>(
+        '/bank/resolve',
+        {
+          params: {
+            account_number: accountNumber,
+            bank_code: bankCode,
+          },
+        },
+      );
+      if (!response.status || !response.data?.account_name) {
+        throw new Error(response.message || 'Unable to resolve bank account');
+      }
+      return response.data;
+    } catch (error) {
+      throw new BadRequestException(
+        (error as Error)?.message || 'Unable to resolve bank account',
+      );
+    }
+  }
+
+  async initializeTransaction(payload: {
+    email: string;
+    amountKobo: number;
+    reference: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      const response = await this.client.post<InitializeTransactionResponse>(
+        '/transaction/initialize',
+        {
+          email: payload.email,
+          amount: payload.amountKobo,
+          currency: 'NGN',
+          reference: payload.reference,
+          metadata: payload.metadata,
+        },
+      );
+      if (!response.status || !response.data?.authorization_url) {
+        throw new Error(response.message || 'Unable to initialize payment');
+      }
+      return response.data;
+    } catch (error) {
+      throw new BadGatewayException(
+        (error as Error)?.message || 'Unable to initialize payment',
+      );
+    }
+  }
+
+  async createTransferRecipient(payload: {
+    accountName: string;
+    accountNumber: string;
+    bankCode: string;
+  }) {
+    try {
+      const response = await this.client.post<TransferRecipientResponse>(
+        '/transferrecipient',
+        {
+          type: 'nuban',
+          name: payload.accountName,
+          account_number: payload.accountNumber,
+          bank_code: payload.bankCode,
+          currency: 'NGN',
+        },
+      );
+      if (!response.status || !response.data?.recipient_code) {
+        throw new Error(response.message || 'Unable to create transfer recipient');
+      }
+      return response.data;
+    } catch (error) {
+      throw new BadRequestException(
+        (error as Error)?.message || 'Unable to create transfer recipient',
+      );
+    }
+  }
+
+  async initiateTransfer(payload: {
+    amountKobo: number;
+    recipientCode: string;
+    reason: string;
+    reference: string;
+  }) {
+    try {
+      const response = await this.client.post<InitiateTransferResponse>(
+        '/transfer',
+        {
+          source: 'balance',
+          amount: Math.round(payload.amountKobo),
+          recipient: payload.recipientCode,
+          reason: payload.reason,
+          reference: payload.reference,
+        },
+      );
+      if (!response.status || !response.data?.reference) {
+        throw new Error(response.message || 'Unable to initiate transfer');
+      }
+      return response.data;
+    } catch (error) {
+      throw new BadRequestException(
+        (error as Error)?.message || 'Unable to initiate transfer',
+      );
     }
   }
 
@@ -330,6 +449,15 @@ export class PaystackService implements PaymentProvider {
           ),
         );
 
+        if (meta.purpose === 'driver-debt-payment') {
+          const expectedAmount = Number(meta.amount || 0);
+          if (!Number.isFinite(expectedAmount) || expectedAmount !== amount) {
+            throw new BadRequestException('Driver debt payment amount mismatch');
+          }
+          await this.applyDriverDebtPayment(String(meta.user), amount, reference);
+          return;
+        }
+
         const [user] = await Promise.all([
           this.db.users.findById(meta.user),
           this.db.balances.findOneAndUpdate(
@@ -337,9 +465,20 @@ export class PaystackService implements PaymentProvider {
               user: meta.user,
               deleted: { $ne: true },
             },
-            { $inc: { amount } },
+            {
+              $inc: { amount, cashAmount: amount },
+              $setOnInsert: { rideCreditAmount: 0, reservedAmount: 0 },
+            },
             { upsert: true, new: true },
           ),
+          this.db.walletTransactions.create({
+            user: meta.user,
+            type: 'CashCredit',
+            amountKobo: Math.round(amount * 100),
+            purpose: 'wallet-top-up',
+            provider: this.name,
+            providerReference: reference,
+          }),
         ]);
 
         if (channel === 'card') {
@@ -379,6 +518,217 @@ export class PaystackService implements PaymentProvider {
         payload,
       });
       throw error;
+    }
+  }
+
+  private async applyDriverDebtPayment(
+    driverId: string,
+    amountNaira: number,
+    reference: string,
+  ) {
+    const amountKobo = Math.round(amountNaira * 100);
+    await this.db.driverLedgerEntries.create({
+      driver: driverId,
+      type: 'Adjustment',
+      amount: -amountNaira,
+      earnedAt: new Date(),
+      purpose: 'driver-debt-payment',
+      reference,
+    });
+
+    const state = await this.db.driverFinancialStates.findOne({
+      driver: driverId,
+    });
+    if (!state?.restricted) {
+      return;
+    }
+    const paidTowardRestrictionKobo =
+      (state.paidTowardRestrictionKobo || 0) + amountKobo;
+    await this.db.driverFinancialStates.updateOne(
+      { _id: state.id },
+      paidTowardRestrictionKobo >= state.requiredDepositKobo
+        ? {
+            $set: {
+              restricted: false,
+              paidTowardRestrictionKobo,
+              releasedAt: new Date(),
+            },
+          }
+        : { $set: { paidTowardRestrictionKobo } },
+    );
+  }
+
+  private async handleTransferSuccessEvent(payload: WebhookPayload) {
+    const data = payload.data as Record<string, unknown>;
+    const reference = String(data.reference || '');
+    if (!reference) return;
+    const request = await this.db.payoutRequests.findOneAndUpdate(
+      { providerReference: reference, status: { $ne: 'Paid' } },
+      {
+        $set: {
+          status: 'Paid',
+          paidAt: new Date(),
+          providerMeta: data,
+        },
+      },
+      { new: true },
+    );
+    if (request) await this.finalizePaidRequest(request);
+    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout is complete');
+  }
+
+  private async handleTransferFailedEvent(payload: WebhookPayload) {
+    const data = payload.data as Record<string, unknown>;
+    const reference = String(data.reference || '');
+    if (!reference) return;
+    const request = await this.db.payoutRequests.findOneAndUpdate(
+      { providerReference: reference, status: { $ne: 'Paid' } },
+      {
+        $set: {
+          status: 'FailedRetryable',
+          failureReason: String(data.reason || 'Transfer failed'),
+          providerMeta: data,
+        },
+      },
+      { new: true },
+    );
+    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout needs attention');
+  }
+
+  private async handleTransferReversedEvent(payload: WebhookPayload) {
+    const data = payload.data as Record<string, unknown>;
+    const reference = String(data.reference || '');
+    if (!reference) return;
+    const request = await this.db.payoutRequests.findOneAndUpdate(
+      { providerReference: reference },
+      {
+        $set: {
+          status: 'Reversed',
+          failureReason: String(data.reason || 'Transfer reversed'),
+          providerMeta: data,
+        },
+      },
+      { new: true },
+    );
+    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout was reversed');
+  }
+
+  private async handleRefundEvent(payload: WebhookPayload) {
+    const data = payload.data as Record<string, unknown>;
+    const transactionReference = String(data.transaction_reference || '');
+    if (!transactionReference) return;
+    const statusByEvent: Record<string, string> = {
+      'refund.pending': 'Processing',
+      'refund.processing': 'Processing',
+      'refund.needs-attention': 'ActionRequired',
+      'refund.failed': 'FailedRetryable',
+      'refund.processed': 'Paid',
+    };
+    const status = statusByEvent[payload.event];
+    const request = await this.db.payoutRequests.findOneAndUpdate(
+      { providerTransactionReference: transactionReference, status: { $ne: status } },
+      {
+        $set: {
+          status,
+          ...(status === 'Paid' ? { paidAt: new Date() } : {}),
+          providerMeta: data,
+        },
+      },
+      { new: true },
+    );
+    if (status === 'Paid' && request) await this.finalizePaidRequest(request);
+    if (request && status === 'Paid') {
+      this.notifyPayoutStatus(request, 'Your Ritz refund is complete');
+    } else if (request && ['ActionRequired', 'FailedRetryable'].includes(status)) {
+      this.notifyPayoutStatus(request, 'Your Ritz refund needs attention');
+    }
+  }
+
+  private notifyPayoutStatus(
+    request: {
+      notificationEmail?: string;
+      notificationPhone?: string;
+      publicReference?: string;
+    },
+    subject: string,
+  ) {
+    const reference = request.publicReference || 'Unavailable';
+    if (request.notificationEmail) {
+      void this.notifications
+        .sendEmail({
+          recipient: request.notificationEmail,
+          subject,
+          template: 'financial-status.template.njk',
+          context: { firstName: 'there', subject, reference },
+        })
+        ?.catch(() => undefined);
+    }
+    if (request.notificationPhone) {
+      void Promise.resolve(
+        this.notifications.sendSMS({
+          to: request.notificationPhone,
+          sms: `${subject}. Reference: ${reference}.`,
+        }),
+      ).catch(() => undefined);
+    }
+  }
+
+  private async finalizePaidRequest(request: {
+    id?: string;
+    user: unknown;
+    type: string;
+    amountKobo: number;
+    debtOffsetKobo?: number;
+    providerReference: string;
+  }) {
+    const userId = String(
+      (request.user as { id?: string; _id?: string })?.id ||
+        (request.user as { _id?: string })?._id ||
+        request.user,
+    );
+    if (request.type === 'RiderAccountClosure') {
+      await Promise.all([
+        this.db.balances.updateOne(
+          { user: userId },
+          { $set: { reservedAmount: 0 } },
+        ),
+        this.db.walletTransactions.updateOne(
+          {
+            providerReference: request.providerReference,
+            type: 'WithdrawalPaid',
+          },
+          {
+            $setOnInsert: {
+              user: userId,
+              type: 'WithdrawalPaid',
+              amountKobo: -Math.abs(request.amountKobo),
+              purpose: 'account-closure',
+              provider: this.name,
+              providerReference: request.providerReference,
+            },
+          },
+          { upsert: true },
+        ),
+      ]);
+      return;
+    }
+
+    const debtOffsetKobo = Math.max(0, Number(request.debtOffsetKobo || 0));
+    if (debtOffsetKobo > 0) {
+      await this.db.driverLedgerEntries.updateOne(
+        { reference: `net_${request.providerReference}` },
+        {
+          $setOnInsert: {
+            driver: userId,
+            type: 'Adjustment',
+            amount: -(debtOffsetKobo / 100),
+            earnedAt: new Date(),
+            purpose: 'driver-payout-netting',
+            reference: `net_${request.providerReference}`,
+          },
+        },
+        { upsert: true },
+      );
     }
   }
 }

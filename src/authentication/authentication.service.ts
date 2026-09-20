@@ -487,6 +487,7 @@ export class AuthenticationService {
 
         user = await this.db.users.findOneAndUpdate(
           {
+            deleted: { $ne: true },
             $or: [
               { email: userObj.email },
               { oAuthIdentifier: userObj.oAuthIdentifier },

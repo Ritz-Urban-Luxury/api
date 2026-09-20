@@ -15,6 +15,7 @@ import { RideStatus } from '../database/schemas/rides.schema';
 import { InactiveTripStatuses } from '../database/schemas/trips.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { Util } from '../shared/util';
+import { FinanceService } from '../finance/finance.service';
 import {
   AdminGetDriversDTO,
   AdminListUsersDTO,
@@ -29,6 +30,7 @@ export class UserService {
   constructor(
     private readonly db: DatabaseService,
     private readonly push: PushNotificationService,
+    private readonly finance: FinanceService,
   ) {}
 
   async updateUser(user: UserDocument, update: UpdateUserDTO) {
@@ -161,7 +163,7 @@ export class UserService {
     }
 
     const userId = user.id;
-    const [activeTrip, activeRental, balance] = await Promise.all([
+    const [activeTrip, activeRental] = await Promise.all([
       this.db.trips.findOne({
         $or: [{ user: userId }, { driver: userId }],
         status: { $nin: InactiveTripStatuses },
@@ -178,7 +180,6 @@ export class UserService {
         },
         deleted: { $ne: true },
       }),
-      this.db.balances.findOne({ user: userId, deleted: { $ne: true } }),
     ]);
 
     if (activeTrip) {
@@ -191,11 +192,31 @@ export class UserService {
         'Complete or cancel your active car rental before deleting your account',
       );
     }
-    if ((balance?.amount || 0) > 0) {
-      throw new ConflictException(
-        'Withdraw or use your wallet balance before deleting your account',
-      );
+    const isDriver = Boolean(
+      user.isDriver ||
+        (await this.db.rides.exists({
+          driver: userId,
+          deleted: { $ne: true },
+        })),
+    );
+    if (isDriver) {
+      const position = await this.finance.getDriverFinancialPosition(user);
+      if (position.cashCommissionDebt > 0) {
+        throw new ConflictException(
+          'Settle your outstanding cash-trip commission before deleting your driver account',
+        );
+      }
+      if (position.availablePayout > 0 || position.pendingPayout > 0) {
+        throw new ConflictException(
+          'Complete your driver earnings payout before deleting your account',
+        );
+      }
     }
+
+    const closureRequest = await this.finance.prepareAccountClosure(user, {
+      destinationType: payload.destinationType,
+      bankAccountId: payload.bankAccountId,
+    });
 
     const now = new Date();
     const anonymizedPassword = await hash(randomBytes(32).toString('hex'), 8);
@@ -220,8 +241,6 @@ export class UserService {
       this.db.driverRideOffers.deleteMany({ driver: userId }),
       this.db.cards.deleteMany({ user: userId }),
       this.db.messages.deleteMany({ sender: userId }),
-      this.db.activities.deleteMany({ user: userId }),
-      this.db.balances.deleteMany({ user: userId }),
       ...(authTokenIdentifiers.length > 0
         ? [this.db.authTokens.deleteMany({ $or: authTokenIdentifiers })]
         : []),
@@ -274,7 +293,17 @@ export class UserService {
       throw new NotFoundException('account not found');
     }
 
-    return { deleted: true, deletedAt: now };
+    return {
+      deleted: true,
+      deletedAt: now,
+      closureRequest: closureRequest
+        ? {
+            reference: closureRequest.publicReference,
+            status: closureRequest.status,
+            amount: closureRequest.amountKobo / 100,
+          }
+        : null,
+    };
   }
 
   async getUserById(userId: string) {

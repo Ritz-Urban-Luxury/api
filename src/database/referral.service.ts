@@ -248,6 +248,8 @@ export class ReferralService {
       await this.paymentService.creditUserRULBalance(
         inviter,
         claimed.bonusAmount,
+        'ride-credit',
+        'referral-ride-credit',
       );
 
       await this.db.activities.create({

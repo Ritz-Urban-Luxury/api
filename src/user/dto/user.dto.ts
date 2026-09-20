@@ -5,6 +5,8 @@ import {
   IsDateString,
   IsEmail,
   IsIn,
+  IsEnum,
+  IsMongoId,
   IsNotEmpty,
   IsOptional,
   IsPhoneNumber,
@@ -12,6 +14,7 @@ import {
   IsUrl,
 } from 'class-validator';
 import { PaginationRequestDTO } from '../../shared/pagination.dto';
+import { PayoutDestinationType } from '../../database/schemas/payout-request.schema';
 
 export class ApplyReferralDTO {
   @IsString()
@@ -114,6 +117,14 @@ export class RemovePushTokenDTO {
 export class DeleteAccountDTO {
   @Equals(true, { message: 'account deletion must be confirmed' })
   confirm: true;
+
+  @IsEnum(PayoutDestinationType)
+  @IsOptional()
+  destinationType?: PayoutDestinationType;
+
+  @IsMongoId()
+  @IsOptional()
+  bankAccountId?: string;
 }
 
 export class SetUserVerificationDTO {

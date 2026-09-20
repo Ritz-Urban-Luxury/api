@@ -1,5 +1,14 @@
 export type WebhookPayload = {
-  event: 'charge.success' | 'transfer.success';
+  event:
+    | 'charge.success'
+    | 'transfer.success'
+    | 'transfer.failed'
+    | 'transfer.reversed'
+    | 'refund.pending'
+    | 'refund.processing'
+    | 'refund.needs-attention'
+    | 'refund.failed'
+    | 'refund.processed';
   data: unknown;
 };
 
@@ -116,5 +125,46 @@ export type ListBanksResponse = {
     next?: string | null;
     previous?: string | null;
     perPage?: number;
+  };
+};
+
+export type ResolveAccountResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    account_number: string;
+    account_name: string;
+    bank_id: number;
+  };
+};
+
+export type TransferRecipientResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    recipient_code: string;
+    name: string;
+    details?: Record<string, unknown>;
+  };
+};
+
+export type InitiateTransferResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    status: string;
+    reference: string;
+    transfer_code?: string;
+    id?: number;
+  };
+};
+
+export type InitializeTransactionResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    authorization_url: string;
+    access_code: string;
+    reference: string;
   };
 };

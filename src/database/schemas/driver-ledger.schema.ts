@@ -35,12 +35,22 @@ export class DriverLedgerEntry extends BaseSchema {
 
   @Prop({ required: true, default: () => new Date() })
   earnedAt: Date;
+
+  @Prop()
+  reference?: string;
+
+  @Prop()
+  purpose?: string;
 }
 
 export const DriverLedgerEntrySchema =
   SchemaFactory.createForClass(DriverLedgerEntry);
 
 DriverLedgerEntrySchema.index({ driver: 1, earnedAt: -1 });
+DriverLedgerEntrySchema.index(
+  { reference: 1 },
+  { unique: true, sparse: true },
+);
 DriverLedgerEntrySchema.index(
   { trip: 1, type: 1 },
   { unique: true, partialFilterExpression: { trip: { $type: 'objectId' } } },

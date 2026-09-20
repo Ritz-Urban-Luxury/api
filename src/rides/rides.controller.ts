@@ -173,8 +173,11 @@ export class RidesController {
 
   @UseGuards(JwtGuard)
   @Put('trips')
-  async acceptRideRequest(@Query() payload: AcceptRideDTO) {
-    await this.ridesService.acceptRide(payload);
+  async acceptRideRequest(
+    @CurrentUser() user: UserDocument,
+    @Query() payload: AcceptRideDTO,
+  ) {
+    await this.ridesService.acceptRide(user, payload);
 
     return Response.json('Accepting ride request');
   }
