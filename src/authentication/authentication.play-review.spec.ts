@@ -9,7 +9,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
     isDriver: false,
     isVerified: false,
     password: 'already-hashed-password',
-    phoneNumber: undefined,
+    phoneNumber: '2347063650901',
   };
 
   const createService = (failedAttempts = 0) => {
@@ -129,5 +129,75 @@ describe('AuthenticationService Play reviewer authentication', () => {
     ).rejects.toMatchObject({ status: 429 });
 
     expect(db.authTokens.create).not.toHaveBeenCalled();
+  });
+
+  // Real riders sign in with Google or a phone number, never email, so the
+  // rider reviewer must also be reachable through the phone-OTP flow.
+  it('skips SMS delivery and stores only an opaque request marker for the reviewer phone number', async () => {
+    const { db, notificationService, service } = createService();
+
+    await service.requestPhoneOtp({ phoneNumber: '07063650901' });
+
+    expect(notificationService.sendSMS).not.toHaveBeenCalled();
+    expect(db.authTokens.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: {
+          phoneNumber: '2347063650901',
+          type: 'play-review-phone-otp-request',
+        },
+        token: expect.stringMatching(/^[a-f\d]{64}$/),
+      }),
+    );
+  });
+
+  it('authorizes the reviewer phone number with its reusable OTP', async () => {
+    const { db, jwtService, service } = createService();
+
+    await expect(
+      service.login({
+        phoneNumber: '07063650901',
+        otp: '1847',
+      }),
+    ).resolves.toEqual({ token: 'reviewer-jwt', user: reviewerUser });
+
+    expect(jwtService.sign).toHaveBeenCalled();
+    expect(db.authTokens.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          email: reviewerUser.email,
+          success: true,
+          type: 'play-review-otp-attempt',
+        }),
+      }),
+    );
+  });
+
+  it('rejects a wrong fixed OTP on the reviewer phone number without falling back to ordinary OTPs', async () => {
+    const { db, service } = createService();
+
+    await expect(
+      service.login({
+        phoneNumber: '07063650901',
+        otp: '9999',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(db.authTokens.findOne).not.toHaveBeenCalled();
+  });
+
+  it('does not intercept an ordinary phone number', async () => {
+    const { db, service } = createService();
+    db.users.findOne.mockResolvedValueOnce(null);
+
+    await expect(
+      service.login({
+        phoneNumber: '08011112222',
+        otp: '1847',
+      }),
+    ).rejects.toThrow();
+
+    // Falls through to the real phone-OTP lookup instead of the reviewer
+    // bypass, which never touches authTokens.findOne.
+    expect(db.authTokens.findOne).toHaveBeenCalled();
   });
 });

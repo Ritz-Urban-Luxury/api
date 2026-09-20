@@ -1,5 +1,6 @@
 import * as Crypto from 'crypto';
 import config from '../shared/config';
+import { Util } from '../shared/util';
 import { OTP_LENGTH, OTP_PATTERN } from './otp';
 
 export type PlayReviewAccountKind = 'rider' | 'driver';
@@ -8,6 +9,7 @@ export type PlayReviewAccount = {
   email: string;
   kind: PlayReviewAccountKind;
   otp: string;
+  phoneNumber?: string;
 };
 
 export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
@@ -15,12 +17,23 @@ export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
   driver: 'driver-review@ritzurbanluxury.com',
 };
 
+// Real riders only ever sign in with Google or a phone number - never email -
+// so the rider reviewer account needs to be reachable through that same
+// phone-OTP flow for App Store review. Not a secret (it goes in the review
+// notes), so it's a plain constant rather than an env var; the driver
+// reviewer has no phone number configured yet.
+export const PLAY_REVIEW_PHONE_NUMBERS: Partial<
+  Record<PlayReviewAccountKind, string>
+> = {
+  rider: Util.formatPhoneNumber('07063650901', 'NG'),
+};
+
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export function getPlayReviewAccounts(): PlayReviewAccount[] {
   const configured = config().playReview;
   const accounts = (Object.keys(PLAY_REVIEW_EMAILS) as PlayReviewAccountKind[])
-    .map((kind) => {
+    .map((kind): PlayReviewAccount | null => {
       const email = configured[kind].email?.trim();
       const otp = configured[kind].otp?.trim();
 
@@ -45,7 +58,12 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
         );
       }
 
-      return { email: normalizedEmail, kind, otp };
+      return {
+        email: normalizedEmail,
+        kind,
+        otp,
+        phoneNumber: PLAY_REVIEW_PHONE_NUMBERS[kind],
+      };
     })
     .filter((account): account is PlayReviewAccount => Boolean(account));
 

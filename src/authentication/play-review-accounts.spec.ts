@@ -1,6 +1,7 @@
 import {
   getPlayReviewAccount,
   getPlayReviewAccounts,
+  PLAY_REVIEW_PHONE_NUMBERS,
   playReviewOtpMatches,
 } from './play-review-accounts';
 
@@ -49,6 +50,21 @@ describe('Play review accounts', () => {
     expect(playReviewOtpMatches(rider, '1847')).toBe(true);
     expect(playReviewOtpMatches(rider, '6305')).toBe(false);
     expect(getPlayReviewAccount('ordinary@example.com')).toBeNull();
+  });
+
+  it('attaches the fixed reviewer phone number only to the rider account', () => {
+    process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
+    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
+    process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
+    process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
+
+    const [rider, driver] = getPlayReviewAccounts().sort((a) =>
+      a.kind === 'rider' ? -1 : 1,
+    );
+
+    expect(rider.phoneNumber).toBe(PLAY_REVIEW_PHONE_NUMBERS.rider);
+    expect(rider.phoneNumber).toBe('2347063650901');
+    expect(driver.phoneNumber).toBeUndefined();
   });
 
   it('rejects malformed or shared reviewer secrets', () => {

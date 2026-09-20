@@ -4,6 +4,7 @@ import { connect, connection, disconnect } from 'mongoose';
 import {
   getPlayReviewAccounts,
   PLAY_REVIEW_EMAILS,
+  PLAY_REVIEW_PHONE_NUMBERS,
 } from '../authentication/play-review-accounts';
 import {
   RideApprovalStatus,
@@ -54,6 +55,9 @@ async function provisionPlayReviewers() {
         isDriver: false,
         isVerified: false,
         lastName: 'Rider Reviewer',
+        ...(PLAY_REVIEW_PHONE_NUMBERS.rider
+          ? { phoneNumber: PLAY_REVIEW_PHONE_NUMBERS.rider }
+          : {}),
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },

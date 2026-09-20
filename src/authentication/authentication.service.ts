@@ -77,14 +77,34 @@ export class AuthenticationService {
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {
     const { phoneNumber } = payload;
     const phone = Util.formatPhoneNumber(phoneNumber, 'NG');
+    const reviewerAccount = this.getReviewerAccountByPhone(phone);
+    const tokenType = reviewerAccount
+      ? 'play-review-phone-otp-request'
+      : 'phone-otp';
     const previousAuthToken = await this.db.authTokens.findOne({
-      'meta.type': 'phone-otp',
+      'meta.type': tokenType,
       'meta.phoneNumber': phone,
       createdAt: {
         $gte: moment().subtract(100, 'seconds').toDate(),
       },
     });
     if (!previousAuthToken) {
+      if (reviewerAccount) {
+        await this.db.authTokens.create({
+          expiresAt: moment().add(1, 'day').toDate(),
+          token: Crypto.randomBytes(32).toString('hex'),
+          meta: {
+            phoneNumber: phone,
+            type: tokenType,
+          },
+        });
+        this.logger.log('Play reviewer OTP requested', {
+          phoneNumber: phone,
+          reviewerType: reviewerAccount.kind,
+        });
+        return;
+      }
+
       const token = generateOtp();
 
       await this.db.authTokens.create({
@@ -169,6 +189,16 @@ export class AuthenticationService {
     return (
       this.playReviewAccounts.find(
         (account) => account.email === normalizedEmail,
+      ) || null
+    );
+  }
+
+  private getReviewerAccountByPhone(
+    phoneNumber: string,
+  ): PlayReviewAccount | null {
+    return (
+      this.playReviewAccounts.find(
+        (account) => account.phoneNumber === phoneNumber,
       ) || null
     );
   }
@@ -566,6 +596,32 @@ export class AuthenticationService {
     const { phoneNumber, otp, identifier, password } = payload;
     if (phoneNumber && otp) {
       const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
+      const reviewerAccount = this.getReviewerAccountByPhone(_phoneNumber);
+      if (reviewerAccount) {
+        const [user, otpIsValid] = await Promise.all([
+          this.db.users.findOne({
+            phoneNumber: _phoneNumber,
+            deleted: { $ne: true },
+          }),
+          this.verifyReviewerOtp(reviewerAccount, otp),
+        ]);
+        if (
+          user &&
+          otpIsValid &&
+          this.reviewerRoleIsValid(reviewerAccount, user)
+        ) {
+          return this.authorizeUser(user);
+        }
+
+        if (user && otpIsValid) {
+          this.logger.error('Play reviewer account has an invalid role', {
+            phoneNumber: _phoneNumber,
+            reviewerType: reviewerAccount.kind,
+          });
+        }
+        throw new UnauthorizedException('invalid credentials');
+      }
+
       const [user, otpDoc] = await Promise.all([
         this.db.users.findOne({ phoneNumber: _phoneNumber }),
         this.getPhoneOtpOrFail(phoneNumber, otp),
