@@ -371,3 +371,126 @@ describe('RidesService Play reviewer sandbox', () => {
     expect(push.sendToUser).not.toHaveBeenCalled();
   });
 });
+
+describe('RidesService notification sounds', () => {
+  const rider = { id: riderId } as never;
+  const driver = { id: ownerId } as never;
+  const trip = { driver, id: rentalId, user: rider } as never;
+  let service: RidesService;
+  let cache: {
+    del: jest.Mock;
+    get: jest.Mock;
+    set: jest.Mock;
+  };
+  let db: {
+    findAndUpdateOrFail: jest.Mock;
+    findOrFail: jest.Mock;
+    messages: { create: jest.Mock };
+    rides: { updateOne: jest.Mock };
+    trips: { create: jest.Mock };
+  };
+  let push: { sendToUser: jest.Mock };
+  let websocket: { emitToUser: jest.Mock };
+
+  beforeEach(() => {
+    cache = {
+      del: jest.fn(),
+      get: jest.fn(),
+      set: jest.fn(),
+    };
+    db = {
+      findAndUpdateOrFail: jest.fn(),
+      findOrFail: jest.fn(),
+      messages: { create: jest.fn() },
+      rides: { updateOne: jest.fn() },
+      trips: { create: jest.fn() },
+    };
+    push = { sendToUser: jest.fn() };
+    websocket = { emitToUser: jest.fn() };
+
+    service = Object.create(RidesService.prototype);
+    Object.assign(service, {
+      WAIT_TIME: 0,
+      cache,
+      db,
+      finance: { canDriverReceiveRides: jest.fn().mockResolvedValue(true) },
+      push,
+      websocket,
+    });
+  });
+
+  it('uses the ride-request and booking-accepted sounds', async () => {
+    const ride = { driver, id: rideId } as never;
+    cache.get.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    db.trips.create.mockResolvedValue(trip);
+    const internals = service as unknown as {
+      closeOnlineSession: () => Promise<void>;
+      recordRideOffer: () => Promise<void>;
+      resolveRideOffer: () => Promise<void>;
+    };
+    jest.spyOn(internals, 'recordRideOffer').mockResolvedValue(undefined);
+    jest.spyOn(internals, 'resolveRideOffer').mockResolvedValue(undefined);
+    jest.spyOn(internals, 'closeOnlineSession').mockResolvedValue(undefined);
+
+    await service.connectToDriver(rider, [ride], 'connection-id', {
+      amount: 5000,
+      distance: 3,
+      fromAddress: 'Pickup',
+      fromLat: 9.1,
+      fromLon: 7.1,
+      paymentMethod: PaymentMethod.Cash,
+      stops: [],
+      toAddress: 'Destination',
+      toLat: 9.2,
+      toLon: 7.2,
+      type: RideType.Classic,
+    });
+
+    expect(push.sendToUser).toHaveBeenCalledWith(
+      driver,
+      expect.objectContaining({
+        channelId: 'driver-ride-requests-v1',
+        sound: 'new_ride_request.wav',
+      }),
+    );
+    expect(push.sendToUser).toHaveBeenCalledWith(
+      rider,
+      expect.objectContaining({
+        channelId: 'rider-booking-updates-v1',
+        sound: 'booking_accepted.wav',
+      }),
+    );
+  });
+
+  it('uses the chat sound only for the message recipient', async () => {
+    db.findOrFail.mockResolvedValue(trip);
+    db.messages.create.mockResolvedValue({ id: 'message-id', text: 'Hello' });
+
+    await service.sendMessage(rider, rentalId, { text: 'Hello' });
+
+    expect(push.sendToUser).toHaveBeenCalledTimes(1);
+    expect(push.sendToUser).toHaveBeenCalledWith(
+      driver,
+      expect.objectContaining({
+        app: 'driver',
+        channelId: 'trip-messages-v1',
+        sound: 'chat_message.wav',
+      }),
+    );
+  });
+
+  it('uses the driver-arrival sound for the rider', async () => {
+    db.findAndUpdateOrFail.mockResolvedValue(trip);
+
+    await service.annouceArrival(driver, rentalId);
+
+    expect(push.sendToUser).toHaveBeenCalledWith(
+      rider,
+      expect.objectContaining({
+        app: 'rider',
+        channelId: 'rider-driver-arrival-v1',
+        sound: 'driver_arrived.wav',
+      }),
+    );
+  });
+});

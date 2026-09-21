@@ -483,6 +483,8 @@ export class RidesService implements OnModuleInit {
           ? `Pickup near ${payload.fromAddress}`
           : 'A rider is requesting a ride nearby',
         app: 'driver',
+        channelId: 'driver-ride-requests-v1',
+        sound: 'new_ride_request.wav',
         data: {
           type: 'RideRequest',
           trackingId,
@@ -565,6 +567,8 @@ export class RidesService implements OnModuleInit {
           title: 'Driver on the way',
           body: 'Your driver accepted the ride',
           app: 'rider',
+          channelId: 'rider-booking-updates-v1',
+          sound: 'booking_accepted.wav',
           data: {
             type: 'TripStarted',
             tripId: String(trip.id),
@@ -712,6 +716,8 @@ export class RidesService implements OnModuleInit {
       title: 'New message',
       body: preview,
       app: String(recipient.id) === String(driver.id) ? 'driver' : 'rider',
+      channelId: 'trip-messages-v1',
+      sound: 'chat_message.wav',
       data: {
         type: 'NewMessage',
         tripId: String(trip.id),
@@ -791,6 +797,8 @@ export class RidesService implements OnModuleInit {
       title: 'Driver has arrived',
       body: 'Your driver is waiting at the pickup',
       app: 'rider',
+      channelId: 'rider-driver-arrival-v1',
+      sound: 'driver_arrived.wav',
       data: {
         type: 'DriverArrival',
         tripId: String(trip.id),

@@ -1,5 +1,8 @@
 import axios from 'axios';
-import { PushNotificationService } from './push-notification.service';
+import {
+  PushNotificationService,
+  type PushPayload,
+} from './push-notification.service';
 
 jest.mock('axios');
 
@@ -30,6 +33,7 @@ describe('PushNotificationService', () => {
       platform: 'ios' | 'android';
       app: 'rider' | 'driver';
     }>,
+    payload: Partial<PushPayload> = {},
   ) => {
     await (
       service as unknown as {
@@ -42,6 +46,7 @@ describe('PushNotificationService', () => {
         title: 'Driver assigned',
         body: 'Your driver is on the way',
         data: { tripId: 'trip-id' },
+        ...payload,
       },
     );
   };
@@ -105,6 +110,61 @@ describe('PushNotificationService', () => {
           },
         },
       },
+    );
+  });
+
+  it('passes event-specific sounds and channels to Expo and Firebase', async () => {
+    mockedAxios.post.mockResolvedValue({
+      data: { data: [{ status: 'ok', id: 'ticket-id' }] },
+    });
+    const sendEachForMulticast = jest.fn().mockResolvedValue({
+      responses: [{ success: true }],
+    });
+    (
+      service as unknown as {
+        messaging: { sendEachForMulticast: typeof sendEachForMulticast };
+      }
+    ).messaging = { sendEachForMulticast };
+
+    await send(
+      [
+        {
+          token: 'ExpoPushToken[ios-token]',
+          platform: 'ios',
+          app: 'rider',
+        },
+        {
+          token: 'native-fcm-token',
+          platform: 'android',
+          app: 'rider',
+        },
+      ],
+      {
+        channelId: 'trip-messages-v1',
+        sound: 'chat_message.wav',
+      },
+    );
+
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://exp.host/--/api/v2/push/send',
+      [
+        expect.objectContaining({
+          channelId: 'trip-messages-v1',
+          sound: 'chat_message.wav',
+        }),
+      ],
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+    expect(sendEachForMulticast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        android: {
+          notification: {
+            channelId: 'trip-messages-v1',
+            sound: 'chat_message.wav',
+          },
+          priority: 'high',
+        },
+      }),
     );
   });
 

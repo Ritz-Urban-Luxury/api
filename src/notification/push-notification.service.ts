@@ -15,6 +15,8 @@ export type PushPayload = {
   body: string;
   data?: Record<string, string>;
   app?: PushApp;
+  channelId?: string;
+  sound?: string;
 };
 
 export type PushDispatchResult = {
@@ -28,6 +30,7 @@ const MAX_DEVICES_PER_USER = 5;
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
 const EXPO_PUSH_BATCH_SIZE = 100;
 const FCM_BATCH_SIZE = 500;
+const DEFAULT_NOTIFICATION_CHANNEL_ID = 'rides-with-sound-v2';
 const chunk = <T>(items: T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(items.length / size) }, (_value, index) =>
     items.slice(index * size, (index + 1) * size),
@@ -288,9 +291,9 @@ export class PushNotificationService implements OnModuleInit {
             title: payload.title,
             body: payload.body,
             data,
-            sound: 'default',
+            sound: payload.sound || 'default',
             priority: 'high',
-            channelId: 'rides-with-sound-v2',
+            channelId: payload.channelId || DEFAULT_NOTIFICATION_CHANNEL_ID,
           })),
           { headers },
         );
@@ -355,6 +358,10 @@ export class PushNotificationService implements OnModuleInit {
           data,
           android: {
             priority: 'high',
+            notification: {
+              channelId: payload.channelId || DEFAULT_NOTIFICATION_CHANNEL_ID,
+              sound: payload.sound || 'default',
+            },
           },
         });
 
