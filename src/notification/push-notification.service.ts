@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import axios from 'axios';
 import * as admin from 'firebase-admin';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -16,7 +17,34 @@ export type PushPayload = {
   app?: PushApp;
 };
 
+export type PushDispatchResult = {
+  targeted: number;
+  accepted: number;
+  failed: number;
+  invalidTokens: string[];
+};
+
 const MAX_DEVICES_PER_USER = 5;
+const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
+const EXPO_PUSH_BATCH_SIZE = 100;
+const FCM_BATCH_SIZE = 500;
+const chunk = <T>(items: T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_value, index) =>
+    items.slice(index * size, (index + 1) * size),
+  );
+const isExpoPushToken = (token: string) =>
+  (token.startsWith('ExponentPushToken[') ||
+    token.startsWith('ExpoPushToken[')) &&
+  token.endsWith(']');
+
+type ExpoPushTicket = {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: {
+    error?: string;
+  };
+};
 
 @Injectable()
 export class PushNotificationService implements OnModuleInit {
@@ -33,7 +61,7 @@ export class PushNotificationService implements OnModuleInit {
 
     if (!encoded) {
       this.logger.warn(
-        'FIREBASE_SERVICE_ACCOUNT_BASE64 missing — push notifications disabled',
+        'FIREBASE_SERVICE_ACCOUNT_BASE64 missing — Android push notifications disabled',
       );
       return;
     }
@@ -112,7 +140,7 @@ export class PushNotificationService implements OnModuleInit {
     user: UserDocument | string | null | undefined,
     payload: PushPayload,
   ): void {
-    void this.sendToUserAsync(user, payload).catch((error) => {
+    this.sendToUserAsync(user, payload).catch((error) => {
       this.logger.error(`push send failed: ${(error as Error).message}`);
     });
   }
@@ -121,10 +149,6 @@ export class PushNotificationService implements OnModuleInit {
     user: UserDocument | string | null | undefined,
     payload: PushPayload,
   ): Promise<void> {
-    if (!this.messaging) {
-      return;
-    }
-
     const userId = typeof user === 'string' ? user : user?.id;
     if (!userId) {
       return;
@@ -139,16 +163,40 @@ export class PushNotificationService implements OnModuleInit {
       return;
     }
 
-    let devices = record.pushDevices || [];
+    const result = await this.dispatchToDevices(
+      record.pushDevices || [],
+      payload,
+    );
+    if (result.invalidTokens.length) {
+      await this.db.users.updateOne(
+        { _id: userId },
+        {
+          $pull: {
+            pushDevices: { token: { $in: result.invalidTokens } },
+          },
+        },
+      );
+    }
+  }
+
+  async dispatchToDevices(
+    sourceDevices: Pick<PushDevice, 'token' | 'platform' | 'app'>[],
+    payload: PushPayload,
+  ): Promise<PushDispatchResult> {
+    let devices = sourceDevices;
     if (payload.app) {
       devices = devices.filter((device) => device.app === payload.app);
     }
 
-    const tokens = [
-      ...new Set(devices.map((device) => device.token).filter(Boolean)),
+    const uniqueDevices = [
+      ...new Map(
+        devices
+          .filter((device) => Boolean(device.token))
+          .map((device) => [device.token, device]),
+      ).values(),
     ];
-    if (!tokens.length) {
-      return;
+    if (!uniqueDevices.length) {
+      return { targeted: 0, accepted: 0, failed: 0, invalidTokens: [] };
     }
 
     const data: Record<string, string> = {};
@@ -158,53 +206,198 @@ export class PushNotificationService implements OnModuleInit {
       }
     });
 
-    const response = await this.messaging.sendEachForMulticast({
-      tokens,
-      notification: {
-        title: payload.title,
-        body: payload.body,
-      },
-      data,
-      android: {
-        priority: 'high',
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-          },
+    const expoTokens = uniqueDevices
+      .filter((device) => isExpoPushToken(device.token))
+      .map((device) => device.token);
+    const androidTokens = uniqueDevices
+      .filter(
+        (device) =>
+          device.platform === 'android' && !isExpoPushToken(device.token),
+      )
+      .map((device) => device.token);
+    const legacyIosTokenCount = uniqueDevices.filter(
+      (device) => device.platform === 'ios' && !isExpoPushToken(device.token),
+    ).length;
+
+    const [expoResult, androidResult] = await Promise.all([
+      this.sendExpoNotifications(expoTokens, payload, data).catch((error) => {
+        this.logger.error(`Expo push send failed: ${(error as Error).message}`);
+        return {
+          accepted: 0,
+          failed: expoTokens.length,
+          invalidTokens: [],
+        };
+      }),
+      this.sendAndroidNotifications(androidTokens, payload, data).catch(
+        (error) => {
+          this.logger.error(
+            `Firebase push send failed: ${(error as Error).message}`,
+          );
+          return {
+            accepted: 0,
+            failed: androidTokens.length,
+            invalidTokens: [],
+          };
         },
-      },
-    });
+      ),
+    ]);
+    const invalidTokens = [
+      ...expoResult.invalidTokens,
+      ...androidResult.invalidTokens,
+    ];
 
-    const invalidTokens: string[] = [];
-    response.responses.forEach((result, index) => {
-      if (result.success) {
-        return;
-      }
-
-      const code = result.error?.code;
-      if (
-        code === 'messaging/registration-token-not-registered' ||
-        code === 'messaging/invalid-registration-token'
-      ) {
-        invalidTokens.push(tokens[index]);
-      } else {
-        this.logger.warn(
-          `FCM send error for token index ${index}: ${result.error?.message}`,
-        );
-      }
-    });
-
-    if (invalidTokens.length) {
-      await this.db.users.updateOne(
-        { _id: userId },
-        {
-          $pull: {
-            pushDevices: { token: { $in: invalidTokens } },
-          },
-        },
+    if (legacyIosTokenCount > 0) {
+      this.logger.warn(
+        `Skipped ${legacyIosTokenCount} legacy APNs token(s); the device must open the updated app to register an Expo push token`,
       );
     }
+
+    return {
+      targeted: uniqueDevices.length,
+      accepted: expoResult.accepted + androidResult.accepted,
+      failed: expoResult.failed + androidResult.failed + legacyIosTokenCount,
+      invalidTokens,
+    };
+  }
+
+  private async sendExpoNotifications(
+    tokens: string[],
+    payload: PushPayload,
+    data: Record<string, string>,
+  ): Promise<Omit<PushDispatchResult, 'targeted'>> {
+    if (!tokens.length) {
+      return { accepted: 0, failed: 0, invalidTokens: [] };
+    }
+
+    const { expo } = config();
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
+      'Content-Type': 'application/json',
+    };
+    if (expo.accessToken?.trim()) {
+      headers.Authorization = `Bearer ${expo.accessToken.trim()}`;
+    }
+
+    const results = await Promise.all(
+      chunk(tokens, EXPO_PUSH_BATCH_SIZE).map(async (batch, batchIndex) => {
+        const response = await axios.post<{ data: ExpoPushTicket[] }>(
+          EXPO_PUSH_ENDPOINT,
+          batch.map((token) => ({
+            to: token,
+            title: payload.title,
+            body: payload.body,
+            data,
+            sound: 'default',
+            priority: 'high',
+            channelId: 'rides-with-sound-v2',
+          })),
+          { headers },
+        );
+
+        const tickets = response.data?.data || [];
+        return tickets.reduce<Omit<PushDispatchResult, 'targeted'>>(
+          (result, ticket, index) => {
+            if (ticket.status === 'ok') {
+              result.accepted += 1;
+              return result;
+            }
+
+            result.failed += 1;
+            if (ticket.details?.error === 'DeviceNotRegistered') {
+              result.invalidTokens.push(batch[index]);
+            } else {
+              const tokenIndex = batchIndex * EXPO_PUSH_BATCH_SIZE + index;
+              this.logger.warn(
+                `Expo push error for token index ${tokenIndex}: ${
+                  ticket.message || ticket.details?.error || 'Unknown error'
+                }`,
+              );
+            }
+            return result;
+          },
+          {
+            accepted: 0,
+            failed: Math.max(0, batch.length - tickets.length),
+            invalidTokens: [],
+          },
+        );
+      }),
+    );
+
+    return this.combineProviderResults(results);
+  }
+
+  private async sendAndroidNotifications(
+    tokens: string[],
+    payload: PushPayload,
+    data: Record<string, string>,
+  ): Promise<Omit<PushDispatchResult, 'targeted'>> {
+    if (!tokens.length) {
+      return { accepted: 0, failed: 0, invalidTokens: [] };
+    }
+    if (!this.messaging) {
+      this.logger.warn(
+        `Skipped ${tokens.length} Android push token(s): Firebase Admin is not configured`,
+      );
+      return { accepted: 0, failed: tokens.length, invalidTokens: [] };
+    }
+
+    const { messaging } = this;
+    const results = await Promise.all(
+      chunk(tokens, FCM_BATCH_SIZE).map(async (batch, batchIndex) => {
+        const response = await messaging.sendEachForMulticast({
+          tokens: batch,
+          notification: {
+            title: payload.title,
+            body: payload.body,
+          },
+          data,
+          android: {
+            priority: 'high',
+          },
+        });
+
+        return response.responses.reduce<Omit<PushDispatchResult, 'targeted'>>(
+          (dispatch, result, index) => {
+            if (result.success) {
+              dispatch.accepted += 1;
+              return dispatch;
+            }
+
+            dispatch.failed += 1;
+            const code = result.error?.code;
+            if (
+              code === 'messaging/registration-token-not-registered' ||
+              code === 'messaging/invalid-registration-token'
+            ) {
+              dispatch.invalidTokens.push(batch[index]);
+            } else {
+              const tokenIndex = batchIndex * FCM_BATCH_SIZE + index;
+              this.logger.warn(
+                `FCM send error for token index ${tokenIndex}: ${result.error?.message}`,
+              );
+            }
+            return dispatch;
+          },
+          { accepted: 0, failed: 0, invalidTokens: [] },
+        );
+      }),
+    );
+
+    return this.combineProviderResults(results);
+  }
+
+  private combineProviderResults(
+    results: Omit<PushDispatchResult, 'targeted'>[],
+  ): Omit<PushDispatchResult, 'targeted'> {
+    return results.reduce(
+      (combined, result) => ({
+        accepted: combined.accepted + result.accepted,
+        failed: combined.failed + result.failed,
+        invalidTokens: [...combined.invalidTokens, ...result.invalidTokens],
+      }),
+      { accepted: 0, failed: 0, invalidTokens: [] },
+    );
   }
 }

@@ -32,6 +32,7 @@ import { BankAccountDocument } from './schemas/bank-account.schema';
 import { PayoutRequestDocument } from './schemas/payout-request.schema';
 import { FinancialSettingsDocument } from './schemas/financial-settings.schema';
 import { DriverFinancialStateDocument } from './schemas/driver-financial-state.schema';
+import { PushCampaignDocument } from './schemas/push-campaign.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -76,6 +77,8 @@ export class DatabaseService {
     public readonly financialSettings: Model<FinancialSettingsDocument>,
     @InjectModel(DB_TABLES.DRIVER_FINANCIAL_STATES)
     public readonly driverFinancialStates: Model<DriverFinancialStateDocument>,
+    @InjectModel(DB_TABLES.PUSH_CAMPAIGNS)
+    public readonly pushCampaigns: Model<PushCampaignDocument>,
   ) {}
 
   async findOrFail<

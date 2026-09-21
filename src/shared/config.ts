@@ -81,6 +81,9 @@ const config = () => ({
   firebase: {
     serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
   },
+  expo: {
+    accessToken: process.env.EXPO_ACCESS_TOKEN,
+  },
   driverCommissionRate: Number.parseFloat(
     process.env.DRIVER_COMMISSION_RATE || '0.2',
   ),

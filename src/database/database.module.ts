@@ -25,6 +25,7 @@ import { BankAccountSchema } from './schemas/bank-account.schema';
 import { PayoutRequestSchema } from './schemas/payout-request.schema';
 import { FinancialSettingsSchema } from './schemas/financial-settings.schema';
 import { DriverFinancialStateSchema } from './schemas/driver-financial-state.schema';
+import { PushCampaignSchema } from './schemas/push-campaign.schema';
 
 @Global()
 @Module({
@@ -41,7 +42,10 @@ import { DriverFinancialStateSchema } from './schemas/driver-financial-state.sch
       { name: DB_TABLES.RENTALS, schema: RentalSchema },
       { name: DB_TABLES.CAR_BRANDS, schema: CarBrandSchema },
       { name: DB_TABLES.DRIVER_EARNINGS, schema: DriverEarningSchema },
-      { name: DB_TABLES.DRIVER_LEDGER_ENTRIES, schema: DriverLedgerEntrySchema },
+      {
+        name: DB_TABLES.DRIVER_LEDGER_ENTRIES,
+        schema: DriverLedgerEntrySchema,
+      },
       { name: DB_TABLES.DRIVER_RIDE_OFFERS, schema: DriverRideOfferSchema },
       {
         name: DB_TABLES.DRIVER_ONLINE_SESSIONS,
@@ -57,6 +61,7 @@ import { DriverFinancialStateSchema } from './schemas/driver-financial-state.sch
         name: DB_TABLES.DRIVER_FINANCIAL_STATES,
         schema: DriverFinancialStateSchema,
       },
+      { name: DB_TABLES.PUSH_CAMPAIGNS, schema: PushCampaignSchema },
     ]),
   ],
   providers: [DatabaseService, ActivityLedgerService, ReferralService],
