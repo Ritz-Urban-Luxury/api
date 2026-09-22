@@ -239,6 +239,9 @@ export class UserService {
         { $set: { endedAt: now } },
       ),
       this.db.driverRideOffers.deleteMany({ driver: userId }),
+      this.db.userBlocks.deleteMany({
+        $or: [{ blocker: userId }, { blocked: userId }],
+      }),
       this.db.cards.deleteMany({ user: userId }),
       this.db.messages.deleteMany({ sender: userId }),
       ...(authTokenIdentifiers.length > 0

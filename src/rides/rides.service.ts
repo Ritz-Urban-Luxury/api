@@ -34,6 +34,10 @@ import {
   TripStopStatus,
 } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
+import {
+  UserReportDocument,
+  UserReportStatus,
+} from '../database/schemas/user-report.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { PaginationRequestDTO } from '../shared/pagination.dto';
@@ -45,6 +49,7 @@ import {
   AcceptRideDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
+  AdminGetUserReportsDTO,
   CreateRideDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
@@ -56,6 +61,7 @@ import {
   UpdateRideDTO,
   UpdateTripDTO,
   RatePassengerDTO,
+  ReportTripUserDTO,
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 import { FinanceService } from '../finance/finance.service';
@@ -106,7 +112,194 @@ export class RidesService implements OnModuleInit {
     );
   }
 
-  async getAvailableRides(payload: GetRidesDTO) {
+  private async getTripCounterparty(user: UserDocument, tripId: string) {
+    const trip = await this.db.trips
+      .findOne({
+        _id: tripId,
+        $or: [{ user: user.id }, { driver: user.id }],
+        deleted: { $ne: true },
+      })
+      .populate('user')
+      .populate('driver');
+
+    if (!trip) {
+      throw new NotFoundException('trip not found');
+    }
+
+    const rider = trip.user as UserDocument;
+    const driver = trip.driver as UserDocument;
+    const counterparty = String(user.id) === String(driver.id) ? rider : driver;
+
+    if (!counterparty?.id || String(counterparty.id) === String(user.id)) {
+      throw new NotFoundException('trip participant not found');
+    }
+
+    return { counterparty, trip };
+  }
+
+  private async isUserPairBlocked(firstUserId: string, secondUserId: string) {
+    return Boolean(
+      await this.db.userBlocks.exists({
+        active: true,
+        $or: [
+          { blocker: firstUserId, blocked: secondUserId },
+          { blocker: secondUserId, blocked: firstUserId },
+        ],
+      }),
+    );
+  }
+
+  private async getBlockedPairUserIds(userId: string) {
+    const blocks = await this.db.userBlocks
+      .find({
+        active: true,
+        $or: [{ blocker: userId }, { blocked: userId }],
+      })
+      .select('blocker blocked');
+
+    return blocks
+      .map((block) => {
+        const blockerId = Util.resolveDocumentId(block.blocker);
+        const blockedId = Util.resolveDocumentId(block.blocked);
+        return blockerId === String(userId) ? blockedId : blockerId;
+      })
+      .filter((id): id is string => Boolean(id));
+  }
+
+  async blockTripUser(user: UserDocument, tripId: string) {
+    const { counterparty, trip } = await this.getTripCounterparty(user, tripId);
+
+    return this.db.userBlocks.findOneAndUpdate(
+      { blocker: user.id, blocked: counterparty.id },
+      {
+        $set: {
+          active: true,
+          sourceTrip: trip.id,
+        },
+        $unset: { unblockedAt: 1 },
+      },
+      { new: true, setDefaultsOnInsert: true, upsert: true },
+    );
+  }
+
+  async reportTripUser(
+    user: UserDocument,
+    tripId: string,
+    payload: ReportTripUserDTO,
+  ) {
+    const { counterparty, trip } = await this.getTripCounterparty(user, tripId);
+    let messageId: string | undefined;
+
+    if (payload.messageId) {
+      const message = await this.db.messages.findOne({
+        _id: payload.messageId,
+        sender: counterparty.id,
+        trip: trip.id,
+      });
+      if (!message) {
+        throw new NotFoundException('message not found in this trip');
+      }
+      messageId = String(message.id);
+    }
+
+    if (payload.blockUser) {
+      await this.db.userBlocks.findOneAndUpdate(
+        { blocker: user.id, blocked: counterparty.id },
+        {
+          $set: { active: true, sourceTrip: trip.id },
+          $unset: { unblockedAt: 1 },
+        },
+        { new: true, setDefaultsOnInsert: true, upsert: true },
+      );
+    }
+
+    return this.db.userReports.create({
+      blockedUser: Boolean(payload.blockUser),
+      details: payload.details?.trim() || undefined,
+      message: messageId,
+      reason: payload.reason,
+      reportedUser: counterparty.id,
+      reporter: user.id,
+      status: UserReportStatus.Open,
+      trip: trip.id,
+    });
+  }
+
+  async getBlockedUsers(user: UserDocument) {
+    return this.db.userBlocks
+      .find({ active: true, blocker: user.id })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'blocked',
+        select: 'firstName lastName avatar',
+      });
+  }
+
+  async unblockUser(user: UserDocument, blockedUserId: string) {
+    if (!isMongoId(blockedUserId)) {
+      throw new BadRequestException('invalid blocked user id');
+    }
+
+    const block = await this.db.userBlocks.findOneAndUpdate(
+      { active: true, blocker: user.id, blocked: blockedUserId },
+      { $set: { active: false, unblockedAt: new Date() } },
+      { new: true, upsert: false },
+    );
+    if (!block) {
+      throw new NotFoundException('blocked user not found');
+    }
+
+    return block;
+  }
+
+  async getUserReports(payload: AdminGetUserReportsDTO) {
+    const { page = 1, limit = 100, reason, status } = payload;
+    const query: FilterQuery<UserReportDocument> = {};
+    if (reason) query.reason = reason;
+    if (status) query.status = status;
+
+    return this.db.userReports.paginate(query, {
+      page,
+      limit,
+      sort: { createdAt: -1 },
+      populate: [
+        { path: 'reporter', select: 'firstName lastName email phoneNumber' },
+        {
+          path: 'reportedUser',
+          select: 'firstName lastName email phoneNumber',
+        },
+        { path: 'trip' },
+        { path: 'message' },
+      ],
+    });
+  }
+
+  async updateUserReportStatus(reportId: string, status: UserReportStatus) {
+    if (!isMongoId(reportId)) {
+      throw new BadRequestException('invalid report id');
+    }
+
+    return this.db.findAndUpdateOrFail<UserReportDocument>(
+      this.db.userReports,
+      { _id: reportId },
+      { $set: { status } },
+      {
+        error: new NotFoundException('user report not found'),
+        options: { new: true, upsert: false },
+        populate: [
+          { path: 'reporter', select: 'firstName lastName email phoneNumber' },
+          {
+            path: 'reportedUser',
+            select: 'firstName lastName email phoneNumber',
+          },
+          { path: 'trip' },
+          { path: 'message' },
+        ],
+      },
+    );
+  }
+
+  async getAvailableRides(user: UserDocument, payload: GetRidesDTO) {
     const { lat, lon, type } = payload;
     const types = type ? (Array.isArray(type) ? type : [type]) : null;
     const isHireOnly = types?.length === 1 && types[0] === RideType.Hire;
@@ -116,6 +309,10 @@ export class RidesService implements OnModuleInit {
       'specs.synthetic': { $ne: true },
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
     };
+    const blockedUserIds = await this.getBlockedPairUserIds(String(user.id));
+    if (blockedUserIds.length > 0) {
+      query.driver = { $nin: blockedUserIds };
+    }
 
     if (types) {
       query.type = { $in: types };
@@ -452,6 +649,10 @@ export class RidesService implements OnModuleInit {
       const driver = ride.driver as UserDocument;
 
       if (!driver?.id) {
+        continue;
+      }
+
+      if (await this.isUserPairBlocked(String(user.id), String(driver.id))) {
         continue;
       }
 
@@ -935,8 +1136,9 @@ export class RidesService implements OnModuleInit {
         paymentMethod: trip.paymentMethod,
       });
       if (trip.paymentMethod === PaymentMethod.Cash) {
-        const financialState =
-          await this.finance.ensureDriverRestrictionState(driver.id);
+        const financialState = await this.finance.ensureDriverRestrictionState(
+          driver.id,
+        );
         if (financialState.restricted) {
           await Promise.all([
             this.db.rides.updateMany(
@@ -1275,6 +1477,13 @@ export class RidesService implements OnModuleInit {
     if (!ride) {
       throw new NotFoundException('Ride not found');
     }
+    const ownerId = Util.resolveDocumentId(ride.driver);
+    if (
+      ownerId &&
+      (await this.isUserPairBlocked(String(user.id), String(ownerId)))
+    ) {
+      throw new NotFoundException('Ride not found');
+    }
 
     if (!checkInAt || !checkOutAt) {
       throw new BadRequestException(
@@ -1354,7 +1563,6 @@ export class RidesService implements OnModuleInit {
       },
     });
 
-    const ownerId = Util.resolveDocumentId(ride.driver);
     if (ownerId) {
       const owner = await this.db.users.findById(ownerId);
       if (owner) {

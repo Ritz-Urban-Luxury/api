@@ -26,6 +26,8 @@ import { PayoutRequestSchema } from './schemas/payout-request.schema';
 import { FinancialSettingsSchema } from './schemas/financial-settings.schema';
 import { DriverFinancialStateSchema } from './schemas/driver-financial-state.schema';
 import { PushCampaignSchema } from './schemas/push-campaign.schema';
+import { UserBlockSchema } from './schemas/user-block.schema';
+import { UserReportSchema } from './schemas/user-report.schema';
 
 @Global()
 @Module({
@@ -62,6 +64,8 @@ import { PushCampaignSchema } from './schemas/push-campaign.schema';
         schema: DriverFinancialStateSchema,
       },
       { name: DB_TABLES.PUSH_CAMPAIGNS, schema: PushCampaignSchema },
+      { name: DB_TABLES.USER_BLOCKS, schema: UserBlockSchema },
+      { name: DB_TABLES.USER_REPORTS, schema: UserReportSchema },
     ]),
   ],
   providers: [DatabaseService, ActivityLedgerService, ReferralService],

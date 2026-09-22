@@ -30,6 +30,7 @@ import {
   MessageDTO,
   OwnerUpdateRentalStatusDTO,
   RatePassengerDTO,
+  ReportTripUserDTO,
   RequestRideDTO,
   SetRideAvailabilityDTO,
   UpdateRideDTO,
@@ -45,8 +46,11 @@ export class RidesController {
 
   @UseGuards(JwtGuard)
   @Get()
-  async getAvailableRides(@Query() payload: GetRidesDTO) {
-    const rides = await this.ridesService.getAvailableRides(payload);
+  async getAvailableRides(
+    @CurrentUser() user: UserDocument,
+    @Query() payload: GetRidesDTO,
+  ) {
+    const rides = await this.ridesService.getAvailableRides(user, payload);
 
     return Response.json('available rides', rides);
   }
@@ -147,6 +151,25 @@ export class RidesController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('blocked-users')
+  async getBlockedUsers(@CurrentUser() user: UserDocument) {
+    const blocks = await this.ridesService.getBlockedUsers(user);
+
+    return Response.json('blocked users', blocks);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('blocked-users/:blockedUser')
+  async unblockUser(
+    @CurrentUser() user: UserDocument,
+    @Param('blockedUser') blockedUser: string,
+  ) {
+    await this.ridesService.unblockUser(user, blockedUser);
+
+    return Response.json('user unblocked');
+  }
+
+  @UseGuards(JwtGuard)
   @Get('/trips')
   async getTrips(
     @CurrentUser() user: UserDocument,
@@ -207,6 +230,29 @@ export class RidesController {
     const location = await this.ridesService.getOngoingTripLocation(user);
 
     return Response.json('ongoing trip location', location);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('trips/:trip/report')
+  async reportTripUser(
+    @CurrentUser() user: UserDocument,
+    @Param('trip') trip: string,
+    @Body() payload: ReportTripUserDTO,
+  ) {
+    const report = await this.ridesService.reportTripUser(user, trip, payload);
+
+    return Response.json('report submitted', report);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('trips/:trip/block')
+  async blockTripUser(
+    @CurrentUser() user: UserDocument,
+    @Param('trip') trip: string,
+  ) {
+    const block = await this.ridesService.blockTripUser(user, trip);
+
+    return Response.json('user blocked', block);
   }
 
   @UseGuards(JwtGuard)

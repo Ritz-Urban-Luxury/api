@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDate,
   IsIn,
   IsLatitude,
@@ -23,6 +24,12 @@ import {
   registerDecorator,
   isLatLong,
 } from 'class-validator';
+import {
+  UserReportReason,
+  UserReportReasons,
+  UserReportStatus,
+  UserReportStatuses,
+} from '../../database/schemas/user-report.schema';
 
 /** Max photos for a vehicle listing (Hire and trip cars). */
 export const MAX_HIRE_RIDE_IMAGES = 6;
@@ -185,6 +192,25 @@ export class MessageDTO {
   @IsString()
   @IsNotEmpty()
   text: string;
+}
+
+export class ReportTripUserDTO {
+  @IsIn(UserReportReasons)
+  @IsNotEmpty()
+  reason: UserReportReason;
+
+  @IsString()
+  @MaxLength(1000)
+  @IsOptional()
+  details?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  messageId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  blockUser?: boolean;
 }
 
 export class RatePassengerDTO {
@@ -437,6 +463,22 @@ export class AdminGetTripsDTO extends PaginationRequestDTO {
   @IsIn(TripStatuses, { each: true })
   @IsOptional()
   status?: TripStatus | TripStatus[];
+}
+
+export class AdminGetUserReportsDTO extends PaginationRequestDTO {
+  @IsIn(UserReportReasons)
+  @IsOptional()
+  reason?: UserReportReason;
+
+  @IsIn(UserReportStatuses)
+  @IsOptional()
+  status?: UserReportStatus;
+}
+
+export class AdminUpdateUserReportDTO {
+  @IsIn(UserReportStatuses)
+  @IsNotEmpty()
+  status: UserReportStatus;
 }
 
 export class GetTripHistoryDTO extends PaginationRequestDTO {

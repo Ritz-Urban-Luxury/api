@@ -5,6 +5,7 @@ import {
   RideType,
 } from '../database/schemas/rides.schema';
 import { PaymentMethod } from '../database/schemas/trips.schema';
+import { UserReportReason } from '../database/schemas/user-report.schema';
 import {
   RentalBillingType,
   RentalStatus,
@@ -216,6 +217,12 @@ describe('RidesService Play reviewer sandbox', () => {
         create: jest.fn(),
         findOne: jest.fn().mockResolvedValue(null),
       },
+      userBlocks: {
+        exists: jest.fn().mockResolvedValue(false),
+        find: jest.fn().mockReturnValue({
+          select: jest.fn().mockResolvedValue([]),
+        }),
+      },
     };
     paymentService = { chargeUser: jest.fn() };
     push = { sendToUser: jest.fn() };
@@ -271,7 +278,10 @@ describe('RidesService Play reviewer sandbox', () => {
     const populate = jest.fn().mockReturnValue({ sort });
     db.rides.find.mockReturnValue({ populate });
 
-    await service.getAvailableRides({ lat: 9.0765, lon: 7.3986 });
+    await service.getAvailableRides(riderReviewer, {
+      lat: 9.0765,
+      lon: 7.3986,
+    });
 
     expect(db.rides.find).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -372,6 +382,110 @@ describe('RidesService Play reviewer sandbox', () => {
   });
 });
 
+describe('RidesService rider safety controls', () => {
+  const driver = { id: ownerId } as never;
+  const rider = { id: riderId } as never;
+  const tripId = '64a000000000000000000005';
+  const messageId = '64a000000000000000000006';
+  let service: RidesService;
+  let db: any;
+
+  const tripQuery = (trip: unknown) => {
+    const query: any = {
+      populate: jest.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) =>
+        Promise.resolve(trip).then(resolve),
+    };
+    return query;
+  };
+
+  beforeEach(() => {
+    db = {
+      messages: {
+        findOne: jest.fn().mockResolvedValue({ id: messageId }),
+      },
+      trips: {
+        findOne: jest
+          .fn()
+          .mockReturnValue(tripQuery({ driver, id: tripId, user: rider })),
+      },
+      userBlocks: {
+        findOneAndUpdate: jest.fn().mockResolvedValue({
+          active: true,
+          blocked: riderId,
+          blocker: ownerId,
+        }),
+      },
+      userReports: {
+        create: jest.fn().mockImplementation(async (payload) => ({
+          ...payload,
+          id: '64a000000000000000000007',
+        })),
+      },
+    };
+
+    service = Object.create(RidesService.prototype);
+    Object.assign(service as any, { db });
+  });
+
+  it('stores an auditable report and blocks the rider when requested', async () => {
+    const result = await service.reportTripUser(driver, tripId, {
+      blockUser: true,
+      details: 'Threatening language in chat',
+      messageId,
+      reason: UserReportReason.AbusiveLanguage,
+    });
+
+    expect(db.messages.findOne).toHaveBeenCalledWith({
+      _id: messageId,
+      sender: riderId,
+      trip: tripId,
+    });
+    expect(db.userBlocks.findOneAndUpdate).toHaveBeenCalledWith(
+      { blocked: riderId, blocker: ownerId },
+      expect.objectContaining({
+        $set: { active: true, sourceTrip: tripId },
+      }),
+      expect.objectContaining({ new: true, upsert: true }),
+    );
+    expect(db.userReports.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blockedUser: true,
+        message: messageId,
+        reportedUser: riderId,
+        reporter: ownerId,
+        trip: tripId,
+      }),
+    );
+    expect(result).toMatchObject({ blockedUser: true });
+  });
+
+  it('does not attach a message that was not sent by the reported rider', async () => {
+    db.messages.findOne.mockResolvedValue(null);
+
+    await expect(
+      service.reportTripUser(driver, tripId, {
+        messageId,
+        reason: UserReportReason.Harassment,
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(db.userReports.create).not.toHaveBeenCalled();
+  });
+
+  it('creates an idempotent future-matching block from a shared trip', async () => {
+    await service.blockTripUser(driver, tripId);
+
+    expect(db.userBlocks.findOneAndUpdate).toHaveBeenCalledWith(
+      { blocked: riderId, blocker: ownerId },
+      expect.objectContaining({
+        $set: { active: true, sourceTrip: tripId },
+      }),
+      expect.objectContaining({ new: true, upsert: true }),
+    );
+  });
+});
+
 describe('RidesService notification sounds', () => {
   const rider = { id: riderId } as never;
   const driver = { id: ownerId } as never;
@@ -388,6 +502,7 @@ describe('RidesService notification sounds', () => {
     messages: { create: jest.Mock };
     rides: { updateOne: jest.Mock };
     trips: { create: jest.Mock };
+    userBlocks: { exists: jest.Mock };
   };
   let push: { sendToUser: jest.Mock };
   let websocket: { emitToUser: jest.Mock };
@@ -404,6 +519,7 @@ describe('RidesService notification sounds', () => {
       messages: { create: jest.fn() },
       rides: { updateOne: jest.fn() },
       trips: { create: jest.fn() },
+      userBlocks: { exists: jest.fn().mockResolvedValue(false) },
     };
     push = { sendToUser: jest.fn() };
     websocket = { emitToUser: jest.fn() };

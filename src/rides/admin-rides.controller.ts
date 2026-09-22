@@ -15,9 +15,11 @@ import {
   AdminGetFleetDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
+  AdminGetUserReportsDTO,
   AdminRefundRentalDTO,
   AdminUpdateFleetApprovalDTO,
   AdminUpdateRentalStatusDTO,
+  AdminUpdateUserReportDTO,
 } from './dto/rides.dto';
 
 @Controller('admin/rides')
@@ -30,6 +32,26 @@ export class AdminRideController {
     const { docs, ...meta } = await this.ridesService.getTrips(query);
 
     return Response.json('trips', docs, meta);
+  }
+
+  @Get('/reports')
+  async getUserReports(@Query() query: AdminGetUserReportsDTO) {
+    const { docs, ...meta } = await this.ridesService.getUserReports(query);
+
+    return Response.json('user reports', docs, meta);
+  }
+
+  @Patch('/reports/:reportId')
+  async updateUserReport(
+    @Param('reportId') reportId: string,
+    @Body() payload: AdminUpdateUserReportDTO,
+  ) {
+    const report = await this.ridesService.updateUserReportStatus(
+      reportId,
+      payload.status,
+    );
+
+    return Response.json('user report updated', report);
   }
 
   @Get('/fleet')

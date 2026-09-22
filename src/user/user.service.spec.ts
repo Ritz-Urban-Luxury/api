@@ -28,6 +28,7 @@ describe('UserService.deleteAccount', () => {
       rentals: { findOne: jest.fn().mockResolvedValue(null) },
       rides: { updateMany: resolved },
       trips: { findOne: jest.fn().mockResolvedValue(null) },
+      userBlocks: { deleteMany: resolved },
       users: {
         findOneAndUpdate: jest.fn().mockResolvedValue({ id: userId }),
       },
@@ -77,6 +78,9 @@ describe('UserService.deleteAccount', () => {
     const result = await service.deleteAccount(user, { confirm: true });
 
     expect(db.cards.deleteMany).toHaveBeenCalledWith({ user: userId });
+    expect(db.userBlocks.deleteMany).toHaveBeenCalledWith({
+      $or: [{ blocker: userId }, { blocked: userId }],
+    });
     expect(db.authTokens.deleteMany).toHaveBeenCalledWith({
       $or: [
         { 'meta.phoneNumber': '2348012345678' },
