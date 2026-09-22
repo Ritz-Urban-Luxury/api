@@ -1,10 +1,128 @@
 <!doctype html>
-<html>
-  <body style="font-family: Arial, sans-serif; color: #171717; line-height: 1.5;">
-    <p>Hi {{ firstName }},</p>
-    <p>{{ subject }}.</p>
-    <p>Your reference is <strong>{{ reference }}</strong>.</p>
-    <p>Approved withdrawals are expected within 7 days.</p>
-    <p>Keep this reference for any follow-up with Ritz support.</p>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no" />
+    <title>{{ subject }}</title>
+    <style>
+      @media only screen and (max-width: 620px) {
+        .email-shell { width: 100% !important; }
+        .email-card { padding: 32px 24px !important; }
+        .email-footer { padding: 24px 20px 8px !important; }
+        .email-heading { font-size: 27px !important; line-height: 35px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent;">
+      {{ subject }}. Reference: {{ reference }}.
+    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 40px 16px;">
+          <table class="email-shell" role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px;">
+            <tr>
+              <td align="center" style="padding: 0 0 24px;">
+                <a href="https://www.ritzurbanluxury.com" style="display: inline-block; color: #43005d; text-decoration: none;" target="_blank">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <tr>
+                      <td style="padding-right: 12px; vertical-align: middle;">
+                        <img src="https://www.ritzurbanluxury.com/ritz-logo.png" width="48" height="49" alt="Ritz" style="display: block; width: 48px; height: 49px; border: 0;" />
+                      </td>
+                      <td style="vertical-align: middle; text-align: left;">
+                        <div style="font-size: 22px; line-height: 24px; font-weight: 700; color: #43005d;">Ritz</div>
+                        <div style="font-size: 10px; line-height: 14px; letter-spacing: 1.8px; text-transform: uppercase; color: #716a77;">Urban Luxury</div>
+                      </td>
+                    </tr>
+                  </table>
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-card" style="padding: 44px 48px; background-color: #ffffff; border: 1px solid #e8e1eb; border-radius: 20px; box-shadow: 0 12px 30px rgba(67, 0, 93, 0.08);">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td>
+                      <div style="display: inline-block; padding: 7px 11px; border-radius: 999px; background-color: #f2e9f6; color: #68008f; font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase;">
+                        Financial update
+                      </div>
+
+                      <h1 class="email-heading" style="margin: 20px 0 12px; color: #24212a; font-size: 30px; line-height: 38px; font-weight: 700;">
+                        {{ subject }}
+                      </h1>
+
+                      <p style="margin: 0 0 24px; color: #625c67; font-size: 16px; line-height: 25px;">
+                        Hi {{ firstName }}, here is an update about your recent Ritz financial request.
+                      </p>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 24px;">
+                        <tr>
+                          <td style="padding: 20px 22px; background-color: #faf7fb; border: 1px solid #e8ddec; border-radius: 14px;">
+                            <div style="margin-bottom: 6px; color: #7b737f; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;">
+                              Reference
+                            </div>
+                            <div style="color: #43005d; font-family: 'Courier New', Courier, monospace; font-size: 18px; line-height: 26px; font-weight: 700; overflow-wrap: anywhere; word-break: break-word;">
+                              {{ reference }}
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 24px;">
+                        <tr>
+                          <td style="width: 4px; background-color: #d5ad36; border-radius: 4px; font-size: 0; line-height: 0;">&nbsp;</td>
+                          <td style="padding: 4px 0 4px 16px; color: #625c67; font-size: 14px; line-height: 22px;">
+                            Approved withdrawals are generally expected within seven days. We&rsquo;ll send another update if the status changes or action is required.
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="margin: 0; color: #625c67; font-size: 14px; line-height: 22px;">
+                        Keep this reference for follow-up. If you need help, contact
+                        <a href="mailto:support@ritzurbanluxury.com" style="color: #68008f; font-weight: 700; text-decoration: none;">Ritz Support</a>.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-footer" align="center" style="padding: 28px 28px 8px; color: #7b737f; font-size: 12px; line-height: 19px;">
+                <p style="margin: 0 0 8px;">
+                  Need help? <a href="mailto:support@ritzurbanluxury.com" style="color: #68008f; text-decoration: underline;">support@ritzurbanluxury.com</a>
+                </p>
+                <p style="margin: 16px 0 10px; color: #625c67; font-weight: 700;">Follow Ritz</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 0 auto 18px;">
+                  <tr>
+                    <td style="padding: 0 5px;">
+                      <a href="https://www.instagram.com/ritzurbanluxury" target="_blank" aria-label="Ritz on Instagram" title="Instagram" style="display: block; width: 36px; height: 36px; border-radius: 50%; background-color: #43005d; color: #ffffff; font-size: 20px; line-height: 36px; text-align: center; text-decoration: none;">&#9678;</a>
+                    </td>
+                    <td style="padding: 0 5px;">
+                      <a href="https://www.facebook.com/ritzurbanluxury" target="_blank" aria-label="Ritz on Facebook" title="Facebook" style="display: block; width: 36px; height: 36px; border-radius: 50%; background-color: #43005d; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 700; line-height: 36px; text-align: center; text-decoration: none;">f</a>
+                    </td>
+                    <td style="padding: 0 5px;">
+                      <a href="https://x.com/ritzurbanluxury" target="_blank" aria-label="Ritz on X" title="X" style="display: block; width: 36px; height: 36px; border-radius: 50%; background-color: #43005d; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; line-height: 36px; text-align: center; text-decoration: none;">X</a>
+                    </td>
+                    <td style="padding: 0 5px;">
+                      <a href="https://www.linkedin.com/company/ritz-urban-luxury" target="_blank" aria-label="Ritz on LinkedIn" title="LinkedIn" style="display: block; width: 36px; height: 36px; border-radius: 50%; background-color: #43005d; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; line-height: 36px; text-align: center; text-decoration: none;">in</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin: 0 0 8px;">
+                  Ritz Urban Luxury Limited &middot; RC 1994458<br />
+                  No. 50, Ebitu Ukiwe Street, Jabi, Abuja, FCT, Nigeria
+                </p>
+                <p style="margin: 0;">&copy; {{ currentYear }} Ritz Urban Luxury. All rights reserved.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>

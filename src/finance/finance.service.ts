@@ -706,6 +706,7 @@ export class FinanceService {
             firstName: 'there',
             subject,
             reference: request.publicReference,
+            currentYear: new Date().getFullYear(),
           },
         })
         ?.catch(() => undefined);
@@ -735,6 +736,7 @@ export class FinanceService {
             firstName: user.firstName || 'there',
             subject,
             reference,
+            currentYear: new Date().getFullYear(),
           },
         })
         ?.catch(() => undefined);

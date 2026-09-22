@@ -659,7 +659,12 @@ export class PaystackService implements PaymentProvider {
           recipient: request.notificationEmail,
           subject,
           template: 'financial-status.template.njk',
-          context: { firstName: 'there', subject, reference },
+          context: {
+            firstName: 'there',
+            subject,
+            reference,
+            currentYear: new Date().getFullYear(),
+          },
         })
         ?.catch(() => undefined);
     }

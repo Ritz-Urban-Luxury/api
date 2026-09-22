@@ -172,8 +172,12 @@ export class AuthenticationService {
       this.notificationService
         .sendEmail({
           recipient: { email, name },
-          context: { otp: token },
-          subject: 'Verify your email',
+          context: {
+            otp: token,
+            name,
+            currentYear: new Date().getFullYear(),
+          },
+          subject: 'Your Ritz verification code',
           template: 'email-otp.template.njk',
         })
         .catch((error) => {
