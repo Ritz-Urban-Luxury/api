@@ -195,6 +195,7 @@ describe('RidesService Play reviewer sandbox', () => {
     process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
 
     cache = {
+      del: jest.fn(),
       get: jest.fn().mockResolvedValue(undefined),
       set: jest.fn(),
     };
@@ -211,8 +212,10 @@ describe('RidesService Play reviewer sandbox', () => {
         find: jest.fn(),
         findOne: jest.fn(),
         findOneAndUpdate: jest.fn(),
+        updateOne: jest.fn(),
         updateMany: jest.fn(),
       },
+      driverRideOffers: { updateOne: jest.fn() },
       trips: {
         create: jest.fn(),
         findOne: jest.fn().mockResolvedValue(null),
@@ -223,6 +226,7 @@ describe('RidesService Play reviewer sandbox', () => {
           select: jest.fn().mockResolvedValue([]),
         }),
       },
+      users: { findOne: jest.fn() },
     };
     paymentService = { chargeUser: jest.fn() };
     push = { sendToUser: jest.fn() };
@@ -271,6 +275,72 @@ describe('RidesService Play reviewer sandbox', () => {
     expect(db.driverOnlineSessions.create).toHaveBeenCalledWith(
       expect.objectContaining({ driver: ownerId, ride: rideId }),
     );
+  });
+
+  it('generates a real socket offer only for the reusable review driver', async () => {
+    db.rides.findOne.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Online,
+    });
+    db.users.findOne.mockResolvedValue(riderReviewer);
+
+    const result = await service.createReviewDemoOffer(driverReviewer);
+
+    expect(result.trackingId).toMatch(/^review-/);
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      driverReviewer,
+      'RideRequest',
+      expect.objectContaining({
+        payload: expect.objectContaining({ amount: 0 }),
+        user: riderReviewer,
+      }),
+    );
+    expect(db.driverRideOffers.updateOne).toHaveBeenCalled();
+  });
+
+  it('accepts a generated offer as a zero-charge synthetic trip', async () => {
+    const trackingId = 'review-offer-id';
+    cache.get.mockImplementation((key: string) =>
+      key === `review-offer:${trackingId}`
+        ? Promise.resolve({
+            driverId: ownerId,
+            riderId,
+            rideId,
+            payload: {
+              amount: 0,
+              distance: 3200,
+              fromAddress: 'Review pickup',
+              fromLat: 9.0747,
+              fromLon: 7.4951,
+              paymentMethod: PaymentMethod.Cash,
+              stops: [],
+              toAddress: 'Review destination',
+              toLat: 9.0667,
+              toLon: 7.5008,
+              type: RideType.Classic,
+            },
+          })
+        : Promise.resolve(undefined),
+    );
+    db.users.findOne.mockResolvedValue(riderReviewer);
+    db.rides.findOne.mockResolvedValue(syntheticRide);
+    db.trips.create.mockResolvedValue({
+      id: 'review-trip-id',
+      toObject: () => ({ id: 'review-trip-id', status: 'Started' }),
+    });
+
+    const trip = await service.acceptRide(driverReviewer, { trackingId });
+
+    expect(db.trips.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 0,
+        meta: { playReviewSynthetic: true },
+      }),
+    );
+    expect(trip).toMatchObject({ id: 'review-trip-id' });
+    expect(
+      (service as any).finance.canDriverReceiveRides,
+    ).not.toHaveBeenCalled();
   });
 
   it('excludes synthetic vehicles from the public availability query', async () => {

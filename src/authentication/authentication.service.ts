@@ -36,6 +36,7 @@ import {
 } from './authentication.dto';
 import {
   getPlayReviewAccounts,
+  isDriverReviewAccount,
   PlayReviewAccount,
   playReviewOtpMatches,
 } from './play-review-accounts';
@@ -215,7 +216,7 @@ export class AuthenticationService {
       return false;
     }
 
-    return account.kind === 'driver'
+    return isDriverReviewAccount(account)
       ? user.isDriver === true && user.isVerified === true
       : user.isDriver !== true;
   }

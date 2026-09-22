@@ -9,7 +9,10 @@ import {
 import { Cache } from 'cache-manager';
 import { isMongoId } from 'class-validator';
 import { FilterQuery, Types } from 'mongoose';
-import { getPlayReviewAccount } from '../authentication/play-review-accounts';
+import {
+  getPlayReviewAccount,
+  getPlayReviewAccounts,
+} from '../authentication/play-review-accounts';
 import {
   RentalBillingType,
   RentalDocument,
@@ -78,6 +81,13 @@ const RIDER_RENTAL_POPULATE = [
   { path: 'ride' },
 ];
 
+type ReviewRideOffer = {
+  driverId: string;
+  riderId: string;
+  rideId: string;
+  payload: RequestRideDTO & { amount: number; distance: number };
+};
+
 @Injectable()
 export class RidesService implements OnModuleInit {
   private readonly WAIT_TIME = 20 * 1000;
@@ -98,6 +108,157 @@ export class RidesService implements OnModuleInit {
         'Live bookings and driver availability are disabled for Play reviewer accounts',
       );
     }
+  }
+
+  getReviewMode(user: UserDocument) {
+    const account = getPlayReviewAccount(user.email);
+    return {
+      canDeleteAccount:
+        account?.kind === 'driverDeletion' || account?.kind === 'riderDeletion',
+      canGenerateDemoRide: account?.kind === 'driver',
+    };
+  }
+
+  async createReviewDemoOffer(driver: UserDocument) {
+    const account = getPlayReviewAccount(driver.email);
+    if (account?.kind !== 'driver') {
+      throw new NotFoundException('review demo is not available');
+    }
+
+    const activeTrip = await this.db.trips.findOne({
+      driver: driver.id,
+      status: { $nin: InactiveTripStatuses },
+      deleted: { $ne: true },
+    });
+    if (activeTrip) {
+      throw new BadRequestException(
+        'Complete or cancel the current demo trip before generating another',
+      );
+    }
+
+    const riderAccount = getPlayReviewAccounts().find(
+      (candidate) => candidate.kind === 'rider',
+    );
+    const [rider, ride] = await Promise.all([
+      riderAccount
+        ? this.db.users.findOne({
+            email: riderAccount.email,
+            deleted: { $ne: true },
+          })
+        : null,
+      this.db.rides.findOne({
+        driver: driver.id,
+        deleted: { $ne: true },
+        'specs.synthetic': true,
+        status: RideStatus.Online,
+        type: { $ne: RideType.Hire },
+      }),
+    ]);
+    if (!rider || !ride) {
+      throw new BadRequestException(
+        'Go online with the review vehicle before generating a demo ride',
+      );
+    }
+
+    const trackingId = `review-${Math.random().toString(32).substring(2)}`;
+    const payload: ReviewRideOffer['payload'] = {
+      amount: 0,
+      distance: 3200,
+      fromAddress: 'Transcorp Hilton Abuja, Maitama',
+      fromLat: 9.0747,
+      fromLon: 7.4951,
+      paymentMethod: PaymentMethod.Cash,
+      stops: [],
+      toAddress: 'Millennium Park, Abuja',
+      toLat: 9.0667,
+      toLon: 7.5008,
+      type: ride.type,
+    };
+    const offer: ReviewRideOffer = {
+      driverId: String(driver.id),
+      riderId: String(rider.id),
+      rideId: String(ride.id),
+      payload,
+    };
+
+    await Promise.all([
+      this.cache.set(trackingId, false, this.WAIT_TIME * 2),
+      this.cache.set(`review-offer:${trackingId}`, offer, this.WAIT_TIME * 2),
+      this.recordRideOffer({
+        driverId: String(driver.id),
+        userId: String(rider.id),
+        trackingId,
+      }),
+    ]);
+
+    this.websocket.emitToUser(driver, 'RideRequest', {
+      trackingId,
+      user: rider,
+      payload,
+    });
+
+    return { expiresInSeconds: (this.WAIT_TIME * 2) / 1000, trackingId };
+  }
+
+  private async acceptReviewDemoOffer(
+    driver: UserDocument,
+    trackingId: string,
+    offer: ReviewRideOffer,
+  ) {
+    if (offer.driverId !== String(driver.id)) {
+      throw new BadRequestException('invalid tracking id');
+    }
+    const [rider, ride] = await Promise.all([
+      this.db.users.findOne({ _id: offer.riderId, deleted: { $ne: true } }),
+      this.db.rides.findOne({
+        _id: offer.rideId,
+        driver: driver.id,
+        'specs.synthetic': true,
+        deleted: { $ne: true },
+      }),
+    ]);
+    if (!rider || !ride) {
+      throw new BadRequestException('review demo is unavailable');
+    }
+
+    const trip = await this.db.trips.create({
+      ...offer.payload,
+      amount: 0,
+      driver,
+      from: {
+        type: 'Point',
+        coordinates: [offer.payload.fromLat, offer.payload.fromLon],
+      },
+      meta: { playReviewSynthetic: true },
+      ride,
+      status: TripStatus.Started,
+      to: {
+        type: 'Point',
+        coordinates: [offer.payload.toLat, offer.payload.toLon],
+      },
+      tripStops: [],
+      user: rider,
+    });
+    await Promise.all([
+      this.db.rides.updateOne(
+        { _id: ride.id },
+        { $set: { status: RideStatus.Busy } },
+      ),
+      this.cache.del(trackingId),
+      this.cache.del(`review-offer:${trackingId}`),
+      this.resolveRideOffer(trackingId, RideOfferOutcome.Accepted, {
+        tripId: trip.id,
+      }),
+    ]);
+
+    const responseTrip = {
+      ...(typeof trip.toObject === 'function' ? trip.toObject() : trip),
+      driver,
+      ride,
+      user: rider,
+    };
+    this.websocket.emitToUser(driver, 'TripStarted', responseTrip);
+    return responseTrip;
   }
 
   async onModuleInit() {
@@ -607,6 +768,17 @@ export class RidesService implements OnModuleInit {
 
   async cancelConnection(user: UserDocument, payload: AcceptRideDTO) {
     const { trackingId } = payload;
+    const reviewOffer = await this.cache.get<ReviewRideOffer>(
+      `review-offer:${trackingId}`,
+    );
+    if (reviewOffer?.driverId === String(user.id)) {
+      await Promise.all([
+        this.cache.del(trackingId),
+        this.cache.del(`review-offer:${trackingId}`),
+        this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut),
+      ]);
+      return;
+    }
     const value = await this.cache.get<string>(`${user.id}`);
     if (value !== trackingId) {
       // Already cancelled, expired, or closed by the other party — treat as success.
@@ -621,6 +793,20 @@ export class RidesService implements OnModuleInit {
   }
 
   async acceptRide(driver: UserDocument, payload: AcceptRideDTO) {
+    const reviewOffer = await this.cache.get<ReviewRideOffer>(
+      `review-offer:${payload.trackingId}`,
+    );
+    if (reviewOffer) {
+      const account = getPlayReviewAccount(driver.email);
+      if (account?.kind !== 'driver') {
+        throw new BadRequestException('invalid tracking id');
+      }
+      return this.acceptReviewDemoOffer(
+        driver,
+        payload.trackingId,
+        reviewOffer,
+      );
+    }
     if (!(await this.finance.canDriverReceiveRides(driver.id))) {
       throw new BadRequestException(
         'Pay the required cash-trip commission deposit before accepting rides',
@@ -633,6 +819,7 @@ export class RidesService implements OnModuleInit {
     }
 
     await this.cache.set(payload.trackingId, true, this.WAIT_TIME * 2);
+    return undefined;
   }
 
   async connectToDriver(
@@ -1078,20 +1265,25 @@ export class RidesService implements OnModuleInit {
     });
 
     const quotes = await this.getRideQuotes({ distance });
-    const amount = quotes[ride.type.toLocaleLowerCase()] || 0;
+    const isPlayReviewSynthetic = trip.meta?.playReviewSynthetic === true;
+    const amount = isPlayReviewSynthetic
+      ? 0
+      : quotes[ride.type.toLocaleLowerCase()] || 0;
 
-    await this.paymentService
-      .chargeUser(user, {
-        amount,
-        method: trip.paymentMethod,
-      })
-      .then((response) => {
-        paymentResponse = response;
-      })
-      .catch((error) => {
-        paymentError = error.message;
-        status = TripStatus.PaymentFailed;
-      });
+    if (!isPlayReviewSynthetic) {
+      await this.paymentService
+        .chargeUser(user, {
+          amount,
+          method: trip.paymentMethod,
+        })
+        .then((response) => {
+          paymentResponse = response;
+        })
+        .catch((error) => {
+          paymentError = error.message;
+          status = TripStatus.PaymentFailed;
+        });
+    }
 
     [trip] = await Promise.all([
       this.db.trips.findOneAndUpdate(
@@ -1100,7 +1292,13 @@ export class RidesService implements OnModuleInit {
           $set: {
             status,
             endedAt: new Date(),
-            meta: { paymentResponse, paymentError, amount, distance },
+            meta: {
+              ...(trip.meta || {}),
+              paymentResponse,
+              paymentError,
+              amount,
+              distance,
+            },
           },
         },
         { new: true, upsert: false },
@@ -1128,7 +1326,7 @@ export class RidesService implements OnModuleInit {
       trip: trip.id,
     });
 
-    if (paymentSucceeded) {
+    if (paymentSucceeded && !isPlayReviewSynthetic) {
       await this.activityLedger.recordDriverEarning({
         driver: driver.id,
         trip: trip.id,
@@ -1160,7 +1358,7 @@ export class RidesService implements OnModuleInit {
     this.websocket.emitToUser(user, event, trip);
     this.websocket.emitToUser(driver, event, trip);
 
-    if (paymentSucceeded) {
+    if (paymentSucceeded && !isPlayReviewSynthetic) {
       this.push.sendToUser(user, {
         title: 'Trip completed',
         body: 'Thanks for riding with Ritz',
@@ -1179,7 +1377,7 @@ export class RidesService implements OnModuleInit {
           tripId: String(trip.id),
         },
       });
-    } else {
+    } else if (!isPlayReviewSynthetic) {
       this.push.sendToUser(user, {
         title: 'Payment failed',
         body: 'We could not charge your payment method',
@@ -1954,6 +2152,7 @@ export class RidesService implements OnModuleInit {
     if (
       status === RideStatus.Online &&
       ride.type !== RideType.Hire &&
+      !getPlayReviewAccount(user.email) &&
       !(await this.finance.canDriverReceiveRides(user.id))
     ) {
       throw new BadRequestException(

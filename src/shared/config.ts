@@ -94,10 +94,22 @@ const config = () => ({
     rider: {
       email: process.env.PLAY_RIDER_REVIEW_EMAIL,
       otp: process.env.PLAY_RIDER_REVIEW_OTP,
+      phoneNumber: process.env.PLAY_RIDER_REVIEW_PHONE_NUMBER,
+    },
+    riderDeletion: {
+      email: process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL,
+      otp: process.env.PLAY_RIDER_DELETE_REVIEW_OTP,
+      phoneNumber: process.env.PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER,
     },
     driver: {
       email: process.env.PLAY_DRIVER_REVIEW_EMAIL,
       otp: process.env.PLAY_DRIVER_REVIEW_OTP,
+      phoneNumber: undefined,
+    },
+    driverDeletion: {
+      email: process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL,
+      otp: process.env.PLAY_DRIVER_DELETE_REVIEW_OTP,
+      phoneNumber: undefined,
     },
   },
 });

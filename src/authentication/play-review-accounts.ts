@@ -3,7 +3,11 @@ import config from '../shared/config';
 import { Util } from '../shared/util';
 import { OTP_LENGTH, OTP_PATTERN } from './otp';
 
-export type PlayReviewAccountKind = 'rider' | 'driver';
+export type PlayReviewAccountKind =
+  | 'rider'
+  | 'riderDeletion'
+  | 'driver'
+  | 'driverDeletion';
 
 export type PlayReviewAccount = {
   email: string;
@@ -14,7 +18,9 @@ export type PlayReviewAccount = {
 
 export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
   rider: 'rider-review@ritzurbanluxury.com',
+  riderDeletion: 'rider-delete-review@ritzurbanluxury.com',
   driver: 'driver-review@ritzurbanluxury.com',
+  driverDeletion: 'driver-delete-review@ritzurbanluxury.com',
 };
 
 // Real riders only ever sign in with Google or a phone number - never email -
@@ -26,6 +32,7 @@ export const PLAY_REVIEW_PHONE_NUMBERS: Partial<
   Record<PlayReviewAccountKind, string>
 > = {
   rider: Util.formatPhoneNumber('07063650901', 'NG'),
+  riderDeletion: Util.formatPhoneNumber('07063650902', 'NG'),
 };
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -36,6 +43,7 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
     .map((kind): PlayReviewAccount | null => {
       const email = configured[kind].email?.trim();
       const otp = configured[kind].otp?.trim();
+      const configuredPhoneNumber = configured[kind].phoneNumber?.trim();
 
       if (!email && !otp) {
         return null;
@@ -57,22 +65,31 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
           `Play ${kind} reviewer OTP must contain ${OTP_LENGTH} digits`,
         );
       }
+      const phoneNumber =
+        configuredPhoneNumber || PLAY_REVIEW_PHONE_NUMBERS[kind];
 
       return {
         email: normalizedEmail,
         kind,
         otp,
-        phoneNumber: PLAY_REVIEW_PHONE_NUMBERS[kind],
+        phoneNumber: phoneNumber
+          ? Util.formatPhoneNumber(phoneNumber, 'NG')
+          : undefined,
       };
     })
     .filter((account): account is PlayReviewAccount => Boolean(account));
 
-  if (accounts.length === 2 && accounts[0].otp === accounts[1].otp) {
-    throw new Error('Play rider and driver reviewer OTPs must be different');
+  if (
+    new Set(accounts.map((account) => account.otp)).size !== accounts.length
+  ) {
+    throw new Error('Play reviewer OTPs must be different');
   }
 
   return accounts;
 }
+
+export const isDriverReviewAccount = (account: PlayReviewAccount | null) =>
+  account?.kind === 'driver' || account?.kind === 'driverDeletion';
 
 export function getPlayReviewAccount(
   email?: string | null,

@@ -41,7 +41,11 @@ describe('UserService.deleteAccount', () => {
       db,
       finance: {
         prepareAccountClosure: jest.fn().mockResolvedValue(null),
-        getDriverFinancialPosition: jest.fn(),
+        getDriverFinancialPosition: jest.fn().mockResolvedValue({
+          availablePayout: 0,
+          cashCommissionDebt: 0,
+          pendingPayout: 0,
+        }),
       },
       push: {},
     });
@@ -115,5 +119,47 @@ describe('UserService.deleteAccount', () => {
       deletedAt: expect.any(Date),
       closureRequest: null,
     });
+  });
+
+  it('allows the disposable reviewer account to exercise deletion', async () => {
+    process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL =
+      'driver-delete-review@ritzurbanluxury.com';
+    process.env.PLAY_DRIVER_DELETE_REVIEW_OTP = '9274';
+
+    await expect(
+      service.deleteAccount(
+        {
+          email: 'driver-delete-review@ritzurbanluxury.com',
+          id: userId,
+          isDriver: true,
+          phoneNumber: '2348012345678',
+        } as never,
+        { confirm: true },
+      ),
+    ).resolves.toMatchObject({ deleted: true });
+
+    delete process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL;
+    delete process.env.PLAY_DRIVER_DELETE_REVIEW_OTP;
+  });
+
+  it('allows the disposable rider reviewer account to exercise deletion', async () => {
+    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
+      'rider-delete-review@ritzurbanluxury.com';
+    process.env.PLAY_RIDER_DELETE_REVIEW_OTP = '5182';
+
+    await expect(
+      service.deleteAccount(
+        {
+          email: 'rider-delete-review@ritzurbanluxury.com',
+          id: userId,
+          isDriver: false,
+          phoneNumber: '2347063650902',
+        } as never,
+        { confirm: true },
+      ),
+    ).resolves.toMatchObject({ deleted: true });
+
+    delete process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL;
+    delete process.env.PLAY_RIDER_DELETE_REVIEW_OTP;
   });
 });

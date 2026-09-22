@@ -184,6 +184,19 @@ export class RidesController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('review-mode')
+  getReviewMode(@CurrentUser() user: UserDocument) {
+    return Response.json('review mode', this.ridesService.getReviewMode(user));
+  }
+
+  @UseVerifiedDriver()
+  @Post('review-mode/demo-offer')
+  async createReviewDemoOffer(@CurrentUser() user: UserDocument) {
+    const offer = await this.ridesService.createReviewDemoOffer(user);
+    return Response.json('demo ride offer generated', offer);
+  }
+
+  @UseGuards(JwtGuard)
   @Post('trips')
   async requestRide(
     @CurrentUser() user: UserDocument,
@@ -200,9 +213,9 @@ export class RidesController {
     @CurrentUser() user: UserDocument,
     @Query() payload: AcceptRideDTO,
   ) {
-    await this.ridesService.acceptRide(user, payload);
+    const trip = await this.ridesService.acceptRide(user, payload);
 
-    return Response.json('Accepting ride request');
+    return Response.json('Accepting ride request', trip);
   }
 
   @UseGuards(JwtGuard)

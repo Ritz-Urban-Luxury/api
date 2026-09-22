@@ -8,8 +8,14 @@ import {
 const ENV_KEYS = [
   'PLAY_RIDER_REVIEW_EMAIL',
   'PLAY_RIDER_REVIEW_OTP',
+  'PLAY_RIDER_REVIEW_PHONE_NUMBER',
+  'PLAY_RIDER_DELETE_REVIEW_EMAIL',
+  'PLAY_RIDER_DELETE_REVIEW_OTP',
+  'PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER',
   'PLAY_DRIVER_REVIEW_EMAIL',
   'PLAY_DRIVER_REVIEW_OTP',
+  'PLAY_DRIVER_DELETE_REVIEW_EMAIL',
+  'PLAY_DRIVER_DELETE_REVIEW_OTP',
 ] as const;
 
 describe('Play review accounts', () => {
@@ -76,5 +82,47 @@ describe('Play review accounts', () => {
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
     process.env.PLAY_DRIVER_REVIEW_OTP = '1234';
     expect(() => getPlayReviewAccounts()).toThrow('must be different');
+  });
+
+  it('configures a distinct disposable driver account for deletion review', () => {
+    process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL =
+      'driver-delete-review@ritzurbanluxury.com';
+    process.env.PLAY_DRIVER_DELETE_REVIEW_OTP = '9274';
+
+    const account = getPlayReviewAccount(
+      'driver-delete-review@ritzurbanluxury.com',
+    );
+
+    expect(account).toMatchObject({
+      kind: 'driverDeletion',
+      otp: '9274',
+    });
+  });
+
+  it('configures a distinct disposable rider account with phone login', () => {
+    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
+      'rider-delete-review@ritzurbanluxury.com';
+    process.env.PLAY_RIDER_DELETE_REVIEW_OTP = '5182';
+    process.env.PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER = '07063650902';
+
+    const account = getPlayReviewAccount(
+      'rider-delete-review@ritzurbanluxury.com',
+    );
+
+    expect(account).toMatchObject({
+      kind: 'riderDeletion',
+      otp: '5182',
+      phoneNumber: '2347063650902',
+    });
+  });
+
+  it('allows the reusable rider phone number to be configured', () => {
+    process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
+    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
+    process.env.PLAY_RIDER_REVIEW_PHONE_NUMBER = '08012345678';
+
+    expect(
+      getPlayReviewAccount('rider-review@ritzurbanluxury.com'),
+    ).toMatchObject({ phoneNumber: '2348012345678' });
   });
 });

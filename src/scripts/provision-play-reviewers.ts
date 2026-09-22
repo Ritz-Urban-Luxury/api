@@ -4,7 +4,6 @@ import { connect, connection, disconnect } from 'mongoose';
 import {
   getPlayReviewAccounts,
   PLAY_REVIEW_EMAILS,
-  PLAY_REVIEW_PHONE_NUMBERS,
 } from '../authentication/play-review-accounts';
 import {
   RideApprovalStatus,
@@ -27,10 +26,15 @@ async function provisionPlayReviewers() {
   }
 
   const accounts = getPlayReviewAccounts();
-  if (accounts.length !== 2) {
-    throw new Error(
-      'Configure both Play reviewer accounts before provisioning',
-    );
+  if (accounts.length !== 4) {
+    throw new Error('Configure all Play reviewer accounts before provisioning');
+  }
+  const riderAccount = accounts.find((account) => account.kind === 'rider');
+  const deletionRiderAccount = accounts.find(
+    (account) => account.kind === 'riderDeletion',
+  );
+  if (!riderAccount?.phoneNumber || !deletionRiderAccount?.phoneNumber) {
+    throw new Error('Configure phone numbers for both rider review accounts');
   }
 
   const databaseUrl = config().database.url;
@@ -55,9 +59,33 @@ async function provisionPlayReviewers() {
         isDriver: false,
         isVerified: false,
         lastName: 'Rider Reviewer',
-        ...(PLAY_REVIEW_PHONE_NUMBERS.rider
-          ? { phoneNumber: PLAY_REVIEW_PHONE_NUMBERS.rider }
-          : {}),
+        phoneNumber: riderAccount.phoneNumber,
+        'preferences.playReview': true,
+        'preferences.syntheticDataOnly': true,
+      },
+      $setOnInsert: { password },
+      $unset: {
+        deletedAt: 1,
+        deletionRequestedAt: 1,
+        vehiclesInFleet: 1,
+      },
+    },
+    { new: true, upsert: true },
+  );
+
+  const deletionRider = await UserModel.findOneAndUpdate(
+    { email: PLAY_REVIEW_EMAILS.riderDeletion },
+    {
+      $set: {
+        billingType: 'individual',
+        deleted: false,
+        email: PLAY_REVIEW_EMAILS.riderDeletion,
+        firstName: 'Apple',
+        isAppAdmin: false,
+        isDriver: false,
+        isVerified: false,
+        lastName: 'Rider Deletion Reviewer',
+        phoneNumber: deletionRiderAccount.phoneNumber,
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },
@@ -106,6 +134,33 @@ async function provisionPlayReviewers() {
     { new: true, upsert: true },
   );
 
+  const deletionDriver = await UserModel.findOneAndUpdate(
+    { email: PLAY_REVIEW_EMAILS.driverDeletion },
+    {
+      $set: {
+        address: 'Disposable App Store account-deletion review account',
+        billingType: 'individual',
+        city: 'Abuja',
+        deleted: false,
+        email: PLAY_REVIEW_EMAILS.driverDeletion,
+        firstName: 'Apple',
+        isAppAdmin: false,
+        isDriver: true,
+        isVerified: true,
+        languages: ['English'],
+        lastName: 'Deletion Reviewer',
+        license: SYNTHETIC_IMAGE,
+        licenseExpiry: new Date('2035-12-31T00:00:00.000Z'),
+        licenseNumber: 'APPLE-DELETE-0001',
+        'preferences.playReview': true,
+        'preferences.syntheticDataOnly': true,
+      },
+      $setOnInsert: { password },
+      $unset: { deletedAt: 1, deletionRequestedAt: 1, vehiclesInFleet: 1 },
+    },
+    { new: true, upsert: true },
+  );
+
   const vehicle = await RideModel.findOneAndUpdate(
     { driver: driver.id, registration: 'PLAY-REVIEW' },
     {
@@ -133,7 +188,7 @@ async function provisionPlayReviewers() {
   // Do not print either reusable OTP. Deployment logs are not a secret store.
   // eslint-disable-next-line no-console
   console.log(
-    `Provisioned ${rider.email}, ${driver.email}, and synthetic vehicle ${vehicle.registration}`,
+    `Provisioned ${rider.email}, ${deletionRider.email}, ${driver.email}, ${deletionDriver.email}, and synthetic vehicle ${vehicle.registration}`,
   );
 }
 
