@@ -12,7 +12,7 @@ Configure all six values in the review API environment:
 ```text
 PLAY_RIDER_REVIEW_EMAIL=rider-review@ritzurbanluxury.com
 PLAY_RIDER_REVIEW_OTP=<four unique digits>
-PLAY_RIDER_REVIEW_PHONE_NUMBER=07063650901
+PLAY_RIDER_REVIEW_PHONE_NUMBER=07064192718
 PLAY_RIDER_DELETE_REVIEW_EMAIL=rider-delete-review@ritzurbanluxury.com
 PLAY_RIDER_DELETE_REVIEW_OTP=<four unique digits>
 PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER=07063650902
@@ -50,7 +50,7 @@ synthetic vehicle.
    `driver-delete-review@ritzurbanluxury.com`. Use Settings > Account > Delete
    account. Do not use the reusable driver account for this test.
 
-For the rider app, sign in to the reusable account with phone `07063650901`
+For the rider app, sign in to the reusable account with phone `07064192718`
 and its configured rider OTP. Use `07063650902` and the separately configured
 rider-deletion OTP only for Settings > Account > Delete account. The deletion
 account cannot create synthetic bookings and can be restored by rerunning the

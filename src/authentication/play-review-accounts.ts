@@ -31,7 +31,7 @@ export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
 export const PLAY_REVIEW_PHONE_NUMBERS: Partial<
   Record<PlayReviewAccountKind, string>
 > = {
-  rider: Util.formatPhoneNumber('07063650901', 'NG'),
+  rider: Util.formatPhoneNumber('07064192718', 'NG'),
   riderDeletion: Util.formatPhoneNumber('07063650902', 'NG'),
 };
 

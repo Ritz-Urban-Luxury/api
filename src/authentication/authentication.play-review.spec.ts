@@ -12,7 +12,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
     isDriver: false,
     isVerified: false,
     password: 'already-hashed-password',
-    phoneNumber: '2347063650901',
+    phoneNumber: '2347064192718',
   };
 
   const createService = (failedAttempts = 0) => {
@@ -140,13 +140,13 @@ describe('AuthenticationService Play reviewer authentication', () => {
   it('skips SMS delivery and stores only an opaque request marker for the reviewer phone number', async () => {
     const { db, notificationService, service } = createService();
 
-    await service.requestPhoneOtp({ phoneNumber: '07063650901' });
+    await service.requestPhoneOtp({ phoneNumber: '07064192718' });
 
     expect(notificationService.sendSMS).not.toHaveBeenCalled();
     expect(db.authTokens.create).toHaveBeenCalledWith(
       expect.objectContaining({
         meta: {
-          phoneNumber: '2347063650901',
+          phoneNumber: '2347064192718',
           type: 'play-review-phone-otp-request',
         },
         token: expect.stringMatching(/^[a-f\d]{64}$/),
@@ -159,7 +159,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
 
     await expect(
       service.login({
-        phoneNumber: '07063650901',
+        phoneNumber: '07064192718',
         otp: '1847',
       }),
     ).resolves.toEqual({ token: 'reviewer-jwt', user: reviewerUser });
@@ -176,16 +176,16 @@ describe('AuthenticationService Play reviewer authentication', () => {
     );
   });
 
-  it('sends ordinary phone OTPs through the DND transactional route', async () => {
+  it('sends the former reviewer phone number through the normal DND OTP route', async () => {
     const { notificationService, service } = createService();
     notificationService.sendSMS.mockResolvedValue({});
 
-    await service.requestPhoneOtp({ phoneNumber: '08011112222' });
+    await service.requestPhoneOtp({ phoneNumber: '07063650901' });
 
     expect(notificationService.sendSMS).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: 'dnd',
-        to: '2348011112222',
+        to: '2347063650901',
       }),
     );
   });
@@ -213,7 +213,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
 
     await expect(
       service.login({
-        phoneNumber: '07063650901',
+        phoneNumber: '07064192718',
         otp: '9999',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);

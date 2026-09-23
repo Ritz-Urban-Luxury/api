@@ -69,7 +69,7 @@ describe('Play review accounts', () => {
     );
 
     expect(rider.phoneNumber).toBe(PLAY_REVIEW_PHONE_NUMBERS.rider);
-    expect(rider.phoneNumber).toBe('2347063650901');
+    expect(rider.phoneNumber).toBe('2347064192718');
     expect(driver.phoneNumber).toBeUndefined();
   });
 

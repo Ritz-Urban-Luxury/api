@@ -19,8 +19,9 @@ same `PLAY_RIDER_REVIEW_OTP`. Real riders only ever sign in with Google or a
 phone number, never email, so store reviewers should be given the phone-number
 credential below rather than the email one - it exercises the same flow a real
 user goes through. The phone number itself is not a secret (it's meant to go
-in review notes), so it's a fixed constant in code
-(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`), not an env var.
+in review notes), so it has a safe default in code
+(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`). A deployment can
+override that default with `PLAY_RIDER_REVIEW_PHONE_NUMBER`.
 Only the rider account has a phone number configured; the driver reviewer
 still signs in with email only.
 
@@ -48,7 +49,7 @@ Reviewer activity runs in an isolated sandbox:
 ## Rider app (recommended: phone number)
 
 ```text
-Phone number: 07063650901
+Phone number: 07064192718
 Reusable OTP: [PLAY_RIDER_REVIEW_OTP from the production secret manager]
 
 Instructions:
