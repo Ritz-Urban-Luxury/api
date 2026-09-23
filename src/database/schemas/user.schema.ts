@@ -151,6 +151,10 @@ export class User extends BaseSchema {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
+UserSchema.virtual('requiresProfileSetup').get(function requiresProfileSetup() {
+  return Boolean(this.oAuthProvider && !this.phoneNumber);
+});
+
 UserSchema.pre('save', async function hashPassword(next) {
   if (!this.isModified('password')) {
     next();
