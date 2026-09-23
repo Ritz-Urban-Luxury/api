@@ -1,4 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthenticationService } from './authentication.service';
 
 describe('AuthenticationService Play reviewer authentication', () => {
@@ -32,6 +35,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
       authTokens: {
         countDocuments: jest.fn().mockResolvedValue(failedAttempts),
         create: jest.fn().mockResolvedValue({}),
+        deleteOne: jest.fn().mockResolvedValue({}),
         findOne: jest.fn().mockResolvedValue(null),
         updateOne: jest.fn(),
       },
@@ -168,6 +172,38 @@ describe('AuthenticationService Play reviewer authentication', () => {
           success: true,
           type: 'play-review-otp-attempt',
         }),
+      }),
+    );
+  });
+
+  it('sends ordinary phone OTPs through the DND transactional route', async () => {
+    const { notificationService, service } = createService();
+    notificationService.sendSMS.mockResolvedValue({});
+
+    await service.requestPhoneOtp({ phoneNumber: '08011112222' });
+
+    expect(notificationService.sendSMS).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'dnd',
+        to: '2348011112222',
+      }),
+    );
+  });
+
+  it('removes the OTP and reports an unavailable service when Termii rejects it', async () => {
+    const { db, notificationService, service } = createService();
+    notificationService.sendSMS.mockRejectedValue(
+      new Error('transactional route unavailable'),
+    );
+
+    await expect(
+      service.requestPhoneOtp({ phoneNumber: '08011112222' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(db.authTokens.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'meta.phoneNumber': '2348011112222',
+        'meta.type': 'phone-otp',
       }),
     );
   });

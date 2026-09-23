@@ -58,12 +58,12 @@ export class NotificationService {
   }
 
   sendSMS(payload: SMSPayload) {
-    this.logger.log('new sms', payload);
     const { termii, turnOffSMS } = config();
 
-    const channel = ['OTPAlert', 'N-Alert'].includes(payload.from)
-      ? 'dnd'
-      : 'generic';
+    const channel =
+      payload.channel ||
+      (['OTPAlert', 'N-Alert'].includes(payload.from) ? 'dnd' : 'generic');
+    this.logger.log('new sms', { channel, to: payload.to });
     if (turnOffSMS) {
       return null;
     }

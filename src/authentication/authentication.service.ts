@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -117,14 +118,25 @@ export class AuthenticationService {
         },
       });
 
-      this.notificationService
-        .sendSMS({
+      try {
+        await this.notificationService.sendSMS({
           to: phone,
           sms: `_${token}_`,
-        })
-        .catch((error) => {
-          this.logger.error(`error sending phone otp sms - ${error.message}`);
+          channel: 'dnd',
         });
+      } catch (error) {
+        await this.db.authTokens.deleteOne({
+          token,
+          'meta.phoneNumber': phone,
+          'meta.type': 'phone-otp',
+        });
+        this.logger.error(
+          `error sending phone otp sms - ${(error as Error).message}`,
+        );
+        throw new ServiceUnavailableException(
+          'Unable to send verification code. Please try again.',
+        );
+      }
     }
   }
 
