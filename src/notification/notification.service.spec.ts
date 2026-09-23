@@ -8,6 +8,7 @@ describe('NotificationService SMS routing', () => {
     process.env.TERMII_API_KEY = 'test-key';
     process.env.TERMII_API_URL = 'https://example.termii.test';
     process.env.TERMII_FROM = 'Ritz Luxury';
+    process.env.TERMII_DND_FROM = 'OE Alert';
     delete process.env.TURN_OFF_SMS;
   });
 
@@ -30,8 +31,27 @@ describe('NotificationService SMS routing', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           channel: 'dnd',
-          from: 'Ritz Luxury',
+          from: 'OE Alert',
           to: '2348011112222',
+        }),
+      }),
+    );
+  });
+
+  it('keeps the branded sender for generic messages', async () => {
+    const request = jest.spyOn(Http, 'request').mockResolvedValue({} as never);
+    const service = new NotificationService({ log: jest.fn() } as never);
+
+    await service.sendSMS({
+      sms: 'A promotional message',
+      to: '2348011112222',
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          channel: 'generic',
+          from: 'Ritz Luxury',
         }),
       }),
     );

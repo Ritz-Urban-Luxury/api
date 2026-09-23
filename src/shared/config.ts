@@ -8,6 +8,7 @@ const config = () => ({
     key: process.env.TERMII_API_KEY,
     url: process.env.TERMII_API_URL,
     from: process.env.TERMII_FROM,
+    dndFrom: process.env.TERMII_DND_FROM || 'OE Alert',
   },
   email: {
     provider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),

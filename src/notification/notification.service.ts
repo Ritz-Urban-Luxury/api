@@ -59,11 +59,20 @@ export class NotificationService {
 
   sendSMS(payload: SMSPayload) {
     const { termii, turnOffSMS } = config();
+    const {
+      channel: requestedChannel,
+      from: requestedFrom,
+      ...message
+    } = payload;
 
     const channel =
-      payload.channel ||
-      (['OTPAlert', 'N-Alert'].includes(payload.from) ? 'dnd' : 'generic');
-    this.logger.log('new sms', { channel, to: payload.to });
+      requestedChannel ||
+      (['OTPAlert', 'N-Alert', 'OE Alert'].includes(requestedFrom)
+        ? 'dnd'
+        : 'generic');
+    const from =
+      requestedFrom || (channel === 'dnd' ? termii.dndFrom : termii.from);
+    this.logger.log('new sms', { channel, from, to: payload.to });
     if (turnOffSMS) {
       return null;
     }
@@ -73,8 +82,8 @@ export class NotificationService {
       baseURL: termii.url,
       url: '/api/sms/send',
       data: {
-        from: termii.from,
-        ...payload,
+        from,
+        ...message,
         api_key: termii.key,
         channel,
         type: 'plain',

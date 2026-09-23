@@ -121,7 +121,7 @@ export class AuthenticationService {
       try {
         await this.notificationService.sendSMS({
           to: phone,
-          sms: `_${token}_`,
+          sms: `Your Ritz Urban Luxury verification code is ${token}. This code expires in 10 minutes. Do not share it with anyone.`,
           channel: 'dnd',
         });
       } catch (error) {

@@ -185,6 +185,9 @@ describe('AuthenticationService Play reviewer authentication', () => {
     expect(notificationService.sendSMS).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: 'dnd',
+        sms: expect.stringMatching(
+          /^Your Ritz Urban Luxury verification code is \d{4}\. This code expires in 10 minutes\. Do not share it with anyone\.$/,
+        ),
         to: '2347063650901',
       }),
     );
