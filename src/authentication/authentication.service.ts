@@ -758,7 +758,10 @@ export class AuthenticationService {
   }
 
   async authorizeUser(user: UserDocument) {
-    const payloadId = await hash(`${user.phoneNumber}${user.password}`, 8);
+    // Bind sessions to the password rather than mutable profile fields. OAuth
+    // users receive their first token before adding a phone number, so tying
+    // the token to phoneNumber invalidates that session during profile setup.
+    const payloadId = await hash(user.password, 8);
     const token = this.jwtService.sign({ id: user.id, payloadId });
 
     return { user, token };
@@ -799,10 +802,7 @@ export class AuthenticationService {
       return null;
     }
 
-    const isValid = await compare(
-      `${user.phoneNumber}${user.password}`,
-      payloadId,
-    );
+    const isValid = await this.isValidJwtPayloadId(user, payloadId);
     if (!isValid) {
       return null;
     }
@@ -854,15 +854,31 @@ export class AuthenticationService {
       deleted: { $ne: true },
     });
     if (user) {
-      const isValid = await compare(
-        `${user.phoneNumber}${user.password}`,
-        payloadId,
-      );
+      const isValid = await this.isValidJwtPayloadId(user, payloadId);
       if (isValid) {
         return user;
       }
     }
 
     return null;
+  }
+
+  private async isValidJwtPayloadId(
+    user: UserDocument,
+    payloadId: string,
+  ): Promise<boolean> {
+    const values = [
+      user.password,
+      // Accept tokens issued by older builds while users migrate to the
+      // password-bound payload format.
+      `${user.phoneNumber}${user.password}`,
+      // OAuth setup tokens were issued while phoneNumber was undefined.
+      ...(user.oAuthProvider ? [`undefined${user.password}`] : []),
+    ];
+
+    const matches = await Promise.all(
+      [...new Set(values)].map((value) => compare(value, payloadId)),
+    );
+    return matches.some(Boolean);
   }
 }
