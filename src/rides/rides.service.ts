@@ -2136,17 +2136,43 @@ export class RidesService implements OnModuleInit {
     status: RideStatus.Online | RideStatus.Offline,
     rideId?: string,
   ) {
-    if (!rideId) {
-      throw new BadRequestException('rideId is required');
-    }
-
-    const ride = await this.db.rides.findOne({
-      _id: rideId,
+    const explicitRideQuery = rideId
+      ? {
+          _id: rideId,
+          deleted: { $ne: true },
+          driver: user.id,
+        }
+      : null;
+    const approvedTripRideQuery = {
+      approvalStatus: RideApprovalStatus.Approved,
       deleted: { $ne: true },
       driver: user.id,
-    });
+      type: { $ne: RideType.Hire },
+    };
+
+    let ride = explicitRideQuery
+      ? await this.db.rides.findOne(explicitRideQuery)
+      : await this.db.rides.findOne({
+          ...approvedTripRideQuery,
+          status:
+            status === RideStatus.Offline
+              ? RideStatus.Online
+              : { $in: [RideStatus.Online, RideStatus.Offline] },
+        });
+
+    // Going offline is idempotent even when every approved vehicle is already
+    // offline. Returning one also keeps the endpoint response shape unchanged.
+    if (!ride && !rideId && status === RideStatus.Offline) {
+      ride = await this.db.rides.findOne({
+        ...approvedTripRideQuery,
+        status: RideStatus.Offline,
+      });
+    }
+
     if (!ride) {
-      throw new BadRequestException('Ride not found');
+      throw new BadRequestException(
+        rideId ? 'Ride not found' : 'No approved trip vehicle found',
+      );
     }
 
     if (

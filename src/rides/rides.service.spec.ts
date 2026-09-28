@@ -277,6 +277,73 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
+  it('automatically uses an approved trip vehicle when no ride id is sent', async () => {
+    db.rides.findOne.mockResolvedValue(syntheticRide);
+    db.rides.findOneAndUpdate.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Online,
+    });
+
+    await expect(
+      service.setRideAvailability(driverReviewer, RideStatus.Online),
+    ).resolves.toMatchObject({ status: RideStatus.Online });
+
+    expect(db.rides.findOne).toHaveBeenCalledWith({
+      approvalStatus: RideApprovalStatus.Approved,
+      deleted: { $ne: true },
+      driver: ownerId,
+      status: { $in: [RideStatus.Online, RideStatus.Offline] },
+      type: { $ne: RideType.Hire },
+    });
+    expect(db.rides.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: rideId },
+      {
+        $set: {
+          'specs.synthetic': true,
+          status: RideStatus.Online,
+        },
+      },
+      { new: true },
+    );
+  });
+
+  it('automatically takes the currently online trip vehicle offline', async () => {
+    db.rides.findOne.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Online,
+    });
+    db.rides.findOneAndUpdate.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Offline,
+    });
+
+    await expect(
+      service.setRideAvailability(driverReviewer, RideStatus.Offline),
+    ).resolves.toMatchObject({ status: RideStatus.Offline });
+
+    expect(db.rides.findOne).toHaveBeenCalledWith({
+      approvalStatus: RideApprovalStatus.Approved,
+      deleted: { $ne: true },
+      driver: ownerId,
+      status: RideStatus.Online,
+      type: { $ne: RideType.Hire },
+    });
+    expect(db.driverOnlineSessions.updateMany).toHaveBeenCalledWith(
+      { driver: ownerId, endedAt: { $exists: false } },
+      { $set: { endedAt: expect.any(Date) } },
+    );
+  });
+
+  it('rejects automatic availability changes without an approved trip vehicle', async () => {
+    db.rides.findOne.mockResolvedValue(null);
+
+    await expect(
+      service.setRideAvailability(driverReviewer, RideStatus.Online),
+    ).rejects.toThrow('No approved trip vehicle found');
+
+    expect(db.rides.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   it('generates a real socket offer only for the reusable review driver', async () => {
     db.rides.findOne.mockResolvedValue({
       ...syntheticRide,
