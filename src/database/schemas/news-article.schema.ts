@@ -33,8 +33,8 @@ export class NewsArticle extends BaseSchema {
   @Prop({ required: true, trim: true })
   body: string;
 
-  @Prop({ trim: true })
-  coverImageUrl?: string;
+  @Prop({ required: true, trim: true })
+  coverImageUrl: string;
 
   @Prop({ type: String, enum: Object.values(NewsAudience), required: true })
   audience: NewsAudience;

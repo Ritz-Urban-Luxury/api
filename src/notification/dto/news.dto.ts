@@ -4,7 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -46,10 +46,12 @@ export class CreateNewsDTO {
   publishedAt?: string;
 
   @Transform(trim)
-  @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsString()
+  @Matches(/^(https?:\/\/.+|asset:\/\/ritz-driver-welcome)$/, {
+    message: 'coverImageUrl must be a valid http(s) image URL',
+  })
   @MaxLength(500)
-  coverImageUrl?: string;
+  coverImageUrl: string;
 }
 
 export class UpdateNewsDTO extends CreateNewsDTO {}

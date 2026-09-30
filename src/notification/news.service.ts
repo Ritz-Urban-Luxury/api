@@ -17,6 +17,9 @@ export class NewsService implements OnModuleInit {
     await this.db.newsArticles.findOneAndUpdate(
       { slug: DEFAULT_NEWS_SLUG },
       {
+        $set: {
+          coverImageUrl: 'asset://ritz-driver-welcome',
+        },
         $setOnInsert: {
           slug: DEFAULT_NEWS_SLUG,
           title: 'Welcome to Ritz Driver',

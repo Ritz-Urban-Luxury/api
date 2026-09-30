@@ -27,6 +27,9 @@ describe('NewsService', () => {
     expect(db.newsArticles.findOneAndUpdate).toHaveBeenCalledWith(
       { slug: 'welcome-to-ritz-driver' },
       {
+        $set: {
+          coverImageUrl: 'asset://ritz-driver-welcome',
+        },
         $setOnInsert: expect.objectContaining({
           audience: NewsAudience.Driver,
           isDefault: true,
@@ -45,6 +48,7 @@ describe('NewsService', () => {
     await service.update(admin, 'welcome', {
       audience: NewsAudience.Rider,
       body: 'An updated welcome message.',
+      coverImageUrl: 'asset://ritz-driver-welcome',
       status: NewsStatus.Archived,
       summary: 'Updated summary',
       title: 'Updated welcome',
