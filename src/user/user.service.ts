@@ -208,12 +208,13 @@ export class UserService {
       const position = await this.finance.getDriverFinancialPosition(user);
       if (position.cashCommissionDebt > 0) {
         throw new ConflictException(
-          'Settle your outstanding cash-trip commission before deleting your driver account',
+          'You have an outstanding cash-trip commission. Please make the required payment before closing your account.',
         );
       }
-      if (position.availablePayout > 0 || position.pendingPayout > 0) {
-        throw new ConflictException(
-          'Complete your driver earnings payout before deleting your account',
+      if (position.availablePayout > 0) {
+        await this.finance.prepareDriverAccountClosurePayout(
+          user,
+          payload.bankAccountId,
         );
       }
     }
@@ -249,6 +250,7 @@ export class UserService {
       }),
       this.db.cards.deleteMany({ user: userId }),
       this.db.messages.deleteMany({ sender: userId }),
+      this.db.newsReads.deleteMany({ user: userId }),
       ...(authTokenIdentifiers.length > 0
         ? [this.db.authTokens.deleteMany({ $or: authTokenIdentifiers })]
         : []),

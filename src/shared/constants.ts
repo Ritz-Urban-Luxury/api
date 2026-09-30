@@ -20,6 +20,8 @@ export const DB_TABLES = {
   FINANCIAL_SETTINGS: 'financial_settings',
   DRIVER_FINANCIAL_STATES: 'driver_financial_states',
   PUSH_CAMPAIGNS: 'push_campaigns',
+  NEWS_ARTICLES: 'news_articles',
+  NEWS_READS: 'news_reads',
   USER_BLOCKS: 'user_blocks',
   USER_REPORTS: 'user_reports',
 };

@@ -57,7 +57,10 @@ export class FinanceService {
     );
   }
 
-  async updateSettings(admin: UserDocument, payload: UpdateFinancialSettingsDTO) {
+  async updateSettings(
+    admin: UserDocument,
+    payload: UpdateFinancialSettingsDTO,
+  ) {
     const $set: Record<string, unknown> = { updatedBy: admin.id };
     if (payload.driverCashDebtLimit !== undefined) {
       $set.driverCashDebtLimitKobo = toKobo(payload.driverCashDebtLimit);
@@ -88,10 +91,13 @@ export class FinanceService {
   }
 
   private nameMatchStatus(user: UserDocument, resolvedName: string) {
-    const profileTokens = this.normalizeName(`${user.firstName} ${user.lastName}`);
+    const profileTokens = this.normalizeName(
+      `${user.firstName} ${user.lastName}`,
+    );
     const resolvedTokens = new Set(this.normalizeName(resolvedName));
     const matched =
-      profileTokens.length >= 2 && profileTokens.every((token) => resolvedTokens.has(token));
+      profileTokens.length >= 2 &&
+      profileTokens.every((token) => resolvedTokens.has(token));
     return matched ? BankNameMatchStatus.Matched : BankNameMatchStatus.Review;
   }
 
@@ -325,15 +331,26 @@ export class FinanceService {
       }),
     ]);
 
-    this.notifyRequest(user, request.publicReference, 'Account closure received');
+    this.notifyRequest(
+      user,
+      request.publicReference,
+      'Account closure received',
+    );
     return request;
   }
 
   async getDriverDebtNaira(driverId: string) {
-    const rows = await this.db.driverLedgerEntries.aggregate<{ total: number }>([
-      { $match: { driver: new Types.ObjectId(driverId), deleted: { $ne: true } } },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]);
+    const rows = await this.db.driverLedgerEntries.aggregate<{ total: number }>(
+      [
+        {
+          $match: {
+            driver: new Types.ObjectId(driverId),
+            deleted: { $ne: true },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ],
+    );
     return Math.max(0, rows[0]?.total || 0);
   }
 
@@ -348,7 +365,9 @@ export class FinanceService {
           $match: {
             driver: new Types.ObjectId(driver.id),
             deleted: { $ne: true },
-            paymentMethod: { $in: [PaymentMethod.Card, PaymentMethod.RULBalance] },
+            paymentMethod: {
+              $in: [PaymentMethod.Card, PaymentMethod.RULBalance],
+            },
             earnedAt: { $lte: cutoff },
           },
         },
@@ -371,7 +390,10 @@ export class FinanceService {
         sum + request.amountKobo + Number(request.debtOffsetKobo || 0),
       0,
     );
-    const grossUnsettledKobo = Math.max(0, earningsKobo - settledOrReservedKobo);
+    const grossUnsettledKobo = Math.max(
+      0,
+      earningsKobo - settledOrReservedKobo,
+    );
     const debtKobo = toKobo(debtNaira);
     const debtOffsetKobo = Math.min(debtKobo, grossUnsettledKobo);
     const availablePayoutKobo = Math.max(
@@ -404,7 +426,10 @@ export class FinanceService {
     };
   }
 
-  async createDriverPayout(driver: UserDocument, payload: CreateDriverPayoutDTO) {
+  async createDriverPayout(
+    driver: UserDocument,
+    payload: CreateDriverPayoutDTO,
+  ) {
     const existing = await this.db.payoutRequests.findOne({
       user: driver.id,
       type: PayoutRequestType.DriverEarnings,
@@ -430,7 +455,9 @@ export class FinanceService {
       deleted: { $ne: true },
     });
     if (!bank) {
-      throw new BadRequestException('A verified matching bank account is required');
+      throw new BadRequestException(
+        'A verified matching bank account is required',
+      );
     }
 
     const request = await this.db.payoutRequests.create({
@@ -452,14 +479,74 @@ export class FinanceService {
       publicReference: `PAY-${randomUUID().split('-')[0].toUpperCase()}`,
       providerReference: `rul_driver_${randomUUID()}`.slice(0, 50),
     });
-    this.notifyRequest(driver, request.publicReference, 'Payout request received');
+    this.notifyRequest(
+      driver,
+      request.publicReference,
+      'Payout request received',
+    );
+    return request;
+  }
+
+  async prepareDriverAccountClosurePayout(
+    driver: UserDocument,
+    bankAccountId?: string,
+  ) {
+    const position = await this.getDriverFinancialPosition(driver);
+    if (position.availablePayout <= 0) {
+      return null;
+    }
+    if (!bankAccountId) {
+      throw new BadRequestException(
+        'Add a verified bank account to receive your remaining earnings before deleting your account',
+      );
+    }
+
+    const bank = await this.db.bankAccounts.findOne({
+      _id: bankAccountId,
+      user: driver.id,
+      nameMatchStatus: BankNameMatchStatus.Matched,
+      deleted: { $ne: true },
+    });
+    if (!bank) {
+      throw new BadRequestException(
+        'A verified bank account matching your Ritz profile is required',
+      );
+    }
+
+    const request = await this.db.payoutRequests.create({
+      user: driver.id,
+      type: PayoutRequestType.DriverEarnings,
+      status: PayoutRequestStatus.Requested,
+      destinationType: PayoutDestinationType.BankAccount,
+      amountKobo: toKobo(position.availablePayout),
+      debtOffsetKobo: 0,
+      bankAccount: bank.id,
+      destinationSnapshot: {
+        bankCode: bank.bankCode,
+        bankName: bank.bankName,
+        accountNumber: bank.accountNumber,
+        resolvedAccountName: bank.resolvedAccountName,
+      },
+      notificationEmail: driver.email,
+      notificationPhone: driver.phoneNumber,
+      publicReference: `PAY-${randomUUID().split('-')[0].toUpperCase()}`,
+      providerReference: `rul_driver_close_${randomUUID()}`.slice(0, 50),
+    });
+
+    this.notifyRequest(
+      driver,
+      request.publicReference,
+      'Final earnings payout requested',
+    );
     return request;
   }
 
   async createDriverDebtPaymentReference(driver: UserDocument, amount: number) {
     const position = await this.getDriverFinancialPosition(driver);
     if (amount <= 0 || amount > position.cashCommissionDebt) {
-      throw new BadRequestException('Enter an amount within your outstanding debt');
+      throw new BadRequestException(
+        'Enter an amount within your outstanding debt',
+      );
     }
     const reference = `rul_debt_${randomUUID()}`.slice(0, 50);
     await this.db.authTokens.create({
@@ -573,9 +660,13 @@ export class FinanceService {
     if (!request) throw new NotFoundException('Payout request not found');
 
     try {
-      if (request.destinationType === PayoutDestinationType.OriginalPaymentMethod) {
+      if (
+        request.destinationType === PayoutDestinationType.OriginalPaymentMethod
+      ) {
         if (!request.providerTransactionReference) {
-          throw new BadRequestException('Original transaction reference is unavailable');
+          throw new BadRequestException(
+            'Original transaction reference is unavailable',
+          );
         }
         const refund = await this.paystack.refund({
           transaction: request.providerTransactionReference,
@@ -589,7 +680,9 @@ export class FinanceService {
           {
             $set: {
               status: PayoutRequestStatus.Processing,
-              providerRefundId: String((refund as Record<string, unknown>)?.id || ''),
+              providerRefundId: String(
+                (refund as Record<string, unknown>)?.id || '',
+              ),
               providerMeta: refund,
             },
           },
@@ -598,7 +691,8 @@ export class FinanceService {
       }
 
       const bank = await this.db.bankAccounts.findById(request.bankAccount);
-      if (!bank) throw new BadRequestException('Payout bank account is unavailable');
+      if (!bank)
+        throw new BadRequestException('Payout bank account is unavailable');
       let recipientCode = bank.recipientCode;
       if (!recipientCode) {
         const recipient = await this.paystack.createTransferRecipient({
@@ -638,7 +732,8 @@ export class FinanceService {
         {
           $set: {
             status: PayoutRequestStatus.FailedRetryable,
-            failureReason: (error as Error)?.message || 'Provider request failed',
+            failureReason:
+              (error as Error)?.message || 'Provider request failed',
           },
         },
       );
@@ -684,7 +779,10 @@ export class FinanceService {
       { new: true },
     );
     if (!request) throw new ConflictException('Payout request status changed');
-    this.notifyStoredRequest(request, 'Your Ritz payout request needs attention');
+    this.notifyStoredRequest(
+      request,
+      'Your Ritz payout request needs attention',
+    );
     return request;
   }
 

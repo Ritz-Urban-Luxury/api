@@ -28,6 +28,8 @@ import { DriverFinancialStateSchema } from './schemas/driver-financial-state.sch
 import { PushCampaignSchema } from './schemas/push-campaign.schema';
 import { UserBlockSchema } from './schemas/user-block.schema';
 import { UserReportSchema } from './schemas/user-report.schema';
+import { NewsArticleSchema } from './schemas/news-article.schema';
+import { NewsReadSchema } from './schemas/news-read.schema';
 
 @Global()
 @Module({
@@ -64,6 +66,8 @@ import { UserReportSchema } from './schemas/user-report.schema';
         schema: DriverFinancialStateSchema,
       },
       { name: DB_TABLES.PUSH_CAMPAIGNS, schema: PushCampaignSchema },
+      { name: DB_TABLES.NEWS_ARTICLES, schema: NewsArticleSchema },
+      { name: DB_TABLES.NEWS_READS, schema: NewsReadSchema },
       { name: DB_TABLES.USER_BLOCKS, schema: UserBlockSchema },
       { name: DB_TABLES.USER_REPORTS, schema: UserReportSchema },
     ]),

@@ -35,6 +35,8 @@ import { DriverFinancialStateDocument } from './schemas/driver-financial-state.s
 import { PushCampaignDocument } from './schemas/push-campaign.schema';
 import { UserBlockDocument } from './schemas/user-block.schema';
 import { UserReportDocument } from './schemas/user-report.schema';
+import { NewsArticleDocument } from './schemas/news-article.schema';
+import { NewsReadDocument } from './schemas/news-read.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -81,6 +83,10 @@ export class DatabaseService {
     public readonly driverFinancialStates: Model<DriverFinancialStateDocument>,
     @InjectModel(DB_TABLES.PUSH_CAMPAIGNS)
     public readonly pushCampaigns: Model<PushCampaignDocument>,
+    @InjectModel(DB_TABLES.NEWS_ARTICLES)
+    public readonly newsArticles: Model<NewsArticleDocument>,
+    @InjectModel(DB_TABLES.NEWS_READS)
+    public readonly newsReads: Model<NewsReadDocument>,
     @InjectModel(DB_TABLES.USER_BLOCKS)
     public readonly userBlocks: Model<UserBlockDocument>,
     @InjectModel(DB_TABLES.USER_REPORTS)

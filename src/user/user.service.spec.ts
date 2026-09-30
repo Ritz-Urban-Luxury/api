@@ -25,6 +25,7 @@ describe('UserService.deleteAccount', () => {
       driverOnlineSessions: { updateMany: resolved },
       driverRideOffers: { deleteMany: resolved },
       messages: { deleteMany: resolved },
+      newsReads: { deleteMany: resolved },
       rentals: { findOne: jest.fn().mockResolvedValue(null) },
       rides: { updateMany: resolved },
       trips: { findOne: jest.fn().mockResolvedValue(null) },
@@ -41,6 +42,7 @@ describe('UserService.deleteAccount', () => {
       db,
       finance: {
         prepareAccountClosure: jest.fn().mockResolvedValue(null),
+        prepareDriverAccountClosurePayout: jest.fn().mockResolvedValue(null),
         getDriverFinancialPosition: jest.fn().mockResolvedValue({
           availablePayout: 0,
           cashCommissionDebt: 0,
@@ -78,6 +80,58 @@ describe('UserService.deleteAccount', () => {
     );
   });
 
+  it('blocks driver deletion while cash-trip commission is outstanding', async () => {
+    db.rides.exists.mockResolvedValue(true);
+    (service as any).finance.getDriverFinancialPosition.mockResolvedValue({
+      availablePayout: 0,
+      cashCommissionDebt: 2500,
+      pendingPayout: 0,
+    });
+
+    await expect(
+      service.deleteAccount(user, { confirm: true }),
+    ).rejects.toThrow('Please make the required payment');
+    expect(
+      (service as any).finance.prepareDriverAccountClosurePayout,
+    ).not.toHaveBeenCalled();
+    expect(db.users.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('requests available driver earnings before deletion', async () => {
+    db.rides.exists.mockResolvedValue(true);
+    (service as any).finance.getDriverFinancialPosition.mockResolvedValue({
+      availablePayout: 12000,
+      cashCommissionDebt: 0,
+      pendingPayout: 0,
+    });
+
+    await service.deleteAccount(user, {
+      confirm: true,
+      bankAccountId: '64a000000000000000000002',
+    });
+
+    expect(
+      (service as any).finance.prepareDriverAccountClosurePayout,
+    ).toHaveBeenCalledWith(user, '64a000000000000000000002');
+    expect(db.users.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it('allows deletion while an earnings payout is pending', async () => {
+    db.rides.exists.mockResolvedValue(true);
+    (service as any).finance.getDriverFinancialPosition.mockResolvedValue({
+      availablePayout: 0,
+      cashCommissionDebt: 0,
+      pendingPayout: 12000,
+    });
+
+    await expect(
+      service.deleteAccount(user, { confirm: true }),
+    ).resolves.toMatchObject({ deleted: true });
+    expect(
+      (service as any).finance.prepareDriverAccountClosurePayout,
+    ).not.toHaveBeenCalled();
+  });
+
   it('removes private records and anonymises the account', async () => {
     const result = await service.deleteAccount(user, { confirm: true });
 
@@ -85,6 +139,7 @@ describe('UserService.deleteAccount', () => {
     expect(db.userBlocks.deleteMany).toHaveBeenCalledWith({
       $or: [{ blocker: userId }, { blocked: userId }],
     });
+    expect(db.newsReads.deleteMany).toHaveBeenCalledWith({ user: userId });
     expect(db.authTokens.deleteMany).toHaveBeenCalledWith({
       $or: [
         { 'meta.phoneNumber': '2348012345678' },
