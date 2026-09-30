@@ -1,21 +1,20 @@
 # Google Play reviewer accounts
 
-The reviewer bypass is backend-only and is disabled unless all four production
-environment variables are configured:
+The reviewer bypass is backend-only and is disabled unless the shared OTP and
+reviewer account emails are configured:
 
 ```env
+PLAY_REVIEW_OTP=<shared-four-digit-code>
 PLAY_RIDER_REVIEW_EMAIL=rider-review@ritzurbanluxury.com
-PLAY_RIDER_REVIEW_OTP=<unique-four-digit-code>
 PLAY_DRIVER_REVIEW_EMAIL=driver-review@ritzurbanluxury.com
-PLAY_DRIVER_REVIEW_OTP=<different-unique-four-digit-code>
 ```
 
-Generate each OTP with a cryptographically secure tool and store it only in the
-production secret manager. Never add the real values to `.env.example`, a mobile
-build, source control, or deployment logs.
+Generate the shared OTP with a cryptographically secure tool and store it only
+in the production secret manager. Never add the real value to `.env.example`,
+a mobile build, source control, or deployment logs.
 
-The rider reviewer account can also sign in with a phone number and reuses the
-same `PLAY_RIDER_REVIEW_OTP`. Real riders only ever sign in with Google or a
+The rider reviewer account can also sign in with a phone number and uses the
+same `PLAY_REVIEW_OTP`. Real riders only ever sign in with Google or a
 phone number, never email, so store reviewers should be given the phone-number
 credential below rather than the email one - it exercises the same flow a real
 user goes through. The phone number itself is not a secret (it's meant to go
@@ -50,7 +49,7 @@ Reviewer activity runs in an isolated sandbox:
 
 ```text
 Phone number: 07064192718
-Reusable OTP: [PLAY_RIDER_REVIEW_OTP from the production secret manager]
+Reusable OTP: [PLAY_REVIEW_OTP from the production secret manager]
 
 Instructions:
 1. Enter the phone number above in the "Enter your number" screen.
@@ -65,7 +64,7 @@ Instructions:
 
 ```text
 Email: rider-review@ritzurbanluxury.com
-Reusable OTP: [PLAY_RIDER_REVIEW_OTP from the production secret manager]
+Reusable OTP: [PLAY_REVIEW_OTP from the production secret manager]
 
 Instructions:
 1. Choose Continue with email and enter the email address above.
@@ -79,7 +78,7 @@ Instructions:
 
 ```text
 Email: driver-review@ritzurbanluxury.com
-Reusable OTP: [PLAY_DRIVER_REVIEW_OTP from the production secret manager]
+Reusable OTP: [PLAY_REVIEW_OTP from the production secret manager]
 
 Instructions:
 1. Choose Continue with email and enter the email address above.

@@ -6,6 +6,7 @@ import {
 } from './play-review-accounts';
 
 const ENV_KEYS = [
+  'PLAY_REVIEW_OTP',
   'PLAY_RIDER_REVIEW_EMAIL',
   'PLAY_RIDER_REVIEW_OTP',
   'PLAY_RIDER_REVIEW_PHONE_NUMBER',
@@ -73,15 +74,25 @@ describe('Play review accounts', () => {
     expect(driver.phoneNumber).toBeUndefined();
   });
 
-  it('rejects malformed or shared reviewer secrets', () => {
+  it('rejects a malformed reviewer OTP', () => {
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
     process.env.PLAY_RIDER_REVIEW_OTP = '123456';
     expect(() => getPlayReviewAccounts()).toThrow('4 digits');
+  });
 
-    process.env.PLAY_RIDER_REVIEW_OTP = '1234';
+  it('uses one shared OTP for every configured reviewer account', () => {
+    process.env.PLAY_REVIEW_OTP = '1234';
+    process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
+    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
+      'rider-delete-review@ritzurbanluxury.com';
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_REVIEW_OTP = '1234';
-    expect(() => getPlayReviewAccounts()).toThrow('must be different');
+    process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL =
+      'driver-delete-review@ritzurbanluxury.com';
+
+    expect(getPlayReviewAccounts()).toHaveLength(4);
+    expect(
+      getPlayReviewAccounts().every((account) => account.otp === '1234'),
+    ).toBe(true);
   });
 
   it('configures a distinct disposable driver account for deletion review', () => {

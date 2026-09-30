@@ -79,12 +79,6 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
     })
     .filter((account): account is PlayReviewAccount => Boolean(account));
 
-  if (
-    new Set(accounts.map((account) => account.otp)).size !== accounts.length
-  ) {
-    throw new Error('Play reviewer OTPs must be different');
-  }
-
   return accounts;
 }
 
