@@ -12,6 +12,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "start:provision-app-reviewers": "node dist/scripts/provision-play-reviewers.js --confirm && node dist/main.js",
     "provision:play-reviewers": "ts-node -r tsconfig-paths/register -r dotenv/config src/scripts/provision-play-reviewers.ts",
     "provision:app-reviewers": "ts-node -r tsconfig-paths/register -r dotenv/config src/scripts/provision-play-reviewers.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
