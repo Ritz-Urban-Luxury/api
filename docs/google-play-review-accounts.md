@@ -18,11 +18,10 @@ same `PLAY_REVIEW_OTP`. Real riders only ever sign in with Google or a
 phone number, never email, so store reviewers should be given the phone-number
 credential below rather than the email one - it exercises the same flow a real
 user goes through. The phone number itself is not a secret (it's meant to go
-in review notes), so it has a safe default in code
-(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`). A deployment can
-override that default with `PLAY_RIDER_REVIEW_PHONE_NUMBER`.
-Only the rider account has a phone number configured; the driver reviewer
-still signs in with email only.
+in review notes), so both rider phone numbers are canonical values in code
+(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`). The reusable rider
+uses `07064192718`; the disposable deletion rider uses `07063650902`. The
+driver reviewers still sign in with email only.
 
 After deploying the backend configuration, provision or repair the two accounts
 against the intended production database:
@@ -32,8 +31,8 @@ npm run provision:play-reviewers -- --confirm
 ```
 
 The command is idempotent. It creates a normal rider, a verified non-admin
-driver, and an approved synthetic trip vehicle. Reviewer-email changes and
-in-app account deletion are blocked.
+driver, and approved synthetic trip and hire vehicles. Reviewer-email changes
+and in-app account deletion are blocked.
 
 Reviewer activity runs in an isolated sandbox:
 
@@ -41,8 +40,9 @@ Reviewer activity runs in an isolated sandbox:
   synthetic vehicles are excluded from real catalogues and driver matching.
 - Rider trip requests create a zero-charge synthetic trip without dispatching,
   notifying, or paying a real driver.
-- Rider hire requests create a zero-charge synthetic booking without reserving
-  the real owner's vehicle, charging a payment method, or notifying the owner.
+- Rider hire requests create an immediately active, zero-charge synthetic
+  booking against the dedicated review vehicle without reserving a real
+  owner's vehicle, charging a payment method, or notifying anyone.
 - Reviewer-created vehicles are automatically marked synthetic.
 
 ## Rider app (recommended: phone number)

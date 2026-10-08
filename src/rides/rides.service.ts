@@ -464,10 +464,13 @@ export class RidesService implements OnModuleInit {
     const { lat, lon, type } = payload;
     const types = type ? (Array.isArray(type) ? type : [type]) : null;
     const isHireOnly = types?.length === 1 && types[0] === RideType.Hire;
+    const isRiderReviewer =
+      getPlayReviewAccount(user.email)?.kind === 'rider';
 
     const query: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
-      'specs.synthetic': { $ne: true },
+      'specs.synthetic':
+        isHireOnly && isRiderReviewer ? true : { $ne: true },
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
     };
     const blockedUserIds = await this.getBlockedPairUserIds(String(user.id));
@@ -1791,7 +1794,7 @@ export class RidesService implements OnModuleInit {
     const ride = await this.db.rides.findOne({
       _id: payload.ride,
       deleted: { $ne: true },
-      'specs.synthetic': { $ne: true },
+      'specs.synthetic': true,
       type: RideType.Hire,
     });
     if (!ride) {
@@ -1821,7 +1824,7 @@ export class RidesService implements OnModuleInit {
       cautionAmount: 0,
       checkInAt: checkIn,
       checkOutAt: checkOut,
-      driver: user.id,
+      driver: ride.driver,
       hireFee: 0,
       insuranceFee: 0,
       meta: {
@@ -1831,7 +1834,8 @@ export class RidesService implements OnModuleInit {
       paymentMethod: payload.paymentMethod,
       price: 0,
       ride,
-      status: RentalStatus.Pending,
+      startedAt: new Date(),
+      status: RentalStatus.InProgress,
       user: user.id,
     });
   }

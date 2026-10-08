@@ -24,10 +24,10 @@ export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
 };
 
 // Real riders only ever sign in with Google or a phone number - never email -
-// so the rider reviewer account needs to be reachable through that same
-// phone-OTP flow for App Store review. Not a secret (it goes in the review
-// notes), so it's a plain constant rather than an env var; the driver
-// reviewer has no phone number configured yet.
+// so both rider reviewer accounts need to be reachable through that same
+// phone-OTP flow for App Store review. These are public review credentials,
+// not secrets, and keeping them canonical prevents deployment configuration
+// from drifting away from the phone numbers supplied to Apple.
 export const PLAY_REVIEW_PHONE_NUMBERS: Partial<
   Record<PlayReviewAccountKind, string>
 > = {
@@ -43,14 +43,13 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
     .map((kind): PlayReviewAccount | null => {
       const email = configured[kind].email?.trim();
       const otp = configured[kind].otp?.trim();
-      const configuredPhoneNumber = configured[kind].phoneNumber?.trim();
 
-      if (!email && !otp) {
+      if (!email) {
         return null;
       }
-      if (!email || !otp) {
+      if (!otp) {
         throw new Error(
-          `Both Play ${kind} reviewer email and OTP must be configured`,
+          `PLAY_REVIEW_OTP must be configured for the Play ${kind} reviewer`,
         );
       }
 
@@ -65,8 +64,7 @@ export function getPlayReviewAccounts(): PlayReviewAccount[] {
           `Play ${kind} reviewer OTP must contain ${OTP_LENGTH} digits`,
         );
       }
-      const phoneNumber =
-        configuredPhoneNumber || PLAY_REVIEW_PHONE_NUMBERS[kind];
+      const phoneNumber = PLAY_REVIEW_PHONE_NUMBERS[kind];
 
       return {
         email: normalizedEmail,

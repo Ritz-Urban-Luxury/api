@@ -8,15 +8,9 @@ import {
 const ENV_KEYS = [
   'PLAY_REVIEW_OTP',
   'PLAY_RIDER_REVIEW_EMAIL',
-  'PLAY_RIDER_REVIEW_OTP',
-  'PLAY_RIDER_REVIEW_PHONE_NUMBER',
   'PLAY_RIDER_DELETE_REVIEW_EMAIL',
-  'PLAY_RIDER_DELETE_REVIEW_OTP',
-  'PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER',
   'PLAY_DRIVER_REVIEW_EMAIL',
-  'PLAY_DRIVER_REVIEW_OTP',
   'PLAY_DRIVER_DELETE_REVIEW_EMAIL',
-  'PLAY_DRIVER_DELETE_REVIEW_OTP',
 ] as const;
 
 describe('Play review accounts', () => {
@@ -44,10 +38,9 @@ describe('Play review accounts', () => {
   });
 
   it('matches only the configured OTP for the exact reviewer email', () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
 
     const rider = getPlayReviewAccount(' Rider-Review@ritzurbanluxury.com ');
     if (!rider) {
@@ -59,24 +52,29 @@ describe('Play review accounts', () => {
     expect(getPlayReviewAccount('ordinary@example.com')).toBeNull();
   });
 
-  it('attaches the fixed reviewer phone number only to the rider account', () => {
+  it('attaches canonical phone numbers only to the rider accounts', () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
+    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
+      'rider-delete-review@ritzurbanluxury.com';
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
 
-    const [rider, driver] = getPlayReviewAccounts().sort((a) =>
-      a.kind === 'rider' ? -1 : 1,
+    const accounts = getPlayReviewAccounts();
+    const rider = accounts.find((account) => account.kind === 'rider');
+    const riderDeletion = accounts.find(
+      (account) => account.kind === 'riderDeletion',
     );
+    const driver = accounts.find((account) => account.kind === 'driver');
 
-    expect(rider.phoneNumber).toBe(PLAY_REVIEW_PHONE_NUMBERS.rider);
-    expect(rider.phoneNumber).toBe('2347064192718');
-    expect(driver.phoneNumber).toBeUndefined();
+    expect(rider?.phoneNumber).toBe(PLAY_REVIEW_PHONE_NUMBERS.rider);
+    expect(rider?.phoneNumber).toBe('2347064192718');
+    expect(riderDeletion?.phoneNumber).toBe('2347063650902');
+    expect(driver?.phoneNumber).toBeUndefined();
   });
 
   it('rejects a malformed reviewer OTP', () => {
+    process.env.PLAY_REVIEW_OTP = '123456';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '123456';
     expect(() => getPlayReviewAccounts()).toThrow('4 digits');
   });
 
@@ -95,10 +93,10 @@ describe('Play review accounts', () => {
     ).toBe(true);
   });
 
-  it('configures a distinct disposable driver account for deletion review', () => {
+  it('configures a distinct disposable driver account with the shared OTP', () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL =
       'driver-delete-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_DELETE_REVIEW_OTP = '9274';
 
     const account = getPlayReviewAccount(
       'driver-delete-review@ritzurbanluxury.com',
@@ -106,15 +104,14 @@ describe('Play review accounts', () => {
 
     expect(account).toMatchObject({
       kind: 'driverDeletion',
-      otp: '9274',
+      otp: '1847',
     });
   });
 
-  it('configures a distinct disposable rider account with phone login', () => {
+  it('configures a distinct disposable rider account with canonical phone login', () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
       'rider-delete-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_DELETE_REVIEW_OTP = '5182';
-    process.env.PLAY_RIDER_DELETE_REVIEW_PHONE_NUMBER = '07063650902';
 
     const account = getPlayReviewAccount(
       'rider-delete-review@ritzurbanluxury.com',
@@ -122,18 +119,8 @@ describe('Play review accounts', () => {
 
     expect(account).toMatchObject({
       kind: 'riderDeletion',
-      otp: '5182',
+      otp: '1847',
       phoneNumber: '2347063650902',
     });
-  });
-
-  it('allows the reusable rider phone number to be configured', () => {
-    process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
-    process.env.PLAY_RIDER_REVIEW_PHONE_NUMBER = '08012345678';
-
-    expect(
-      getPlayReviewAccount('rider-review@ritzurbanluxury.com'),
-    ).toMatchObject({ phoneNumber: '2348012345678' });
   });
 });

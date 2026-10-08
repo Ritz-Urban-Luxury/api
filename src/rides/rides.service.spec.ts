@@ -189,10 +189,9 @@ describe('RidesService Play reviewer sandbox', () => {
   let websocket: any;
 
   beforeEach(() => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
 
     cache = {
       del: jest.fn(),
@@ -244,10 +243,9 @@ describe('RidesService Play reviewer sandbox', () => {
   });
 
   afterEach(() => {
+    delete process.env.PLAY_REVIEW_OTP;
     delete process.env.PLAY_RIDER_REVIEW_EMAIL;
-    delete process.env.PLAY_RIDER_REVIEW_OTP;
     delete process.env.PLAY_DRIVER_REVIEW_EMAIL;
-    delete process.env.PLAY_DRIVER_REVIEW_OTP;
     jest.restoreAllMocks();
   });
 
@@ -427,6 +425,26 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
+  it('returns only synthetic hire vehicles to the reusable rider reviewer', async () => {
+    db.rides.find.mockReturnValue({
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockResolvedValue([]),
+    });
+
+    await service.getAvailableRides(riderReviewer, {
+      lat: 9.0765,
+      lon: 7.3986,
+      type: RideType.Hire,
+    });
+
+    expect(db.rides.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'specs.synthetic': true,
+        type: { $in: [RideType.Hire] },
+      }),
+    );
+  });
+
   it('creates an isolated zero-charge trip for the rider reviewer', async () => {
     jest.spyOn(GeolocationService, 'getDistance').mockResolvedValue(3000);
     db.rides.findOne.mockReturnValue(populatedQuery(syntheticRide));
@@ -469,7 +487,7 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
-  it('creates a zero-charge synthetic hire without notifying the real owner', async () => {
+  it('starts a zero-charge synthetic hire without notifying the real owner', async () => {
     jest.spyOn(service, 'getOngoingRental').mockResolvedValue(null);
     const hireRide = {
       dailyRate: 50000,
@@ -477,7 +495,7 @@ describe('RidesService Play reviewer sandbox', () => {
       hourlyRate: 8000,
       id: rideId,
       insuranceFee: 500,
-      specs: {},
+      specs: { synthetic: true },
       type: RideType.Hire,
     };
     db.rides.findOne.mockResolvedValue(hireRide);
@@ -504,14 +522,18 @@ describe('RidesService Play reviewer sandbox', () => {
       id: rentalId,
       meta: expect.objectContaining({ playReviewSynthetic: true }),
       price: 0,
+      startedAt: expect.any(Date),
+      status: RentalStatus.InProgress,
     });
     expect(db.rentals.create).toHaveBeenCalledWith(
       expect.objectContaining({
         cautionAmount: 0,
-        driver: riderId,
+        driver: ownerId,
         hireFee: 0,
         insuranceFee: 0,
         price: 0,
+        startedAt: expect.any(Date),
+        status: RentalStatus.InProgress,
       }),
     );
     expect(paymentService.chargeUser).not.toHaveBeenCalled();

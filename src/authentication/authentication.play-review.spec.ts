@@ -16,10 +16,11 @@ describe('AuthenticationService Play reviewer authentication', () => {
   };
 
   const createService = (failedAttempts = 0) => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_REVIEW_OTP = '1847';
+    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
+      'rider-delete-review@ritzurbanluxury.com';
     process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_REVIEW_OTP = '6305';
 
     const notificationService = {
       sendEmail: jest.fn(),
@@ -58,10 +59,10 @@ describe('AuthenticationService Play reviewer authentication', () => {
   };
 
   afterEach(() => {
+    delete process.env.PLAY_REVIEW_OTP;
     delete process.env.PLAY_RIDER_REVIEW_EMAIL;
-    delete process.env.PLAY_RIDER_REVIEW_OTP;
+    delete process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL;
     delete process.env.PLAY_DRIVER_REVIEW_EMAIL;
-    delete process.env.PLAY_DRIVER_REVIEW_OTP;
   });
 
   it('skips email delivery and stores only an opaque request marker', async () => {
@@ -174,6 +175,25 @@ describe('AuthenticationService Play reviewer authentication', () => {
         }),
       }),
     );
+  });
+
+  it('authorizes the disposable deletion phone number with the same reusable OTP', async () => {
+    const { db, jwtService, service } = createService();
+    const deletionReviewer = {
+      ...reviewerUser,
+      email: 'rider-delete-review@ritzurbanluxury.com',
+      phoneNumber: '2347063650902',
+    };
+    db.users.findOne.mockResolvedValueOnce(deletionReviewer);
+
+    await expect(
+      service.login({
+        phoneNumber: '07063650902',
+        otp: '1847',
+      }),
+    ).resolves.toEqual({ token: 'reviewer-jwt', user: deletionReviewer });
+
+    expect(jwtService.sign).toHaveBeenCalled();
   });
 
   it('sends the former reviewer phone number through the normal DND OTP route', async () => {

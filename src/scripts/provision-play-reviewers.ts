@@ -185,10 +185,35 @@ async function provisionPlayReviewers() {
     { new: true, upsert: true },
   );
 
+  const hireVehicle = await RideModel.findOneAndUpdate(
+    { driver: driver.id, registration: 'PLAY-REVIEW-HIRE' },
+    {
+      $set: {
+        approvalStatus: RideApprovalStatus.Approved,
+        brand: 'Mercedes-Benz',
+        cautionDeposit: 0,
+        color: 'Black',
+        dailyRate: 0,
+        deleted: false,
+        driver: driver.id,
+        hourlyRate: 0,
+        images: [SYNTHETIC_IMAGE],
+        insuranceFee: 0,
+        model: 'V-Class',
+        registration: 'PLAY-REVIEW-HIRE',
+        specs: { seats: 6, synthetic: true, year: '2024' },
+        status: RideStatus.Online,
+        type: RideType.Hire,
+      },
+      $unset: { approvalReason: 1, location: 1 },
+    },
+    { new: true, upsert: true },
+  );
+
   // Do not print either reusable OTP. Deployment logs are not a secret store.
   // eslint-disable-next-line no-console
   console.log(
-    `Provisioned ${rider.email}, ${deletionRider.email}, ${driver.email}, ${deletionDriver.email}, and synthetic vehicle ${vehicle.registration}`,
+    `Provisioned ${rider.email}, ${deletionRider.email}, ${driver.email}, ${deletionDriver.email}, and synthetic vehicles ${vehicle.registration} and ${hireVehicle.registration}`,
   );
 }
 

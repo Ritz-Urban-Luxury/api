@@ -177,9 +177,9 @@ describe('UserService.deleteAccount', () => {
   });
 
   it('allows the disposable reviewer account to exercise deletion', async () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL =
       'driver-delete-review@ritzurbanluxury.com';
-    process.env.PLAY_DRIVER_DELETE_REVIEW_OTP = '9274';
 
     await expect(
       service.deleteAccount(
@@ -194,13 +194,13 @@ describe('UserService.deleteAccount', () => {
     ).resolves.toMatchObject({ deleted: true });
 
     delete process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL;
-    delete process.env.PLAY_DRIVER_DELETE_REVIEW_OTP;
+    delete process.env.PLAY_REVIEW_OTP;
   });
 
   it('allows the disposable rider reviewer account to exercise deletion', async () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
       'rider-delete-review@ritzurbanluxury.com';
-    process.env.PLAY_RIDER_DELETE_REVIEW_OTP = '5182';
 
     await expect(
       service.deleteAccount(
@@ -215,6 +215,6 @@ describe('UserService.deleteAccount', () => {
     ).resolves.toMatchObject({ deleted: true });
 
     delete process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL;
-    delete process.env.PLAY_RIDER_DELETE_REVIEW_OTP;
+    delete process.env.PLAY_REVIEW_OTP;
   });
 });
