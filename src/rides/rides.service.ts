@@ -12,6 +12,7 @@ import { FilterQuery, Types } from 'mongoose';
 import {
   getPlayReviewAccount,
   getPlayReviewAccounts,
+  PLAY_REVIEW_PHONE_NUMBERS,
 } from '../authentication/play-review-accounts';
 import {
   RentalBillingType,
@@ -116,6 +117,9 @@ export class RidesService implements OnModuleInit {
       canDeleteAccount:
         account?.kind === 'driverDeletion' || account?.kind === 'riderDeletion',
       canGenerateDemoRide: account?.kind === 'driver',
+      canUseRiderDemo:
+        account?.kind === 'rider' &&
+        user.phoneNumber === PLAY_REVIEW_PHONE_NUMBERS.rider,
     };
   }
 

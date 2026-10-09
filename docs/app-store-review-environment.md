@@ -53,6 +53,13 @@ Profile > Delete account > Review > Close account. The deletion account cannot
 create synthetic bookings and can be restored by rerunning the provisioning
 command.
 
+The reusable rider sees an **App Review Demo** panel on Home. **Test a ride**
+loads fixed Abuja pickup/destination locations and Cash payment before opening
+the normal confirmation flow. **Test car hire** opens the isolated hire
+catalogue containing `PLAY-REVIEW-HIRE`. The capability is granted by the API
+only when both the reusable reviewer email and canonical phone number match;
+the disposable deletion account never receives it.
+
 Only the exact reusable driver review account can call the demo-offer endpoint.
 Synthetic trips are zero-charge, excluded from live vehicle discovery, and do
 not invoke the real payment processor. Rider review ride bookings start

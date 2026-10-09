@@ -168,6 +168,7 @@ describe('RidesService Play reviewer sandbox', () => {
   const riderReviewer = {
     email: 'rider-review@ritzurbanluxury.com',
     id: riderId,
+    phoneNumber: '2347064192718',
   } as never;
   const driverReviewer = {
     email: 'driver-review@ritzurbanluxury.com',
@@ -240,6 +241,22 @@ describe('RidesService Play reviewer sandbox', () => {
       push,
       websocket,
     });
+  });
+
+  it('enables the rider demo only for the canonical reusable phone account', () => {
+    expect(service.getReviewMode(riderReviewer)).toMatchObject({
+      canDeleteAccount: false,
+      canGenerateDemoRide: false,
+      canUseRiderDemo: true,
+    });
+
+    expect(
+      service.getReviewMode({
+        email: 'rider-review@ritzurbanluxury.com',
+        id: riderId,
+        phoneNumber: '2347063650902',
+      } as never),
+    ).toMatchObject({ canUseRiderDemo: false });
   });
 
   afterEach(() => {
