@@ -197,7 +197,7 @@ async function provisionPlayReviewers() {
         deleted: false,
         driver: driver.id,
         hourlyRate: 0,
-        images: [SYNTHETIC_IMAGE],
+        images: [],
         insuranceFee: 0,
         model: 'V-Class',
         registration: 'PLAY-REVIEW-HIRE',
