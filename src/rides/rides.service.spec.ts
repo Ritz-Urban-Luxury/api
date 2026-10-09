@@ -207,6 +207,7 @@ describe('RidesService Play reviewer sandbox', () => {
       rentals: {
         create: jest.fn(),
         exists: jest.fn().mockResolvedValue(false),
+        findOne: jest.fn(),
       },
       rides: {
         find: jest.fn(),
@@ -504,7 +505,52 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
-  it('starts a zero-charge synthetic hire without notifying the real owner', async () => {
+  it('advances only the rider synthetic trip through the review lifecycle', async () => {
+    const syntheticTrip = {
+      driver: driverReviewer,
+      id: 'synthetic-trip-id',
+      meta: { playReviewSynthetic: true },
+      status: 'Started',
+      user: riderId,
+    };
+    db.trips.findOne.mockReturnValue(populatedQuery(syntheticTrip));
+    const announceArrival = jest
+      .spyOn(service, 'annouceArrival')
+      .mockResolvedValue({ ...syntheticTrip, status: 'DriverArrived' } as never);
+
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, syntheticTrip.id),
+    ).resolves.toMatchObject({ status: 'DriverArrived' });
+    expect(announceArrival).toHaveBeenCalledWith(
+      driverReviewer,
+      syntheticTrip.id,
+    );
+  });
+
+  it('advances a rider synthetic rental one valid status at a time', async () => {
+    db.rentals.findOne.mockResolvedValue({
+      id: rentalId,
+      meta: { playReviewSynthetic: true },
+      status: RentalStatus.Pending,
+      user: riderId,
+    });
+    const updateRentalStatus = jest
+      .spyOn(service, 'updateRentalStatus')
+      .mockResolvedValue({
+        id: rentalId,
+        status: RentalStatus.Accepted,
+      } as never);
+
+    await expect(
+      service.advancePlayReviewRental(riderReviewer, rentalId),
+    ).resolves.toMatchObject({ status: RentalStatus.Accepted });
+    expect(updateRentalStatus).toHaveBeenCalledWith(
+      rentalId,
+      RentalStatus.Accepted,
+    );
+  });
+
+  it('creates a pending zero-charge synthetic hire without notifying the real owner', async () => {
     jest.spyOn(service, 'getOngoingRental').mockResolvedValue(null);
     const hireRide = {
       dailyRate: 50000,
@@ -539,8 +585,7 @@ describe('RidesService Play reviewer sandbox', () => {
       id: rentalId,
       meta: expect.objectContaining({ playReviewSynthetic: true }),
       price: 0,
-      startedAt: expect.any(Date),
-      status: RentalStatus.InProgress,
+      status: RentalStatus.Pending,
     });
     expect(db.rentals.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -549,8 +594,7 @@ describe('RidesService Play reviewer sandbox', () => {
         hireFee: 0,
         insuranceFee: 0,
         price: 0,
-        startedAt: expect.any(Date),
-        status: RentalStatus.InProgress,
+        status: RentalStatus.Pending,
       }),
     );
     expect(paymentService.chargeUser).not.toHaveBeenCalled();

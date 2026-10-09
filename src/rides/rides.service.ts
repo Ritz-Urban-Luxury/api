@@ -123,6 +123,74 @@ export class RidesService implements OnModuleInit {
     };
   }
 
+  private assertReusableRiderReviewAccount(user: UserDocument) {
+    if (!this.getReviewMode(user).canUseRiderDemo) {
+      throw new NotFoundException('review demo is not available');
+    }
+  }
+
+  async advancePlayReviewTrip(user: UserDocument, tripId: string) {
+    this.assertReusableRiderReviewAccount(user);
+
+    const trip = await this.db.trips
+      .findOne({
+        _id: tripId,
+        user: user.id,
+        'meta.playReviewSynthetic': true,
+        deleted: { $ne: true },
+      })
+      .populate('driver');
+
+    if (!trip || !trip.driver) {
+      throw new NotFoundException('review trip not found');
+    }
+
+    const driver = trip.driver as UserDocument;
+    switch (trip.status) {
+      case TripStatus.Started:
+        return this.annouceArrival(driver, tripId);
+      case TripStatus.DriverArrived:
+        return this.startTrip(driver, tripId);
+      case TripStatus.InProgress:
+        return this.endTrip(driver, tripId);
+      case TripStatus.Completed:
+        return trip;
+      default:
+        throw new BadRequestException('review trip cannot be advanced');
+    }
+  }
+
+  async advancePlayReviewRental(user: UserDocument, rentalId: string) {
+    this.assertReusableRiderReviewAccount(user);
+
+    const rental = await this.db.rentals.findOne({
+      _id: rentalId,
+      user: user.id,
+      'meta.playReviewSynthetic': true,
+      deleted: { $ne: true },
+    });
+
+    if (!rental) {
+      throw new NotFoundException('review rental not found');
+    }
+
+    const nextStatus: Partial<Record<RentalStatus, RentalStatus>> = {
+      [RentalStatus.Pending]: RentalStatus.Accepted,
+      [RentalStatus.Accepted]: RentalStatus.InProgress,
+      [RentalStatus.InProgress]: RentalStatus.Completed,
+    };
+    const status = nextStatus[rental.status];
+
+    if (!status) {
+      if (rental.status === RentalStatus.Completed) {
+        return rental;
+      }
+      throw new BadRequestException('review rental cannot be advanced');
+    }
+
+    return this.updateRentalStatus(rentalId, status);
+  }
+
   async createReviewDemoOffer(driver: UserDocument) {
     const account = getPlayReviewAccount(driver.email);
     if (account?.kind !== 'driver') {
@@ -1838,8 +1906,7 @@ export class RidesService implements OnModuleInit {
       paymentMethod: payload.paymentMethod,
       price: 0,
       ride,
-      startedAt: new Date(),
-      status: RentalStatus.InProgress,
+      status: RentalStatus.Pending,
       user: user.id,
     });
   }

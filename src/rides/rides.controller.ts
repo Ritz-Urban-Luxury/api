@@ -189,6 +189,29 @@ export class RidesController {
     return Response.json('review mode', this.ridesService.getReviewMode(user));
   }
 
+  @UseGuards(JwtGuard)
+  @Post('review-mode/trips/:tripId/advance')
+  async advanceReviewTrip(
+    @CurrentUser() user: UserDocument,
+    @Param('tripId') tripId: string,
+  ) {
+    const trip = await this.ridesService.advancePlayReviewTrip(user, tripId);
+    return Response.json('review trip advanced', trip);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('review-mode/rentals/:rentalId/advance')
+  async advanceReviewRental(
+    @CurrentUser() user: UserDocument,
+    @Param('rentalId') rentalId: string,
+  ) {
+    const rental = await this.ridesService.advancePlayReviewRental(
+      user,
+      rentalId,
+    );
+    return Response.json('review rental advanced', rental);
+  }
+
   @UseVerifiedDriver()
   @Post('review-mode/demo-offer')
   async createReviewDemoOffer(@CurrentUser() user: UserDocument) {
