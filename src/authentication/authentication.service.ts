@@ -618,6 +618,7 @@ export class AuthenticationService {
       if (reviewerAccount) {
         const [user, otpIsValid] = await Promise.all([
           this.db.users.findOne({
+            email: reviewerAccount.email,
             phoneNumber: _phoneNumber,
             deleted: { $ne: true },
           }),

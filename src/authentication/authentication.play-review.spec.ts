@@ -166,6 +166,11 @@ describe('AuthenticationService Play reviewer authentication', () => {
     ).resolves.toEqual({ token: 'reviewer-jwt', user: reviewerUser });
 
     expect(jwtService.sign).toHaveBeenCalled();
+    expect(db.users.findOne).toHaveBeenCalledWith({
+      email: reviewerUser.email,
+      phoneNumber: reviewerUser.phoneNumber,
+      deleted: { $ne: true },
+    });
     expect(db.authTokens.create).toHaveBeenCalledWith(
       expect.objectContaining({
         meta: expect.objectContaining({
