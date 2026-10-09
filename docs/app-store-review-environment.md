@@ -61,10 +61,11 @@ only when both the reusable reviewer email and canonical phone number match;
 the disposable deletion account never receives it.
 
 The synthetic ride automatically progresses from driver approaching to driver
-arrived after 3.5 seconds, starts 3.5 seconds later, and completes after another
-8 seconds so the reviewer reaches the rating flow. Synthetic hire progresses
-through Pending, Accepted, InProgress, and Completed on the same short review
-timeline. Every transition is restricted to records marked
+arrived after 5 seconds, starts 5 seconds later, and completes after another
+30 seconds so the reviewer has time to inspect the active-trip features before
+reaching the rating flow. Synthetic hire progresses from Pending to Accepted
+after 5 seconds, starts 5 seconds later, and completes after 20 active seconds.
+Every transition is restricted to records marked
 `playReviewSynthetic`; no real driver, owner, or payment is involved.
 
 Only the exact reusable driver review account can call the demo-offer endpoint.
