@@ -92,7 +92,7 @@ export class NotificationService {
   }
 
   sendEmail(payload: EmailPayload) {
-    const { recipient, context, subject, template } = payload;
+    const { recipient, context, subject, template, replyTo } = payload;
     const html = this.templateEngine.render(template, context);
 
     if (this.emailProvider === 'resend') {
@@ -103,6 +103,7 @@ export class NotificationService {
           to: this.normalizeRecipients(recipient),
           subject,
           html,
+          ...(replyTo && { replyTo: replyTo.email }),
         })
         .then(({ error }) => {
           if (error) {
@@ -117,6 +118,7 @@ export class NotificationService {
       from: sendGrid.from,
       subject,
       html,
+      ...(replyTo && { replyTo }),
     });
   }
 

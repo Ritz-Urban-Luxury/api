@@ -8,6 +8,7 @@ import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
+import { ContactModule } from './contact/contact.module';
 import { DatabaseModule } from './database/database.module';
 import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
@@ -25,6 +26,7 @@ import { FinanceModule } from './finance/finance.module';
     LoggerModule,
     NotificationModule,
     AuthenticationModule,
+    ContactModule,
     MongooseModule.forRoot(config().database.url, {
       connectionFactory(connection) {
         connection.plugin(mongoosePaginate);

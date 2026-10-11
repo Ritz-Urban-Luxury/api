@@ -10,4 +10,5 @@ export type EmailPayload = {
   recipient: string | { name?: string; email: string };
   subject: string;
   context: Record<string, unknown>;
+  replyTo?: { name?: string; email: string };
 };

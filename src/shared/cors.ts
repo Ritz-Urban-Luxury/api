@@ -4,5 +4,7 @@ export default {
     /^http:\/\/127\.0\.0\.1:\d+$/,
     'https://admin-app-288.pages.dev',
     'https://admin.ritzurbanluxury.com',
+    'https://www.ritzurbanluxury.com',
+    'https://ritzurbanluxury.com',
   ],
 };

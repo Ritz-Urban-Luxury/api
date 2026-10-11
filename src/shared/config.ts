@@ -13,6 +13,10 @@ const config = () => ({
   email: {
     provider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
   },
+  contact: {
+    supportEmail:
+      process.env.CONTACT_SUPPORT_EMAIL || 'support@ritzurbanluxury.com',
+  },
   resend: {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_DEFAULT_FROM,

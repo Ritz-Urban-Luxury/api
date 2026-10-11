@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New website message</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
+            <tr>
+              <td style="padding: 32px;">
+                <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Website contact form</div>
+                <h1 style="margin: 8px 0 24px; font-size: 22px; line-height: 28px; color: #43005d;">{{ topic }}</h1>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size: 15px; line-height: 22px;">
+                  <tr>
+                    <td style="padding: 6px 0; width: 90px; color: #716a77;">From</td>
+                    <td style="padding: 6px 0;">{{ name }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #716a77;">Email</td>
+                    <td style="padding: 6px 0;"><a href="mailto:{{ email }}" style="color: #43005d;">{{ email }}</a></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #716a77;">Sent</td>
+                    <td style="padding: 6px 0;">{{ sentAt }}</td>
+                  </tr>
+                </table>
+
+                <div style="margin-top: 24px; padding: 20px; border-radius: 8px; background-color: #f4ecf7; font-size: 15px; line-height: 23px; white-space: pre-wrap;">{{ message }}</div>
+
+                <p style="margin: 24px 0 0; font-size: 13px; line-height: 20px; color: #716a77;">Reply to this email to answer {{ name }} directly.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
