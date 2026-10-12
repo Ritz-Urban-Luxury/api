@@ -1,14 +1,8 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { DatabaseService } from './database.service';
-import {
-  ReferralStatus,
-} from './schemas/referrals.schema';
+import { ReferralStatus } from './schemas/referrals.schema';
 import { ActivityType } from './schemas/activities.schema';
 import { UserDocument } from './schemas/user.schema';
 import { PaymentService } from '../payments/payment.service';
@@ -64,9 +58,7 @@ export class ReferralService {
   async ensureInviteCode(user: UserDocument | string) {
     const userId = this.userIdOf(user);
     const existing =
-      typeof user === 'string'
-        ? await this.db.users.findById(userId)
-        : user;
+      typeof user === 'string' ? await this.db.users.findById(userId) : user;
 
     if (!existing) {
       return null;

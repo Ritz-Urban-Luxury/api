@@ -1,14 +1,9 @@
-import {
-  CACHE_MANAGER,
-  HttpException,
-  HttpStatus,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { Logger } from '../logger/logger.service';
 import { NotificationService } from '../notification/notification.service';
 import config from '../shared/config';
+import { enforceRateLimit } from '../shared/rate-limit';
 import { ContactMessageDTO, ContactTopic } from './dto/contact-message.dto';
 
 const MAX_MESSAGES_PER_WINDOW = 5;
@@ -37,7 +32,13 @@ export class ContactService {
       return;
     }
 
-    await this.enforceRateLimit(ip);
+    await enforceRateLimit(this.cache, this.logger, {
+      key: `contact-form:${ip}`,
+      max: MAX_MESSAGES_PER_WINDOW,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+      message:
+        'Too many messages. Please try again later or email us directly.',
+    });
 
     const { contact } = config();
     const topic = topicLabels[payload.topic];
@@ -59,31 +60,5 @@ export class ContactService {
     });
 
     this.logger.log('Contact form message sent', { topic: payload.topic });
-  }
-
-  private async enforceRateLimit(ip: string): Promise<void> {
-    const key = `contact-form:${ip}`;
-    let sent = 0;
-
-    try {
-      sent = (await this.cache.get<number>(key)) ?? 0;
-    } catch (error) {
-      // If the cache is down, let the message through rather than lose it.
-      this.logger.warn('Unable to read contact form rate limit', error);
-      return;
-    }
-
-    if (sent >= MAX_MESSAGES_PER_WINDOW) {
-      throw new HttpException(
-        'Too many messages. Please try again later or email us directly.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    try {
-      await this.cache.set(key, sent + 1, RATE_LIMIT_WINDOW_MS);
-    } catch (error) {
-      this.logger.warn('Unable to update contact form rate limit', error);
-    }
   }
 }

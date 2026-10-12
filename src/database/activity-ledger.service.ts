@@ -1,9 +1,9 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DatabaseService } from '../database/database.service';
-import { ActivityType } from '../database/schemas/activities.schema';
-import { DriverLedgerType } from '../database/schemas/driver-ledger.schema';
-import { PaymentMethod } from '../database/schemas/trips.schema';
+import { DatabaseService } from './database.service';
+import { ActivityType } from './schemas/activities.schema';
+import { DriverLedgerType } from './schemas/driver-ledger.schema';
+import { PaymentMethod } from './schemas/trips.schema';
 import { Configuration } from '../shared/config';
 import { ReferralService } from './referral.service';
 

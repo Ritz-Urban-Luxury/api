@@ -24,4 +24,5 @@ export const DB_TABLES = {
   NEWS_READS: 'news_reads',
   USER_BLOCKS: 'user_blocks',
   USER_REPORTS: 'user_reports',
+  WAITLIST_ENTRIES: 'waitlist_entries',
 };

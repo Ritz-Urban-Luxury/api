@@ -17,6 +17,25 @@ const config = () => ({
     supportEmail:
       process.env.CONTACT_SUPPORT_EMAIL || 'support@ritzurbanluxury.com',
   },
+  waitlist: {
+    // Public address of this API, used for unsubscribe links in emails.
+    publicApiUrl: (
+      process.env.PUBLIC_API_URL || 'https://rul-api.onrender.com'
+    ).replace(/\/+$/, ''),
+    siteUrl: (
+      process.env.SITE_URL || 'https://www.ritzurbanluxury.com'
+    ).replace(/\/+$/, ''),
+    storeLinks: {
+      rider: {
+        apple: process.env.RIDER_APP_STORE_URL,
+        google: process.env.RIDER_PLAY_STORE_URL,
+      },
+      driver: {
+        apple: process.env.DRIVER_APP_STORE_URL,
+        google: process.env.DRIVER_PLAY_STORE_URL,
+      },
+    },
+  },
   resend: {
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.RESEND_DEFAULT_FROM,

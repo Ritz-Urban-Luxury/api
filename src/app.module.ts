@@ -17,6 +17,7 @@ import { PaymentModule } from './payments/payment.module';
 import { RidesModule } from './rides/rides.module';
 import config from './shared/config';
 import { UserModule } from './user/user.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { FinanceModule } from './finance/finance.module';
 
@@ -27,6 +28,7 @@ import { FinanceModule } from './finance/finance.module';
     NotificationModule,
     AuthenticationModule,
     ContactModule,
+    WaitlistModule,
     MongooseModule.forRoot(config().database.url, {
       connectionFactory(connection) {
         connection.plugin(mongoosePaginate);

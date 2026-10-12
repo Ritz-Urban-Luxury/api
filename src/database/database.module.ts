@@ -30,6 +30,7 @@ import { UserBlockSchema } from './schemas/user-block.schema';
 import { UserReportSchema } from './schemas/user-report.schema';
 import { NewsArticleSchema } from './schemas/news-article.schema';
 import { NewsReadSchema } from './schemas/news-read.schema';
+import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
 
 @Global()
 @Module({
@@ -70,6 +71,7 @@ import { NewsReadSchema } from './schemas/news-read.schema';
       { name: DB_TABLES.NEWS_READS, schema: NewsReadSchema },
       { name: DB_TABLES.USER_BLOCKS, schema: UserBlockSchema },
       { name: DB_TABLES.USER_REPORTS, schema: UserReportSchema },
+      { name: DB_TABLES.WAITLIST_ENTRIES, schema: WaitlistEntrySchema },
     ]),
   ],
   providers: [DatabaseService, ActivityLedgerService, ReferralService],

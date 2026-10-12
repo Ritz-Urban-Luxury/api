@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ appName }} is ready to download</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
+            <tr>
+              <td style="padding: 32px;">
+                <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Ritz Urban Luxury</div>
+                <h1 style="margin: 8px 0 16px; font-size: 22px; line-height: 28px; color: #43005d;">{% if name %}{{ name }}, {{ appName }}{% else %}{{ appName }}{% endif %} is ready.</h1>
+                {% if role == 'driver' %}
+                <p style="margin: 0 0 24px; font-size: 15px; line-height: 23px;">
+                  You asked us to tell you when the driver app was out. It is. Download Ritz Driver, sign up with your details and documents, and we'll get you verified so you can start taking trips.
+                </p>
+                {% else %}
+                <p style="margin: 0 0 24px; font-size: 15px; line-height: 23px;">
+                  You asked us to tell you when the app was out. It is. Download Ritz to book a ride, schedule a trip for later or hire a car with a driver.
+                </p>
+                {% endif %}
+
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    {% if appStoreUrl %}
+                    <td style="padding: 0 12px 12px 0;">
+                      <a href="{{ appStoreUrl }}" style="display: inline-block; padding: 12px 20px; border-radius: 10px; background-color: #43005d; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none;">Get it on the App Store</a>
+                    </td>
+                    {% endif %}
+                    {% if playStoreUrl %}
+                    <td style="padding: 0 12px 12px 0;">
+                      <a href="{{ playStoreUrl }}" style="display: inline-block; padding: 12px 20px; border-radius: 10px; background-color: #43005d; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none;">Get it on Google Play</a>
+                    </td>
+                    {% endif %}
+                  </tr>
+                </table>
+
+                <p style="margin: 12px 0 0; font-size: 15px; line-height: 23px;">Thanks for waiting with us.<br />The Ritz team</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 16px 0 0; font-size: 12px; line-height: 18px; color: #716a77;">
+            You're getting this because you joined the waiting list at <a href="{{ siteUrl }}" style="color: #716a77;">ritzurbanluxury.com</a>.
+            <a href="{{ unsubscribeUrl }}" style="color: #716a77;">Unsubscribe</a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -1,17 +1,9 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
+import { clientIp } from '../shared/client-ip';
 import { Response } from '../shared/response';
 import { ContactService } from './contact.service';
 import { ContactMessageDTO } from './dto/contact-message.dto';
-
-/** The API runs behind a proxy, so the visitor's address is the first x-forwarded-for entry. */
-function clientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
-    ?.split(',')[0]
-    ?.trim();
-  return first || req.ip || 'unknown';
-}
 
 @Controller('contact')
 export class ContactController {

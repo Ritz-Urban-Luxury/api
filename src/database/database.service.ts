@@ -37,6 +37,7 @@ import { UserBlockDocument } from './schemas/user-block.schema';
 import { UserReportDocument } from './schemas/user-report.schema';
 import { NewsArticleDocument } from './schemas/news-article.schema';
 import { NewsReadDocument } from './schemas/news-read.schema';
+import { WaitlistEntryDocument } from './schemas/waitlist-entry.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -91,6 +92,8 @@ export class DatabaseService {
     public readonly userBlocks: Model<UserBlockDocument>,
     @InjectModel(DB_TABLES.USER_REPORTS)
     public readonly userReports: Model<UserReportDocument>,
+    @InjectModel(DB_TABLES.WAITLIST_ENTRIES)
+    public readonly waitlistEntries: Model<WaitlistEntryDocument>,
   ) {}
 
   async findOrFail<

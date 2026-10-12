@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>You're on the Ritz waiting list</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
+            <tr>
+              <td style="padding: 32px;">
+                <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Ritz Urban Luxury</div>
+                <h1 style="margin: 8px 0 16px; font-size: 22px; line-height: 28px; color: #43005d;">You're on the list{% if name %}, {{ name }}{% endif %}.</h1>
+                <p style="margin: 0 0 16px; font-size: 15px; line-height: 23px;">
+                  Thanks for signing up. {{ appName }} is on its way to the App Store and Google Play, and we'll email you the day it's ready to download.
+                </p>
+                <p style="margin: 0; font-size: 15px; line-height: 23px;">
+                  That's the only email we'll send about it, apart from this one.
+                </p>
+                <p style="margin: 24px 0 0; font-size: 15px; line-height: 23px;">The Ritz team</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 16px 0 0; font-size: 12px; line-height: 18px; color: #716a77;">
+            You're getting this because you joined the waiting list at <a href="{{ siteUrl }}" style="color: #716a77;">ritzurbanluxury.com</a>.
+            <a href="{{ unsubscribeUrl }}" style="color: #716a77;">Unsubscribe</a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
