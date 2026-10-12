@@ -39,7 +39,6 @@ export type DashboardAttention = {
   pendingDrivers: number;
   pendingRentals: number;
   pendingTripVehicles: number;
-  pendingHireCars: number;
   openReports: number;
   pendingPayouts: number;
 };
@@ -109,7 +108,6 @@ export class DashboardService {
       pendingDrivers,
       pendingRentals,
       pendingTripVehicles,
-      pendingHireCars,
       openReports,
       pendingPayouts,
     ] = await Promise.all([
@@ -127,11 +125,6 @@ export class DashboardService {
         type: { $in: [RideType.Classic, RideType.Luxury] },
         approvalStatus: RideApprovalStatus.Pending,
       }),
-      this.db.rides.countDocuments({
-        ...notDeleted,
-        type: RideType.Hire,
-        approvalStatus: RideApprovalStatus.Pending,
-      }),
       this.db.userReports.countDocuments({
         ...notDeleted,
         status: UserReportStatus.Open,
@@ -146,7 +139,6 @@ export class DashboardService {
       pendingDrivers,
       pendingRentals,
       pendingTripVehicles,
-      pendingHireCars,
       openReports,
       pendingPayouts,
     };

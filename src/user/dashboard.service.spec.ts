@@ -52,10 +52,7 @@ describe('DashboardService.getAttention', () => {
       rentals: { countDocuments: count(2) },
       rides: {
         distinct: jest.fn().mockResolvedValue(['driver-1']),
-        countDocuments: jest
-          .fn()
-          .mockResolvedValueOnce(4)
-          .mockResolvedValueOnce(1),
+        countDocuments: jest.fn().mockResolvedValue(4),
       },
       userReports: { countDocuments: count(5) },
       payoutRequests: { countDocuments: count(6) },
@@ -66,7 +63,6 @@ describe('DashboardService.getAttention', () => {
       pendingDrivers: 3,
       pendingRentals: 2,
       pendingTripVehicles: 4,
-      pendingHireCars: 1,
       openReports: 5,
       pendingPayouts: 6,
     });
