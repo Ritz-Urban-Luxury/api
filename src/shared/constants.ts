@@ -8,6 +8,7 @@ export const DB_TABLES = {
   CARDS: 'cards',
   RENTALS: 'rentals',
   CAR_BRANDS: 'car_brands',
+  CAR_BRAND_LOGOS: 'car_brand_logos',
   DRIVER_EARNINGS: 'driver_earnings',
   DRIVER_LEDGER_ENTRIES: 'driver_ledger_entries',
   DRIVER_RIDE_OFFERS: 'driver_ride_offers',

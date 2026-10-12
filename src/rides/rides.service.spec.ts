@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   RideApprovalStatus,
   RideStatus,
@@ -516,7 +520,10 @@ describe('RidesService Play reviewer sandbox', () => {
     db.trips.findOne.mockReturnValue(populatedQuery(syntheticTrip));
     const announceArrival = jest
       .spyOn(service, 'annouceArrival')
-      .mockResolvedValue({ ...syntheticTrip, status: 'DriverArrived' } as never);
+      .mockResolvedValue({
+        ...syntheticTrip,
+        status: 'DriverArrived',
+      } as never);
 
     await expect(
       service.advancePlayReviewTrip(riderReviewer, syntheticTrip.id),
@@ -828,5 +835,112 @@ describe('RidesService notification sounds', () => {
         sound: 'driver_arrived.wav',
       }),
     );
+  });
+});
+
+describe('RidesService car brand logos', () => {
+  const logoId = '64a000000000000000000005';
+  let service: RidesService;
+  let db: any;
+
+  beforeEach(() => {
+    db = {
+      carBrands: { find: jest.fn() },
+      carBrandLogos: {
+        create: jest.fn((doc) => Promise.resolve({ id: logoId, ...doc })),
+        exists: jest.fn().mockResolvedValue(null),
+        find: jest.fn(),
+        findOneAndUpdate: jest.fn(),
+      },
+    };
+
+    service = Object.create(RidesService.prototype);
+    Object.assign(service as any, { db });
+  });
+
+  it('stores a normalized slug so brand names match regardless of spelling', async () => {
+    await service.createCarBrandLogo({
+      name: ' Mercedes-Benz ',
+      logoUrl: 'https://cdn.example.com/mercedes.png',
+    });
+
+    expect(db.carBrandLogos.exists).toHaveBeenCalledWith({
+      slug: 'mercedesbenz',
+      deleted: { $ne: true },
+    });
+    expect(db.carBrandLogos.create).toHaveBeenCalledWith({
+      name: 'Mercedes-Benz',
+      slug: 'mercedesbenz',
+      logoUrl: 'https://cdn.example.com/mercedes.png',
+    });
+  });
+
+  it('rejects a logo for a brand that already has one', async () => {
+    db.carBrandLogos.exists.mockResolvedValue({ _id: logoId });
+
+    await expect(
+      service.createCarBrandLogo({
+        name: 'mercedes benz',
+        logoUrl: 'https://cdn.example.com/mercedes.png',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(db.carBrandLogos.create).not.toHaveBeenCalled();
+  });
+
+  it('throws when updating a logo that does not exist', async () => {
+    db.carBrandLogos.findOneAndUpdate.mockResolvedValue(null);
+
+    await expect(
+      service.updateCarBrandLogo(logoId, {
+        name: 'Toyota',
+        logoUrl: 'https://cdn.example.com/toyota.png',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('attaches the matching logo url to each car brand by manufacturer', async () => {
+    const brand = (manufacturer: string) => ({
+      manufacturer,
+      toJSON: () => ({ manufacturer, brand: 'Model', year: 2020 }),
+    });
+    db.carBrands.find.mockResolvedValue([
+      brand('Mercedes-Benz'),
+      brand('Toyota'),
+    ]);
+    db.carBrandLogos.find.mockResolvedValue([
+      { slug: 'mercedesbenz', logoUrl: 'https://cdn.example.com/mercedes.png' },
+    ]);
+
+    const brands = await service.getCarBrands();
+
+    expect(brands.map((item) => item.logoUrl)).toEqual([
+      'https://cdn.example.com/mercedes.png',
+      null,
+    ]);
+  });
+
+  it('attaches the matching logo url to each rental brand', async () => {
+    db.rides = {
+      aggregate: jest
+        .fn()
+        .mockResolvedValueOnce([
+          { _id: 'mercedes benz', brand: 'mercedes benz', count: 2 },
+        ])
+        .mockResolvedValueOnce([{ _id: 'mercedes benz' }]),
+    };
+    db.carBrandLogos.find.mockResolvedValue([
+      { slug: 'mercedesbenz', logoUrl: 'https://cdn.example.com/mercedes.png' },
+    ]);
+
+    const { data } = await service.getRentalCarBrands({});
+
+    expect(data).toEqual([
+      {
+        _id: 'mercedes benz',
+        brand: 'mercedes benz',
+        count: 2,
+        logoUrl: 'https://cdn.example.com/mercedes.png',
+      },
+    ]);
   });
 });

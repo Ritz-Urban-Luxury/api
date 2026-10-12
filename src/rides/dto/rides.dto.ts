@@ -17,6 +17,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   ValidateNested,
   ValidationArguments,
   ValidationOptions,
@@ -539,4 +540,13 @@ export class AdminCarBrandDTO {
   @Min(1900)
   @Max(2100)
   year: number;
+}
+
+export class AdminCarBrandLogoDTO {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsUrl()
+  logoUrl: string;
 }

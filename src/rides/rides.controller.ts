@@ -62,6 +62,13 @@ export class RidesController {
     return Response.json('car brands', brands);
   }
 
+  @Get('/brand-logos')
+  async getCarBrandLogos() {
+    const logos = await this.ridesService.getCarBrandLogos();
+
+    return Response.json('car brand logos', logos);
+  }
+
   @UseGuards(JwtGuard)
   @Get('directions')
   async getDrivingRoute(@Query() payload: GetDrivingRouteDTO) {

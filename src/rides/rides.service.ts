@@ -55,6 +55,7 @@ import {
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
   AdminCarBrandDTO,
+  AdminCarBrandLogoDTO,
   AdminGetUserReportsDTO,
   CreateRideDTO,
   GetRideQuoteDTO,
@@ -83,6 +84,10 @@ const RIDER_RENTAL_POPULATE = [
   },
   { path: 'ride' },
 ];
+
+// "Mercedes-Benz", "mercedes benz" and "MERCEDES-BENZ" all map to "mercedesbenz".
+const toCarBrandSlug = (name = '') =>
+  name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 type ReviewRideOffer = {
   driverId: string;
@@ -1655,7 +1660,7 @@ export class RidesService implements OnModuleInit {
       },
     ];
 
-    const [data, totalBrands] = await Promise.all([
+    const [brands, totalBrands, logoUrls] = await Promise.all([
       this.db.rides.aggregate([
         ...all,
         { $sort: { createdAt: -1 } },
@@ -1663,7 +1668,12 @@ export class RidesService implements OnModuleInit {
         { $limit: limit },
       ]),
       this.db.rides.aggregate([...all]),
+      this.getCarBrandLogoUrls(),
     ]);
+    const data = brands.map((brand) => ({
+      ...brand,
+      logoUrl: logoUrls.get(toCarBrandSlug(brand.brand)) ?? null,
+    }));
 
     const totalDocs = totalBrands.length;
     const totalPages = Math.round(totalDocs / limit);
@@ -2459,7 +2469,75 @@ export class RidesService implements OnModuleInit {
   }
 
   async getCarBrands() {
-    return this.db.carBrands.find({ deleted: { $ne: true } });
+    const [brands, logoUrls] = await Promise.all([
+      this.db.carBrands.find({ deleted: { $ne: true } }),
+      this.getCarBrandLogoUrls(),
+    ]);
+
+    return brands.map((brand) => ({
+      ...brand.toJSON(),
+      logoUrl: logoUrls.get(toCarBrandSlug(brand.manufacturer)) ?? null,
+    }));
+  }
+
+  // Logo url per brand slug, for attaching logos to brand listings.
+  private async getCarBrandLogoUrls() {
+    const logos = await this.db.carBrandLogos.find({ deleted: { $ne: true } });
+
+    return new Map(logos.map((logo) => [logo.slug, logo.logoUrl]));
+  }
+
+  async getCarBrandLogos() {
+    return this.db.carBrandLogos
+      .find({ deleted: { $ne: true } })
+      .sort({ name: 1 });
+  }
+
+  async createCarBrandLogo(payload: AdminCarBrandLogoDTO) {
+    const slug = toCarBrandSlug(payload.name);
+    const duplicate = await this.db.carBrandLogos.exists({
+      slug,
+      deleted: { $ne: true },
+    });
+    if (duplicate) throw new ConflictException('car brand logo already exists');
+    return this.db.carBrandLogos.create({
+      name: payload.name.trim(),
+      slug,
+      logoUrl: payload.logoUrl.trim(),
+    });
+  }
+
+  async updateCarBrandLogo(logoId: string, payload: AdminCarBrandLogoDTO) {
+    const slug = toCarBrandSlug(payload.name);
+    const duplicate = await this.db.carBrandLogos.exists({
+      _id: { $ne: logoId },
+      slug,
+      deleted: { $ne: true },
+    });
+    if (duplicate) throw new ConflictException('car brand logo already exists');
+    const logo = await this.db.carBrandLogos.findOneAndUpdate(
+      { _id: logoId, deleted: { $ne: true } },
+      {
+        $set: {
+          name: payload.name.trim(),
+          slug,
+          logoUrl: payload.logoUrl.trim(),
+        },
+      },
+      { new: true },
+    );
+    if (!logo) throw new NotFoundException('car brand logo not found');
+    return logo;
+  }
+
+  async deleteCarBrandLogo(logoId: string) {
+    const logo = await this.db.carBrandLogos.findOneAndUpdate(
+      { _id: logoId, deleted: { $ne: true } },
+      { $set: { deleted: true } },
+      { new: true },
+    );
+    if (!logo) throw new NotFoundException('car brand logo not found');
+    return { id: logo.id, deleted: true };
   }
 
   async getAdminCarBrands() {

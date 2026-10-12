@@ -15,6 +15,7 @@ import { RidesService } from './rides.service';
 import {
   AdminGetFleetDTO,
   AdminCarBrandDTO,
+  AdminCarBrandLogoDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
   AdminGetUserReportsDTO,
@@ -68,6 +69,41 @@ export class AdminRideController {
     return Response.json(
       'car brand deleted',
       await this.ridesService.deleteCarBrand(brandId),
+    );
+  }
+
+  @Get('/brand-logos')
+  async getBrandLogos() {
+    return Response.json(
+      'car brand logos',
+      await this.ridesService.getCarBrandLogos(),
+    );
+  }
+
+  @Post('/brand-logos')
+  async createBrandLogo(@Body() payload: AdminCarBrandLogoDTO) {
+    return Response.json(
+      'car brand logo created',
+      await this.ridesService.createCarBrandLogo(payload),
+    );
+  }
+
+  @Patch('/brand-logos/:logoId')
+  async updateBrandLogo(
+    @Param('logoId') logoId: string,
+    @Body() payload: AdminCarBrandLogoDTO,
+  ) {
+    return Response.json(
+      'car brand logo updated',
+      await this.ridesService.updateCarBrandLogo(logoId, payload),
+    );
+  }
+
+  @Delete('/brand-logos/:logoId')
+  async deleteBrandLogo(@Param('logoId') logoId: string) {
+    return Response.json(
+      'car brand logo deleted',
+      await this.ridesService.deleteCarBrandLogo(logoId),
     );
   }
 

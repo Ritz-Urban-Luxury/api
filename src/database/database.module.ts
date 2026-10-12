@@ -10,6 +10,7 @@ import { ActivitySchema } from './schemas/activities.schema';
 import { AuthTokenSchema } from './schemas/auth-tokens.schema';
 import { CardSchema } from './schemas/card.schema';
 import { CarBrandSchema } from './schemas/car-brands.schema';
+import { CarBrandLogoSchema } from './schemas/car-brand-logos.schema';
 import { DriverEarningSchema } from './schemas/driver-earnings.schema';
 import { DriverLedgerEntrySchema } from './schemas/driver-ledger.schema';
 import { DriverOnlineSessionSchema } from './schemas/driver-online-session.schema';
@@ -46,6 +47,7 @@ import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
       { name: DB_TABLES.CARDS, schema: CardSchema },
       { name: DB_TABLES.RENTALS, schema: RentalSchema },
       { name: DB_TABLES.CAR_BRANDS, schema: CarBrandSchema },
+      { name: DB_TABLES.CAR_BRAND_LOGOS, schema: CarBrandLogoSchema },
       { name: DB_TABLES.DRIVER_EARNINGS, schema: DriverEarningSchema },
       {
         name: DB_TABLES.DRIVER_LEDGER_ENTRIES,
