@@ -6,6 +6,7 @@ import { DriverLedgerType } from './schemas/driver-ledger.schema';
 import { PaymentMethod } from './schemas/trips.schema';
 import { Configuration } from '../shared/config';
 import { ReferralService } from './referral.service';
+import { PricingService } from './pricing.service';
 
 @Injectable()
 export class ActivityLedgerService {
@@ -16,8 +17,13 @@ export class ActivityLedgerService {
     private readonly config: ConfigService<Configuration>,
     @Inject(forwardRef(() => ReferralService))
     private readonly referralService: ReferralService,
+    private readonly pricing: PricingService,
   ) {}
 
+  /**
+   * The environment fallback rate. Only used for old earnings rows; new earnings use the
+   * commission set on the admin Pricing page.
+   */
   commissionRate() {
     const rate = this.config.get('driverCommissionRate', { infer: true });
     if (!Number.isFinite(rate) || rate < 0 || rate >= 1) {
@@ -26,8 +32,7 @@ export class ActivityLedgerService {
     return rate as number;
   }
 
-  splitFare(gross: number) {
-    const rate = this.commissionRate();
+  splitFare(gross: number, rate = this.commissionRate()) {
     const commissionAmount = Math.round(gross * rate * 100) / 100;
     const netAmount = Math.round((gross - commissionAmount) * 100) / 100;
     return { grossAmount: gross, commissionAmount, netAmount };
@@ -58,6 +63,8 @@ export class ActivityLedgerService {
     rental?: string;
     amount: number;
     paymentMethod?: PaymentMethod | string;
+    /** Fraction Ritz keeps (0.2 = 20%). Defaults to the current admin setting. */
+    commissionRate?: number;
   }) {
     if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
       return;
@@ -68,8 +75,17 @@ export class ActivityLedgerService {
       return;
     }
 
+    const rate =
+      typeof payload.commissionRate === 'number' &&
+      payload.commissionRate >= 0 &&
+      payload.commissionRate < 1
+        ? payload.commissionRate
+        : await this.pricing
+            .commissionRate()
+            .catch(() => this.commissionRate());
     const { grossAmount, commissionAmount, netAmount } = this.splitFare(
       payload.amount,
+      rate,
     );
 
     const filter = payload.rental

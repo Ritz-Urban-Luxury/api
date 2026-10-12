@@ -39,6 +39,9 @@ import { UserReportDocument } from './schemas/user-report.schema';
 import { NewsArticleDocument } from './schemas/news-article.schema';
 import { NewsReadDocument } from './schemas/news-read.schema';
 import { WaitlistEntryDocument } from './schemas/waitlist-entry.schema';
+import { PricingSettingsDocument } from './schemas/pricing-settings.schema';
+import { PricingChangeDocument } from './schemas/pricing-change.schema';
+import { PricingZoneDocument } from './schemas/pricing-zone.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -97,6 +100,12 @@ export class DatabaseService {
     public readonly userReports: Model<UserReportDocument>,
     @InjectModel(DB_TABLES.WAITLIST_ENTRIES)
     public readonly waitlistEntries: Model<WaitlistEntryDocument>,
+    @InjectModel(DB_TABLES.PRICING_SETTINGS)
+    public readonly pricingSettings: Model<PricingSettingsDocument>,
+    @InjectModel(DB_TABLES.PRICING_CHANGES)
+    public readonly pricingChanges: Model<PricingChangeDocument>,
+    @InjectModel(DB_TABLES.PRICING_ZONES)
+    public readonly pricingZones: Model<PricingZoneDocument>,
   ) {}
 
   async findOrFail<

@@ -81,6 +81,47 @@ export class GeolocationService {
       });
   }
 
+  /** Road distance (metres) and driving time in current traffic (seconds), for pricing. */
+  static async getRouteSummary(
+    from: [number, number],
+    to: [number, number],
+  ): Promise<{ distance: number; duration: number }> {
+    if (config().turnOffGeolaction) {
+      return { distance: 3000, duration: 7 * 60 };
+    }
+
+    const { mapsApiKey, mapsApiUrl } = config().google;
+
+    return Http.request({
+      baseURL: mapsApiUrl,
+      url: '/distancematrix/json',
+      params: {
+        origins: `${from[0]},${from[1]}`,
+        destinations: `${to[0]},${to[1]}`,
+        key: mapsApiKey,
+        ...TRAFFIC_AWARE_PARAMS,
+      },
+    })
+      .then((res) => {
+        const data = res.data as DistanceMatrixResponse;
+        const element = data.rows?.[0]?.elements?.[0];
+
+        if (data.status !== 'OK' || element?.status !== 'OK') {
+          throw new Error(data.error_message || data.status || 'NO_ROUTE');
+        }
+
+        return {
+          distance: element.distance?.value ?? 0,
+          duration: getMatrixDurationSeconds(element),
+        };
+      })
+      .catch((error) => {
+        throw new BadRequestException(
+          `error getting distance - ${error.message}`,
+        );
+      });
+  }
+
   static async getETA(from: [number, number], to: [number, number]) {
     if (config().turnOffGeolaction) {
       return 5;

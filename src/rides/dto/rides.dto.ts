@@ -26,21 +26,18 @@ import {
   isLatLong,
 } from 'class-validator';
 import {
-  UserReportReason,
-  UserReportReasons,
-  UserReportStatus,
-  UserReportStatuses,
-} from '../../database/schemas/user-report.schema';
-
-/** Max photos for a vehicle listing (Hire and trip cars). */
-export const MAX_HIRE_RIDE_IMAGES = 6;
-import {
   RentalBillingType,
   RentalBillingTypes,
   RentalStatus,
   RentalStatuses,
 } from 'src/database/schemas/rentals.schema';
 import { PaginationRequestDTO } from 'src/shared/pagination.dto';
+import {
+  UserReportReason,
+  UserReportReasons,
+  UserReportStatus,
+  UserReportStatuses,
+} from '../../database/schemas/user-report.schema';
 import {
   RideApprovalStatus,
   RideApprovalStatuses,
@@ -56,6 +53,9 @@ import {
   TripStatus,
   TripStatuses,
 } from '../../database/schemas/trips.schema';
+
+/** Max photos for a vehicle listing (Hire and trip cars). */
+export const MAX_HIRE_RIDE_IMAGES = 6;
 
 @ValidatorConstraint()
 class IsCoordinatesConstraint {
@@ -106,6 +106,20 @@ export class GetRideQuoteDTO {
   @IsNumber()
   @IsNotEmpty()
   distance: number;
+
+  /** Expected driving time in seconds. Estimated from distance when left out. */
+  @IsNumber()
+  @IsOptional()
+  duration?: number;
+
+  /** Pickup point, so the price uses that location's rates. Older apps leave it out. */
+  @IsLatitude()
+  @IsOptional()
+  fromLat?: number;
+
+  @IsLongitude()
+  @IsOptional()
+  fromLon?: number;
 }
 
 export class RideStopsDTO {

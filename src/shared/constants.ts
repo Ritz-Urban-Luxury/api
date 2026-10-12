@@ -26,4 +26,7 @@ export const DB_TABLES = {
   USER_BLOCKS: 'user_blocks',
   USER_REPORTS: 'user_reports',
   WAITLIST_ENTRIES: 'waitlist_entries',
+  PRICING_SETTINGS: 'pricing_settings',
+  PRICING_CHANGES: 'pricing_changes',
+  PRICING_ZONES: 'pricing_zones',
 };

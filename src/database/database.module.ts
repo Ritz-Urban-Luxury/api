@@ -32,6 +32,10 @@ import { UserReportSchema } from './schemas/user-report.schema';
 import { NewsArticleSchema } from './schemas/news-article.schema';
 import { NewsReadSchema } from './schemas/news-read.schema';
 import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
+import { PricingSettingsSchema } from './schemas/pricing-settings.schema';
+import { PricingChangeSchema } from './schemas/pricing-change.schema';
+import { PricingZoneSchema } from './schemas/pricing-zone.schema';
+import { PricingService } from './pricing.service';
 
 @Global()
 @Module({
@@ -74,9 +78,22 @@ import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
       { name: DB_TABLES.USER_BLOCKS, schema: UserBlockSchema },
       { name: DB_TABLES.USER_REPORTS, schema: UserReportSchema },
       { name: DB_TABLES.WAITLIST_ENTRIES, schema: WaitlistEntrySchema },
+      { name: DB_TABLES.PRICING_SETTINGS, schema: PricingSettingsSchema },
+      { name: DB_TABLES.PRICING_CHANGES, schema: PricingChangeSchema },
+      { name: DB_TABLES.PRICING_ZONES, schema: PricingZoneSchema },
     ]),
   ],
-  providers: [DatabaseService, ActivityLedgerService, ReferralService],
-  exports: [DatabaseService, ActivityLedgerService, ReferralService],
+  providers: [
+    DatabaseService,
+    ActivityLedgerService,
+    ReferralService,
+    PricingService,
+  ],
+  exports: [
+    DatabaseService,
+    ActivityLedgerService,
+    ReferralService,
+    PricingService,
+  ],
 })
 export class DatabaseModule {}

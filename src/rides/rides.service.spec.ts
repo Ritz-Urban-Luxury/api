@@ -243,6 +243,9 @@ describe('RidesService Play reviewer sandbox', () => {
       db,
       finance: { canDriverReceiveRides: jest.fn().mockResolvedValue(true) },
       paymentService,
+      pricing: {
+        quote: jest.fn().mockResolvedValue({ classic: 700, luxury: 800 }),
+      },
       push,
       websocket,
     });

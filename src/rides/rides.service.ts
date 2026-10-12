@@ -11,16 +11,17 @@ import { Cache } from 'cache-manager';
 import { isMongoId } from 'class-validator';
 import { FilterQuery, Types } from 'mongoose';
 import {
-  getPlayReviewAccount,
-  getPlayReviewAccounts,
-  PLAY_REVIEW_PHONE_NUMBERS,
-} from '../authentication/play-review-accounts';
-import {
   RentalBillingType,
   RentalDocument,
   RentalStatus,
 } from 'src/database/schemas/rentals.schema';
+import {
+  getPlayReviewAccount,
+  getPlayReviewAccounts,
+  PLAY_REVIEW_PHONE_NUMBERS,
+} from '../authentication/play-review-accounts';
 import { ActivityLedgerService } from '../database/activity-ledger.service';
+import { PricingService } from '../database/pricing.service';
 import { DatabaseService } from '../database/database.service';
 import { ActivityType } from '../database/schemas/activities.schema';
 import { RideOfferOutcome } from '../database/schemas/driver-ride-offer.schema';
@@ -35,6 +36,7 @@ import {
   PaymentMethod,
   Rating,
   TripDocument,
+  TripFare,
   TripStatus,
   TripStopStatus,
 } from '../database/schemas/trips.schema';
@@ -93,7 +95,11 @@ type ReviewRideOffer = {
   driverId: string;
   riderId: string;
   rideId: string;
-  payload: RequestRideDTO & { amount: number; distance: number };
+  payload: RequestRideDTO & {
+    amount: number;
+    distance: number;
+    fare?: TripFare;
+  };
 };
 
 @Injectable()
@@ -108,6 +114,7 @@ export class RidesService implements OnModuleInit {
     private readonly activityLedger: ActivityLedgerService,
     private readonly push: PushNotificationService,
     private readonly finance: FinanceService,
+    private readonly pricing: PricingService,
   ) {}
 
   private rejectPlayReviewerRealWorldAction(user: UserDocument) {
@@ -579,17 +586,13 @@ export class RidesService implements OnModuleInit {
       .sort(isHireOnly ? { createdAt: -1 } : undefined);
   }
 
+  /** Prices for each ride type, from the rates admins set on the Pricing page. */
   async getRideQuotes(payload: GetRideQuoteDTO) {
-    const classicPricePerKM = 85;
-    const luxuryPricePerKM = 100;
-    const { distance } = payload;
-
-    const distanceInKM = distance / 1000;
-
-    return {
-      classic: Math.max(700, Math.round(classicPricePerKM * distanceInKM)),
-      luxury: Math.max(800, Math.round(luxuryPricePerKM * distanceInKM)),
-    };
+    const pickup =
+      typeof payload.fromLat === 'number' && typeof payload.fromLon === 'number'
+        ? ([payload.fromLat, payload.fromLon] as [number, number])
+        : undefined;
+    return this.pricing.quote(payload.distance, payload.duration, pickup);
   }
 
   async getOngoingTrip(user: UserDocument) {
@@ -699,7 +702,7 @@ export class RidesService implements OnModuleInit {
     }
 
     const trackingId = Math.random().toString(32).substring(2);
-    const [_available, distance] = await Promise.all([
+    const [_available, route] = await Promise.all([
       this.db.rides
         .find({
           'specs.synthetic': { $ne: true },
@@ -713,13 +716,18 @@ export class RidesService implements OnModuleInit {
           },
         })
         .populate('driver'),
-      GeolocationService.getDistance(
+      GeolocationService.getRouteSummary(
         [payload.fromLat, payload.fromLon],
         [payload.toLat, payload.toLon],
       ),
     ]);
-    const quotes = await this.getRideQuotes({ distance });
-    const amount: number = quotes[type.toLowerCase()];
+    const { distance } = route;
+    // The price is fixed here and stored on the trip, so the rider pays what they were quoted.
+    const fare = await this.pricing.fareFor(type, distance, route.duration, [
+      payload.fromLat,
+      payload.fromLon,
+    ]);
+    const { amount } = fare;
     if (paymentMethod === PaymentMethod.RULBalance) {
       const balance = await this.db.balances.findOne({
         user: user.id,
@@ -776,6 +784,7 @@ export class RidesService implements OnModuleInit {
       ...payload,
       amount,
       distance,
+      fare,
     });
 
     return { ride: available[0], trackingId };
@@ -906,7 +915,11 @@ export class RidesService implements OnModuleInit {
     user: UserDocument,
     available: RidesDocument[],
     connectionId: string,
-    payload: RequestRideDTO & { distance: number; amount: number },
+    payload: RequestRideDTO & {
+      distance: number;
+      amount: number;
+      fare?: TripFare;
+    },
   ) {
     // Offer flag must outlive the wait window
     const offerTtl = this.WAIT_TIME * 2;
@@ -1344,11 +1357,20 @@ export class RidesService implements OnModuleInit {
       distance += stop?.distance || 0;
     });
 
-    const quotes = await this.getRideQuotes({ distance });
     const isPlayReviewSynthetic = trip.meta?.playReviewSynthetic === true;
-    const amount = isPlayReviewSynthetic
-      ? 0
-      : quotes[ride.type.toLocaleLowerCase()] || 0;
+    const stopsDistance = distance - trip.distance;
+    let amount = 0;
+    if (!isPlayReviewSynthetic) {
+      if (trip.fare?.amount > 0) {
+        // Charge the booked price, plus any stops added on the way at the booked rate.
+        amount = PricingService.chargeForTrip(trip.fare, stopsDistance);
+      } else {
+        // Trips booked before prices were locked at booking.
+        const [fromLat, fromLon] = trip.from?.coordinates ?? [];
+        const quotes = await this.getRideQuotes({ distance, fromLat, fromLon });
+        amount = quotes[ride.type.toLocaleLowerCase()] || 0;
+      }
+    }
 
     if (!isPlayReviewSynthetic) {
       await this.paymentService
@@ -1412,6 +1434,11 @@ export class RidesService implements OnModuleInit {
         trip: trip.id,
         amount,
         paymentMethod: trip.paymentMethod,
+        // The commission agreed when the ride was booked.
+        commissionRate:
+          typeof trip.fare?.commissionPercent === 'number'
+            ? trip.fare.commissionPercent / 100
+            : undefined,
       });
       if (trip.paymentMethod === PaymentMethod.Cash) {
         const financialState = await this.finance.ensureDriverRestrictionState(

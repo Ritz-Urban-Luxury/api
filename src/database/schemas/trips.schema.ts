@@ -84,10 +84,32 @@ export class TripStop {
 
 export const TripStopSchema = SchemaFactory.createForClass(TripStop);
 
+/** The price agreed at booking and the rates behind it, so the rider pays what they were quoted. */
+export type TripFare = {
+  rideType: string;
+  baseFare: number;
+  perKm: number;
+  perMinute: number;
+  minimumFare: number;
+  /** Ritz's share at booking time, as a percentage. */
+  commissionPercent: number;
+  /** The pricing location the pickup fell in; empty means default rates. */
+  zoneId?: string;
+  zoneName?: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  amount: number;
+  quotedAt: Date;
+};
+
 @Schema()
 export class Trip extends BaseSchema {
+  /** The fare quoted at booking. What was charged is in meta.amount. */
   @Prop({ required: true })
   amount: number;
+
+  @Prop({ type: SchemaTypes.Mixed })
+  fare?: TripFare;
 
   @Prop({ type: LocationSchema, required: true })
   from: Location;
