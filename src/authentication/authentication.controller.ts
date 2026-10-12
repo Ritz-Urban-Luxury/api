@@ -6,7 +6,10 @@ import {
   HttpStatus,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { UserDocument } from '../database/schemas/user.schema';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
 import {
   LoginDTO,
@@ -16,6 +19,7 @@ import {
   SignupDTO,
 } from './authentication.dto';
 import { AuthenticationService } from './authentication.service';
+import { AdminJwtGuard } from './guards/jwt.guard';
 
 @Controller({ path: 'authentication' })
 export class AuthenticationController {
@@ -58,10 +62,17 @@ export class AuthenticationController {
     return Response.json('login successful', loggedInUser);
   }
 
+  @UseGuards(AdminJwtGuard)
+  @Get('admin-session')
+  adminSession(@CurrentUser() user: UserDocument) {
+    return Response.json('admin session', user);
+  }
+
   @Post('reset-password')
   async resetPassword(@Body() payload: ResetPasswordDTO) {
-    const loggedInUser =
-      await this.authenticationService.resetPassword(payload);
+    const loggedInUser = await this.authenticationService.resetPassword(
+      payload,
+    );
 
     return Response.json('password updated', loggedInUser);
   }

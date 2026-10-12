@@ -151,6 +151,8 @@ export class User extends BaseSchema {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
+UserSchema.index({ deleted: 1, isDriver: 1, isAppAdmin: 1, createdAt: 1 });
+
 UserSchema.virtual('requiresProfileSetup').get(function requiresProfileSetup() {
   return Boolean(this.oAuthProvider && !this.phoneNumber);
 });
