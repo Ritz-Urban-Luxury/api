@@ -14,4 +14,13 @@ export class AdminDashboardController {
 
     return Response.json('dashboard', data);
   }
+
+  /** Light endpoint for the admin sidebar badges, polled in the background. */
+  @Get('attention')
+  async getAttention() {
+    return Response.json(
+      'dashboard attention',
+      await this.dashboardService.getAttention(),
+    );
+  }
 }

@@ -3,6 +3,10 @@ import { FilterQuery } from 'mongoose';
 import * as moment from 'moment';
 import { DatabaseService } from '../database/database.service';
 import { ActivityDocument } from '../database/schemas/activities.schema';
+import { PayoutRequestStatus } from '../database/schemas/payout-request.schema';
+import { RentalStatus } from '../database/schemas/rentals.schema';
+import { RideApprovalStatus, RideType } from '../database/schemas/rides.schema';
+import { UserReportStatus } from '../database/schemas/user-report.schema';
 import { TripDocument, TripStatus } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 
@@ -28,6 +32,16 @@ type TripTrendRow = {
   completedRides: number;
   cancelledRides: number;
   revenue: number;
+};
+
+/** Work waiting on an admin. Each count matches the default filter of the page it links to. */
+export type DashboardAttention = {
+  pendingDrivers: number;
+  pendingRentals: number;
+  pendingTripVehicles: number;
+  pendingHireCars: number;
+  openReports: number;
+  pendingPayouts: number;
 };
 
 export type DashboardTrendPoint = {
@@ -86,6 +100,58 @@ export const buildDashboardTrendPoints = (
 export class DashboardService {
   constructor(private readonly db: DatabaseService) {}
 
+  async getAttention(): Promise<DashboardAttention> {
+    const notDeleted = { deleted: { $ne: true } };
+    // Same definition of "driver" as the admin drivers list.
+    const rideDriverIds = await this.db.rides.distinct('driver', notDeleted);
+
+    const [
+      pendingDrivers,
+      pendingRentals,
+      pendingTripVehicles,
+      pendingHireCars,
+      openReports,
+      pendingPayouts,
+    ] = await Promise.all([
+      this.db.users.countDocuments({
+        ...notDeleted,
+        $or: [{ isDriver: true }, { _id: { $in: rideDriverIds } }],
+        isVerified: { $ne: true },
+      }),
+      this.db.rentals.countDocuments({
+        ...notDeleted,
+        status: RentalStatus.Pending,
+      }),
+      this.db.rides.countDocuments({
+        ...notDeleted,
+        type: { $in: [RideType.Classic, RideType.Luxury] },
+        approvalStatus: RideApprovalStatus.Pending,
+      }),
+      this.db.rides.countDocuments({
+        ...notDeleted,
+        type: RideType.Hire,
+        approvalStatus: RideApprovalStatus.Pending,
+      }),
+      this.db.userReports.countDocuments({
+        ...notDeleted,
+        status: UserReportStatus.Open,
+      }),
+      this.db.payoutRequests.countDocuments({
+        ...notDeleted,
+        status: PayoutRequestStatus.Requested,
+      }),
+    ]);
+
+    return {
+      pendingDrivers,
+      pendingRentals,
+      pendingTripVehicles,
+      pendingHireCars,
+      openReports,
+      pendingPayouts,
+    };
+  }
+
   async getDashboard() {
     const notDeleted: FilterQuery<unknown> = { deleted: { $ne: true } };
     const startOfToday = moment().startOf('day').toDate();
@@ -117,6 +183,7 @@ export class DashboardService {
       activityDocs,
       userTrendRows,
       tripTrendRows,
+      attention,
     ] = await Promise.all([
       this.db.users.countDocuments({
         ...notDeleted,
@@ -269,6 +336,7 @@ export class DashboardService {
         },
         { $sort: { _id: 1 } },
       ]),
+      this.getAttention(),
     ]);
 
     const revenueRow = revenueAgg[0];
@@ -279,8 +347,7 @@ export class DashboardService {
     let revenueChangePct = 0;
     if (previousMonthRevenue > 0) {
       revenueChangePct = Math.round(
-        ((currentMonthRevenue - previousMonthRevenue) /
-          previousMonthRevenue) *
+        ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) *
           100,
       );
     } else if (currentMonthRevenue > 0) {
@@ -347,6 +414,7 @@ export class DashboardService {
         rideNow: null,
         rideLater: null,
       },
+      attention,
       recentRides,
       wages: {
         dailyTotal,

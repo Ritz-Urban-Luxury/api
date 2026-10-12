@@ -1,4 +1,7 @@
-import { buildDashboardTrendPoints } from './dashboard.service';
+import {
+  buildDashboardTrendPoints,
+  DashboardService,
+} from './dashboard.service';
 
 describe('buildDashboardTrendPoints', () => {
   it('fills missing days and merges user, ride, and revenue metrics', () => {
@@ -37,6 +40,45 @@ describe('buildDashboardTrendPoints', () => {
       completedRides: 0,
       cancelledRides: 0,
       revenue: 0,
+    });
+  });
+});
+
+describe('DashboardService.getAttention', () => {
+  it('counts the work waiting on an admin with the same filters as each list', async () => {
+    const count = (n: number) => jest.fn().mockResolvedValue(n);
+    const db = {
+      users: { countDocuments: count(3) },
+      rentals: { countDocuments: count(2) },
+      rides: {
+        distinct: jest.fn().mockResolvedValue(['driver-1']),
+        countDocuments: jest
+          .fn()
+          .mockResolvedValueOnce(4)
+          .mockResolvedValueOnce(1),
+      },
+      userReports: { countDocuments: count(5) },
+      payoutRequests: { countDocuments: count(6) },
+    };
+    const service = new DashboardService(db as never);
+
+    await expect(service.getAttention()).resolves.toEqual({
+      pendingDrivers: 3,
+      pendingRentals: 2,
+      pendingTripVehicles: 4,
+      pendingHireCars: 1,
+      openReports: 5,
+      pendingPayouts: 6,
+    });
+    expect(db.users.countDocuments).toHaveBeenCalledWith({
+      deleted: { $ne: true },
+      $or: [{ isDriver: true }, { _id: { $in: ['driver-1'] } }],
+      isVerified: { $ne: true },
+    });
+    expect(db.rides.countDocuments).toHaveBeenNthCalledWith(1, {
+      deleted: { $ne: true },
+      type: { $in: ['Classic', 'Luxury'] },
+      approvalStatus: 'Pending',
     });
   });
 });
