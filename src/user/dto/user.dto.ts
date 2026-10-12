@@ -12,6 +12,7 @@ import {
   IsPhoneNumber,
   IsString,
   IsUrl,
+  MinLength,
 } from 'class-validator';
 import { PaginationRequestDTO } from '../../shared/pagination.dto';
 import { PayoutDestinationType } from '../../database/schemas/payout-request.schema';
@@ -167,4 +168,24 @@ export class SetUserAdminDTO {
   @IsBoolean()
   @IsNotEmpty()
   isAppAdmin: boolean;
+}
+
+export class AdminCreateDriverDTO {
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsPhoneNumber('NG')
+  phoneNumber: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
 }

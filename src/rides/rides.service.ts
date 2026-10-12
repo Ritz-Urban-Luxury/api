@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   CACHE_MANAGER,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -53,6 +54,7 @@ import {
   AcceptRideDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
+  AdminCarBrandDTO,
   AdminGetUserReportsDTO,
   CreateRideDTO,
   GetRideQuoteDTO,
@@ -536,13 +538,11 @@ export class RidesService implements OnModuleInit {
     const { lat, lon, type } = payload;
     const types = type ? (Array.isArray(type) ? type : [type]) : null;
     const isHireOnly = types?.length === 1 && types[0] === RideType.Hire;
-    const isRiderReviewer =
-      getPlayReviewAccount(user.email)?.kind === 'rider';
+    const isRiderReviewer = getPlayReviewAccount(user.email)?.kind === 'rider';
 
     const query: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
-      'specs.synthetic':
-        isHireOnly && isRiderReviewer ? true : { $ne: true },
+      'specs.synthetic': isHireOnly && isRiderReviewer ? true : { $ne: true },
       status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
     };
     const blockedUserIds = await this.getBlockedPairUserIds(String(user.id));
@@ -2459,17 +2459,87 @@ export class RidesService implements OnModuleInit {
   }
 
   async getCarBrands() {
-    return this.db.carBrands.find();
+    return this.db.carBrands.find({ deleted: { $ne: true } });
+  }
+
+  async getAdminCarBrands() {
+    return this.db.carBrands
+      .find({ deleted: { $ne: true } })
+      .sort({ manufacturer: 1, brand: 1, year: -1 });
+  }
+
+  async createCarBrand(payload: AdminCarBrandDTO) {
+    const duplicate = await this.db.carBrands.exists({
+      manufacturer: payload.manufacturer.trim(),
+      brand: payload.brand.trim(),
+      year: payload.year,
+      deleted: { $ne: true },
+    });
+    if (duplicate)
+      throw new ConflictException('car brand entry already exists');
+    return this.db.carBrands.create({
+      manufacturer: payload.manufacturer.trim(),
+      brand: payload.brand.trim(),
+      year: payload.year,
+    });
+  }
+
+  async updateCarBrand(brandId: string, payload: AdminCarBrandDTO) {
+    const brand = await this.db.carBrands.findOneAndUpdate(
+      { _id: brandId, deleted: { $ne: true } },
+      {
+        $set: {
+          manufacturer: payload.manufacturer.trim(),
+          brand: payload.brand.trim(),
+          year: payload.year,
+        },
+      },
+      { new: true },
+    );
+    if (!brand) throw new NotFoundException('car brand not found');
+    return brand;
+  }
+
+  async deleteCarBrand(brandId: string) {
+    const brand = await this.db.carBrands.findOneAndUpdate(
+      { _id: brandId, deleted: { $ne: true } },
+      { $set: { deleted: true } },
+      { new: true },
+    );
+    if (!brand) throw new NotFoundException('car brand not found');
+    return { id: brand.id, deleted: true };
   }
 
   async getTrips(query: AdminGetTripsDTO) {
-    const { page = 1, limit = 100, status } = query;
+    const { page = 1, limit = 100, status, scope } = query;
     const q: FilterQuery<TripDocument> = { deleted: { $ne: true } };
     if (status) {
       q.status = { $in: Array.isArray(status) ? status : [status] };
+    } else if (scope === 'running') {
+      q.status = {
+        $in: [
+          TripStatus.Started,
+          TripStatus.InProgress,
+          TripStatus.DriverArrived,
+        ],
+      };
+    } else if (scope === 'history') {
+      q.status = { $in: InactiveTripStatuses };
     }
 
-    return this.db.trips.paginate(q, { page, limit });
+    return this.db.trips.paginate(q, {
+      page,
+      limit,
+      populate: [
+        { path: 'user', select: 'firstName lastName email phoneNumber' },
+        { path: 'driver', select: 'firstName lastName email phoneNumber' },
+        {
+          path: 'ride',
+          select: 'brand model registration color type images location',
+        },
+      ],
+      sort: { createdAt: -1 },
+    });
   }
 
   async getRentals(query: AdminGetRentalsDTO) {

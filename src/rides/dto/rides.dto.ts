@@ -463,6 +463,10 @@ export class AdminGetTripsDTO extends PaginationRequestDTO {
   @IsIn(TripStatuses, { each: true })
   @IsOptional()
   status?: TripStatus | TripStatus[];
+
+  @IsIn(['running', 'history'])
+  @IsOptional()
+  scope?: 'running' | 'history';
 }
 
 export class AdminGetUserReportsDTO extends PaginationRequestDTO {
@@ -519,4 +523,20 @@ export class DriverActivityQueryDTO {
   @IsIn(['week', 'months'])
   @IsOptional()
   period?: 'week' | 'months';
+}
+
+export class AdminCarBrandDTO {
+  @IsString()
+  @IsNotEmpty()
+  manufacturer: string;
+
+  @IsString()
+  @IsNotEmpty()
+  brand: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1900)
+  @Max(2100)
+  year: number;
 }

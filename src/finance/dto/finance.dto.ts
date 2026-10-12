@@ -10,6 +10,8 @@ import {
   Min,
 } from 'class-validator';
 import { PayoutDestinationType } from '../../database/schemas/payout-request.schema';
+import { WalletTransactionType } from '../../database/schemas/wallet-transaction.schema';
+import { PaginationRequestDTO } from '../../shared/pagination.dto';
 
 export class ResolveBankAccountDTO {
   @IsString()
@@ -84,4 +86,10 @@ export class AccountClosureDestinationDTO {
   @IsMongoId()
   @IsOptional()
   bankAccountId?: string;
+}
+
+export class AdminWalletTransactionsDTO extends PaginationRequestDTO {
+  @IsEnum(WalletTransactionType)
+  @IsOptional()
+  type?: WalletTransactionType;
 }

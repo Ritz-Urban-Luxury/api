@@ -5,7 +5,44 @@ import {
   PayoutRequestStatus,
   PayoutRequestType,
 } from '../database/schemas/payout-request.schema';
+import { WalletTransactionType } from '../database/schemas/wallet-transaction.schema';
 import { FinanceService } from './finance.service';
+
+describe('FinanceService.listWalletTransactions', () => {
+  it('returns a filtered, newest-first page with user details', async () => {
+    const paginate = jest.fn().mockResolvedValue({
+      docs: [],
+      page: 2,
+      totalPages: 2,
+    });
+    const service = Object.create(FinanceService.prototype) as FinanceService;
+    Object.assign(service as any, {
+      db: { walletTransactions: { paginate } },
+    });
+
+    await service.listWalletTransactions({
+      page: 2,
+      limit: 25,
+      type: WalletTransactionType.Debit,
+    });
+
+    expect(paginate).toHaveBeenCalledWith(
+      {
+        deleted: { $ne: true },
+        type: WalletTransactionType.Debit,
+      },
+      {
+        page: 2,
+        limit: 25,
+        populate: {
+          path: 'user',
+          select: 'firstName lastName email phoneNumber',
+        },
+        sort: { createdAt: -1 },
+      },
+    );
+  });
+});
 
 describe('FinanceService.prepareDriverAccountClosurePayout', () => {
   const driver = {

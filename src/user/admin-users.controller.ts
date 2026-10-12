@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Post,
   Put,
   Query,
   UseGuards,
@@ -11,6 +12,7 @@ import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
 import { Response } from 'src/shared/response';
 import {
   AdminGetDriversDTO,
+  AdminCreateDriverDTO,
   AdminListUsersDTO,
   SetUserAdminDTO,
   SetUserVerificationDTO,
@@ -34,6 +36,13 @@ export class AdminUserController {
     const { docs, ...meta } = await this.userService.listDrivers(query);
 
     return Response.json('drivers', docs, meta);
+  }
+
+  @Post('/drivers')
+  async createDriver(@Body() payload: AdminCreateDriverDTO) {
+    const driver = await this.userService.createDriver(payload);
+
+    return Response.json('driver created', driver);
   }
 
   @Get('/drivers/:userId')

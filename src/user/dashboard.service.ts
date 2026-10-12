@@ -23,6 +23,10 @@ export class DashboardService {
     const notDeleted: FilterQuery<unknown> = { deleted: { $ne: true } };
     const startOfToday = moment().startOf('day').toDate();
     const startOfMonth = moment().startOf('month').toDate();
+    const startOfPreviousMonth = moment()
+      .subtract(1, 'month')
+      .startOf('month')
+      .toDate();
 
     const [
       totalRiders,
@@ -33,6 +37,8 @@ export class DashboardService {
       runningTrips,
       completedTrips,
       revenueAgg,
+      currentMonthRevenueAgg,
+      previousMonthRevenueAgg,
       recentTripDocs,
       dailyEarningsAgg,
       monthlyEarningsAgg,
@@ -59,16 +65,38 @@ export class DashboardService {
           $match: {
             deleted: { $ne: true },
             status: TripStatus.Completed,
-            'meta.amount': { $type: 'number' },
+            amount: { $type: 'number' },
           },
         },
         {
           $group: {
             _id: null,
-            total: { $sum: '$meta.amount' },
+            total: { $sum: '$amount' },
             count: { $sum: 1 },
           },
         },
+      ]),
+      this.db.trips.aggregate<{ total: number }>([
+        {
+          $match: {
+            deleted: { $ne: true },
+            status: TripStatus.Completed,
+            amount: { $type: 'number' },
+            createdAt: { $gte: startOfMonth },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      this.db.trips.aggregate<{ total: number }>([
+        {
+          $match: {
+            deleted: { $ne: true },
+            status: TripStatus.Completed,
+            amount: { $type: 'number' },
+            createdAt: { $gte: startOfPreviousMonth, $lt: startOfMonth },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       this.db.trips
         .find(notDeleted)
@@ -104,31 +132,46 @@ export class DashboardService {
     const revenueRow = revenueAgg[0];
     const revenue =
       revenueRow && revenueRow.count > 0 ? revenueRow.total : null;
+    const currentMonthRevenue = currentMonthRevenueAgg[0]?.total || 0;
+    const previousMonthRevenue = previousMonthRevenueAgg[0]?.total || 0;
+    const revenueChangePct =
+      previousMonthRevenue > 0
+        ? Math.round(
+            ((currentMonthRevenue - previousMonthRevenue) /
+              previousMonthRevenue) *
+              100,
+          )
+        : currentMonthRevenue > 0
+        ? 100
+        : 0;
 
     const dailyTotal = dailyEarningsAgg[0]?.total || 0;
     const monthlyTotal = monthlyEarningsAgg[0]?.total || 0;
     const mtdTotal = dailyTotal + monthlyTotal;
-    const dailyPct = mtdTotal > 0 ? Math.round((100 * dailyTotal) / mtdTotal) : 0;
+    const dailyPct =
+      mtdTotal > 0 ? Math.round((100 * dailyTotal) / mtdTotal) : 0;
     const monthlyPct = mtdTotal > 0 ? 100 - dailyPct : 0;
 
-    const recentRides = (recentTripDocs as TripDocument[]).map((trip, index) => {
-      const user = trip.user as UserDocument | undefined;
-      const name =
-        [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
-        user?.email ||
-        'Unknown rider';
+    const recentRides = (recentTripDocs as TripDocument[]).map(
+      (trip, index) => {
+        const user = trip.user as UserDocument | undefined;
+        const name =
+          [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
+          user?.email ||
+          'Unknown rider';
 
-      return {
-        id: String(trip._id ?? trip.id),
-        index: index + 1,
-        name,
-        time: trip.createdAt ? moment(trip.createdAt).fromNow() : '',
-        status: this.mapTripStatus(trip.status),
-        createdAt: trip.createdAt
-          ? new Date(trip.createdAt).toISOString()
-          : null,
-      };
-    });
+        return {
+          id: String(trip._id ?? trip.id),
+          index: index + 1,
+          name,
+          time: trip.createdAt ? moment(trip.createdAt).fromNow() : '',
+          status: this.mapTripStatus(trip.status),
+          createdAt: trip.createdAt
+            ? new Date(trip.createdAt).toISOString()
+            : null,
+        };
+      },
+    );
 
     const activity = (activityDocs as ActivityDocument[]).map((item) => ({
       id: String(item._id ?? item.id),
@@ -136,9 +179,7 @@ export class DashboardService {
       title: item.title,
       meta: item.meta || null,
       amount: item.amount ?? null,
-      createdAt: item.createdAt
-        ? new Date(item.createdAt).toISOString()
-        : null,
+      createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
     }));
 
     return {
@@ -147,7 +188,7 @@ export class DashboardService {
         totalDrivers: driverIds.length,
         vehicleTypes,
         revenue,
-        revenueChangePct: null,
+        revenueChangePct,
       },
       rides: {
         total: totalTrips,

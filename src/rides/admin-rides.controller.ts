@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -13,6 +14,7 @@ import { Response } from 'src/shared/response';
 import { RidesService } from './rides.service';
 import {
   AdminGetFleetDTO,
+  AdminCarBrandDTO,
   AdminGetRentalsDTO,
   AdminGetTripsDTO,
   AdminGetUserReportsDTO,
@@ -32,6 +34,41 @@ export class AdminRideController {
     const { docs, ...meta } = await this.ridesService.getTrips(query);
 
     return Response.json('trips', docs, meta);
+  }
+
+  @Get('/brands')
+  async getBrands() {
+    return Response.json(
+      'car brands',
+      await this.ridesService.getAdminCarBrands(),
+    );
+  }
+
+  @Post('/brands')
+  async createBrand(@Body() payload: AdminCarBrandDTO) {
+    return Response.json(
+      'car brand created',
+      await this.ridesService.createCarBrand(payload),
+    );
+  }
+
+  @Patch('/brands/:brandId')
+  async updateBrand(
+    @Param('brandId') brandId: string,
+    @Body() payload: AdminCarBrandDTO,
+  ) {
+    return Response.json(
+      'car brand updated',
+      await this.ridesService.updateCarBrand(brandId, payload),
+    );
+  }
+
+  @Delete('/brands/:brandId')
+  async deleteBrand(@Param('brandId') brandId: string) {
+    return Response.json(
+      'car brand deleted',
+      await this.ridesService.deleteCarBrand(brandId),
+    );
   }
 
   @Get('/reports')

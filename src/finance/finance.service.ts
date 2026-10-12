@@ -25,6 +25,7 @@ import { NotificationService } from '../notification';
 import { PaystackService } from '../payments/providers/paystack/paystack.service';
 import {
   AccountClosureDestinationDTO,
+  AdminWalletTransactionsDTO,
   CreateDriverPayoutDTO,
   ResolveBankAccountDTO,
   UpdateFinancialSettingsDTO,
@@ -54,6 +55,25 @@ export class FinanceService {
         },
       },
       { new: true, upsert: true },
+    );
+  }
+
+  async listWalletTransactions(query: AdminWalletTransactionsDTO) {
+    const { page = 1, limit = 50, type } = query;
+    return this.db.walletTransactions.paginate(
+      {
+        deleted: { $ne: true },
+        ...(type ? { type } : {}),
+      },
+      {
+        page,
+        limit,
+        populate: {
+          path: 'user',
+          select: 'firstName lastName email phoneNumber',
+        },
+        sort: { createdAt: -1 },
+      },
     );
   }
 

@@ -18,6 +18,7 @@ import { Util } from '../shared/util';
 import { FinanceService } from '../finance/finance.service';
 import {
   AdminGetDriversDTO,
+  AdminCreateDriverDTO,
   AdminListUsersDTO,
   DeleteAccountDTO,
   SetUserAdminDTO,
@@ -340,6 +341,35 @@ export class UserService {
       select: '-password -oAuthIdentifier -oAuthProvider',
       sort: { createdAt: -1 },
     });
+  }
+
+  async createDriver(payload: AdminCreateDriverDTO) {
+    const email = payload.email.trim().toLowerCase();
+    const phoneNumber = Util.formatPhoneNumber(payload.phoneNumber, 'NG');
+    const existing = await this.db.users.findOne({
+      deleted: { $ne: true },
+      $or: [{ email }, { phoneNumber }],
+    });
+    if (existing) {
+      throw new ConflictException(
+        existing.email === email
+          ? 'user with email already exists'
+          : 'user with phone number already exists',
+      );
+    }
+
+    const user = await this.db.users.create({
+      firstName: payload.firstName.trim(),
+      lastName: payload.lastName.trim(),
+      email,
+      phoneNumber,
+      password: payload.password,
+      isDriver: true,
+      isVerified: false,
+      billingType: 'individual',
+    });
+
+    return user;
   }
 
   async getDriverDetail(userId: string) {
