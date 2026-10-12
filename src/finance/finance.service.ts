@@ -21,6 +21,7 @@ import {
 import { PaymentMethod } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 import { WalletTransactionType } from '../database/schemas/wallet-transaction.schema';
+import { ActivityType } from '../database/schemas/activities.schema';
 import { NotificationService } from '../notification';
 import { PaystackService } from '../payments/providers/paystack/paystack.service';
 import {
@@ -60,21 +61,103 @@ export class FinanceService {
 
   async listWalletTransactions(query: AdminWalletTransactionsDTO) {
     const { page = 1, limit = 50, type } = query;
-    return this.db.walletTransactions.paginate(
-      {
-        deleted: { $ne: true },
-        ...(type ? { type } : {}),
-      },
-      {
-        page,
-        limit,
-        populate: {
-          path: 'user',
-          select: 'firstName lastName email phoneNumber',
-        },
-        sort: { createdAt: -1 },
-      },
-    );
+    const walletTypes = Object.values(WalletTransactionType) as string[];
+    const paymentTypes = [
+      ActivityType.PaymentSucceeded,
+      ActivityType.PaymentFailed,
+    ] as string[];
+    const includeWallet = !type || walletTypes.includes(type);
+    const includePayments = !type || paymentTypes.includes(type);
+    const fetchLimit = page * limit;
+    const userPopulate = {
+      path: 'user',
+      select: 'firstName lastName email phoneNumber',
+    };
+
+    const [walletRows, paymentRows, walletCount, paymentCount] =
+      await Promise.all([
+        includeWallet
+          ? this.db.walletTransactions
+              .find({
+                deleted: { $ne: true },
+                ...(type ? { type } : {}),
+              })
+              .populate(userPopulate)
+              .sort({ createdAt: -1 })
+              .limit(fetchLimit)
+          : [],
+        includePayments
+          ? this.db.activities
+              .find({
+                deleted: { $ne: true },
+                type: type || { $in: paymentTypes },
+              })
+              .populate(userPopulate)
+              .sort({ createdAt: -1 })
+              .limit(fetchLimit)
+          : [],
+        includeWallet
+          ? this.db.walletTransactions.countDocuments({
+              deleted: { $ne: true },
+              ...(type ? { type } : {}),
+            })
+          : 0,
+        includePayments
+          ? this.db.activities.countDocuments({
+              deleted: { $ne: true },
+              type: type || { $in: paymentTypes },
+            })
+          : 0,
+      ]);
+
+    const wallets = walletRows.map((row) => ({
+      ...row.toJSON(),
+      source: 'wallet',
+    }));
+    const payments = paymentRows.map((row) => {
+      const activity = row.toJSON();
+      const title = activity.title || 'Trip payment';
+      const lowerTitle = title.toLowerCase();
+      let provider = 'Trip';
+      if (lowerTitle.includes('credit card')) provider = 'Card';
+      else if (lowerTitle.includes('cash')) provider = 'Cash';
+      else if (lowerTitle.includes('rul balance')) provider = 'RUL Balance';
+
+      return {
+        id: activity.id,
+        type: activity.type,
+        amountKobo: Math.round(Number(activity.amount || 0) * 100),
+        purpose: title,
+        provider,
+        providerReference: activity.trip ? String(activity.trip) : undefined,
+        createdAt: activity.createdAt,
+        user: activity.user,
+        source: 'trip-payment',
+      };
+    });
+    const totalDocs = walletCount + paymentCount;
+    const totalPages = Math.max(1, Math.ceil(totalDocs / limit));
+    const start = (page - 1) * limit;
+    const docs = [...wallets, ...payments]
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime(),
+      )
+      .slice(start, start + limit);
+
+    return {
+      docs,
+      totalDocs,
+      limit,
+      totalPages,
+      page,
+      pagingCounter: start + 1,
+      hasPrevPage: page > 1,
+      hasNextPage: page < totalPages,
+      prevPage: page > 1 ? page - 1 : null,
+      nextPage: page < totalPages ? page + 1 : null,
+    };
   }
 
   async updateSettings(

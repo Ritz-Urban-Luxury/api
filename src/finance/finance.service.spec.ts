@@ -9,38 +9,87 @@ import { WalletTransactionType } from '../database/schemas/wallet-transaction.sc
 import { FinanceService } from './finance.service';
 
 describe('FinanceService.listWalletTransactions', () => {
-  it('returns a filtered, newest-first page with user details', async () => {
-    const paginate = jest.fn().mockResolvedValue({
-      docs: [],
-      page: 2,
-      totalPages: 2,
-    });
-    const service = Object.create(FinanceService.prototype) as FinanceService;
-    Object.assign(service as any, {
-      db: { walletTransactions: { paginate } },
-    });
+  const queryResult = (
+    rows: Array<{ toJSON: () => Record<string, unknown> }>,
+  ) => ({
+    populate: jest.fn().mockReturnThis(),
+    sort: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockResolvedValue(rows),
+  });
 
-    await service.listWalletTransactions({
-      page: 2,
+  it('returns a filtered wallet transaction page', async () => {
+    const debit = {
+      toJSON: () => ({
+        id: 'wallet-1',
+        type: WalletTransactionType.Debit,
+        amountKobo: -2500,
+        createdAt: new Date('2026-10-12T10:00:00Z'),
+      }),
+    };
+    const walletQuery = queryResult([debit]);
+    const walletTransactions = {
+      find: jest.fn().mockReturnValue(walletQuery),
+      countDocuments: jest.fn().mockResolvedValue(1),
+    };
+    const activities = {
+      find: jest.fn(),
+      countDocuments: jest.fn(),
+    };
+    const service = Object.create(FinanceService.prototype) as FinanceService;
+    Reflect.set(service, 'db', { walletTransactions, activities });
+
+    const result = await service.listWalletTransactions({
+      page: 1,
       limit: 25,
       type: WalletTransactionType.Debit,
     });
 
-    expect(paginate).toHaveBeenCalledWith(
-      {
-        deleted: { $ne: true },
-        type: WalletTransactionType.Debit,
+    expect(walletTransactions.find).toHaveBeenCalledWith({
+      deleted: { $ne: true },
+      type: WalletTransactionType.Debit,
+    });
+    expect(activities.find).not.toHaveBeenCalled();
+    expect(result.docs).toEqual([
+      expect.objectContaining({ id: 'wallet-1', source: 'wallet' }),
+    ]);
+    expect(result.totalDocs).toBe(1);
+  });
+
+  it('includes historical trip payment activity without creating ledger rows', async () => {
+    const payment = {
+      toJSON: () => ({
+        id: 'activity-1',
+        type: 'PaymentSucceeded',
+        title: 'Credit card Payment',
+        amount: 3200,
+        createdAt: new Date('2026-10-11T10:00:00Z'),
+        trip: 'trip-1',
+      }),
+    };
+    const service = Object.create(FinanceService.prototype) as FinanceService;
+    Reflect.set(service, 'db', {
+      walletTransactions: {
+        find: jest.fn().mockReturnValue(queryResult([])),
+        countDocuments: jest.fn().mockResolvedValue(0),
       },
-      {
-        page: 2,
-        limit: 25,
-        populate: {
-          path: 'user',
-          select: 'firstName lastName email phoneNumber',
-        },
-        sort: { createdAt: -1 },
+      activities: {
+        find: jest.fn().mockReturnValue(queryResult([payment])),
+        countDocuments: jest.fn().mockResolvedValue(1),
       },
-    );
+    });
+
+    const result = await service.listWalletTransactions({ page: 1, limit: 50 });
+
+    expect(result.docs).toEqual([
+      expect.objectContaining({
+        id: 'activity-1',
+        type: 'PaymentSucceeded',
+        amountKobo: 320000,
+        provider: 'Card',
+        providerReference: 'trip-1',
+        source: 'trip-payment',
+      }),
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
@@ -11,6 +12,7 @@ import {
 } from 'class-validator';
 import { PayoutDestinationType } from '../../database/schemas/payout-request.schema';
 import { WalletTransactionType } from '../../database/schemas/wallet-transaction.schema';
+import { ActivityType } from '../../database/schemas/activities.schema';
 import { PaginationRequestDTO } from '../../shared/pagination.dto';
 
 export class ResolveBankAccountDTO {
@@ -89,7 +91,14 @@ export class AccountClosureDestinationDTO {
 }
 
 export class AdminWalletTransactionsDTO extends PaginationRequestDTO {
-  @IsEnum(WalletTransactionType)
+  @IsIn([
+    ...Object.values(WalletTransactionType),
+    ActivityType.PaymentSucceeded,
+    ActivityType.PaymentFailed,
+  ])
   @IsOptional()
-  type?: WalletTransactionType;
+  type?:
+    | WalletTransactionType
+    | ActivityType.PaymentSucceeded
+    | ActivityType.PaymentFailed;
 }
