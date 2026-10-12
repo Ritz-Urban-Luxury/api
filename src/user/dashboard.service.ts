@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FilterQuery } from 'mongoose';
-import moment from 'moment';
+import * as moment from 'moment';
 import { DatabaseService } from '../database/database.service';
 import { ActivityDocument } from '../database/schemas/activities.schema';
 import { TripDocument, TripStatus } from '../database/schemas/trips.schema';
