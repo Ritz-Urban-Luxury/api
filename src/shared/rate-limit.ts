@@ -12,6 +12,31 @@ export async function enforceRateLimit(
   options: { key: string; max: number; windowMs: number; message: string },
 ): Promise<void> {
   const { key, max, windowMs, message } = options;
+  const store = cache.store as
+    | (typeof cache.store & {
+        getClient?: () => {
+          incr: (cacheKey: string) => Promise<number>;
+          pExpire: (cacheKey: string, milliseconds: number) => Promise<boolean>;
+        };
+      })
+    | undefined;
+  const redisClient = store?.getClient?.();
+
+  if (redisClient) {
+    try {
+      const count = await redisClient.incr(key);
+      if (count === 1) await redisClient.pExpire(key, windowMs);
+      if (count > max) {
+        throw new HttpException(message, HttpStatus.TOO_MANY_REQUESTS);
+      }
+      return;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      logger.warn(`Unable to atomically update rate limit ${key}`, error);
+      // Fall through to the portable cache implementation.
+    }
+  }
+
   let count = 0;
 
   try {

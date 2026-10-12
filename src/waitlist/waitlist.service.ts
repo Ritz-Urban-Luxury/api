@@ -3,6 +3,8 @@ import {
   CACHE_MANAGER,
   Inject,
   Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { randomBytes } from 'crypto';
@@ -26,6 +28,9 @@ const MAX_SIGNUPS_PER_WINDOW = 10;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 /** Pause between launch emails to stay under the email provider's rate limit. */
 const SEND_INTERVAL_MS = 600;
+const DELIVERY_LEASE_MS = 5 * 60 * 1000;
+const RETENTION_MS = 365 * 24 * 60 * 60 * 1000;
+const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const appNames: Record<WaitlistRole, string> = {
   [WaitlistRole.Rider]: 'Ritz',
@@ -48,8 +53,10 @@ const wait = (ms: number) =>
   });
 
 @Injectable()
-export class WaitlistService {
+export class WaitlistService implements OnModuleInit, OnModuleDestroy {
   private sending = false;
+
+  private retentionTimer?: NodeJS.Timeout;
 
   /** Swappable in tests so batches do not wait between emails. */
   sendInterval = SEND_INTERVAL_MS;
@@ -60,6 +67,19 @@ export class WaitlistService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly logger: Logger,
   ) {}
+
+  onModuleInit() {
+    this.cleanupExpiredEntries();
+    this.retentionTimer = setInterval(
+      () => this.cleanupExpiredEntries(),
+      RETENTION_INTERVAL_MS,
+    );
+    this.retentionTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+  }
 
   /**
    * Adds someone to the waiting list. The reply is the same whether or not the
@@ -134,17 +154,17 @@ export class WaitlistService {
       source: payload.source,
     });
 
-    try {
-      await this.notifications.sendEmail({
+    this.notifications
+      .sendEmail({
         template: 'waitlist-welcome.template.njk',
         recipient: name ? { name, email: entry.email } : entry.email,
         subject: "You're on the Ritz waiting list",
         context: this.emailContext(entry),
+      })
+      .catch((error) => {
+        // They are on the list either way; the welcome email is a courtesy.
+        this.logger.warn('Unable to send waitlist welcome email', error);
       });
-    } catch (error) {
-      // They are on the list either way; the welcome email is a courtesy.
-      this.logger.warn('Unable to send waitlist welcome email', error);
-    }
   }
 
   /** Returns false when the token does not match anyone on the list. */
@@ -167,33 +187,36 @@ export class WaitlistService {
   }
 
   async summary() {
-    const rows = await this.db.waitlistEntries.aggregate<
-      { _id: WaitlistRole } & RoleCounts
-    >([
-      { $match: { deleted: { $ne: true } } },
-      {
-        $group: {
-          _id: '$role',
-          total: { $sum: 1 },
-          unsubscribed: {
-            $sum: { $cond: [{ $ifNull: ['$unsubscribedAt', false] }, 1, 0] },
-          },
-          notified: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $ifNull: ['$notifiedAt', false] },
-                    { $not: [{ $ifNull: ['$unsubscribedAt', false] }] },
-                  ],
-                },
-                1,
-                0,
-              ],
+    const [rows, activeClaims] = await Promise.all([
+      this.db.waitlistEntries.aggregate<{ _id: WaitlistRole } & RoleCounts>([
+        { $match: { deleted: { $ne: true } } },
+        {
+          $group: {
+            _id: '$role',
+            total: { $sum: 1 },
+            unsubscribed: {
+              $sum: { $cond: [{ $ifNull: ['$unsubscribedAt', false] }, 1, 0] },
+            },
+            notified: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ifNull: ['$notifiedAt', false] },
+                      { $not: [{ $ifNull: ['$unsubscribedAt', false] }] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
             },
           },
         },
-      },
+      ]),
+      this.db.waitlistEntries.countDocuments({
+        notifyClaimedAt: { $gt: this.leaseCutoff() },
+      }),
     ]);
 
     const counts = (role: WaitlistRole): RoleCounts => {
@@ -211,10 +234,14 @@ export class WaitlistService {
     return {
       rider: counts(WaitlistRole.Rider),
       driver: counts(WaitlistRole.Driver),
-      sending: this.sending,
+      sending: this.sending || activeClaims > 0,
       storeLinksReady: {
-        rider: Boolean(storeLinks.rider.apple || storeLinks.rider.google),
-        driver: Boolean(storeLinks.driver.apple || storeLinks.driver.google),
+        rider:
+          this.validStoreLink('apple', storeLinks.rider.apple) ||
+          this.validStoreLink('google', storeLinks.rider.google),
+        driver:
+          this.validStoreLink('apple', storeLinks.driver.apple) ||
+          this.validStoreLink('google', storeLinks.driver.google),
       },
     };
   }
@@ -336,7 +363,15 @@ export class WaitlistService {
 
   private async drain(roles: WaitlistRole[]) {
     const failed: string[] = [];
-    const sent = await this.sendNext(roles, failed, 0);
+    let sent = 0;
+    let delivered = await this.sendNext(roles, failed);
+
+    while (delivered !== undefined) {
+      if (delivered) sent += 1;
+      await wait(this.sendInterval);
+      delivered = await this.sendNext(roles, failed);
+    }
+
     this.logger.log('Waitlist launch email finished', {
       sent,
       failed: failed.length,
@@ -347,18 +382,17 @@ export class WaitlistService {
   private async sendNext(
     roles: WaitlistRole[],
     failed: string[],
-    sent: number,
-  ): Promise<number> {
+  ): Promise<boolean | undefined> {
+    const claimedAt = new Date();
     const entry = await this.db.waitlistEntries
       .findOneAndUpdate(
         { ...this.pendingFilter(roles), _id: { $nin: failed } },
-        { $set: { notifiedAt: new Date() }, $unset: { notifyError: 1 } },
+        { $set: { notifyClaimedAt: claimedAt }, $unset: { notifyError: 1 } },
         { new: true, sort: { createdAt: 1 } },
       )
       .select('+unsubscribeToken');
-    if (!entry) return sent;
+    if (!entry) return undefined;
 
-    let delivered = false;
     try {
       await this.notifications.sendEmail({
         template: 'waitlist-launch.template.njk',
@@ -368,21 +402,26 @@ export class WaitlistService {
         subject: this.launchSubject(entry.role),
         context: this.emailContext(entry),
       });
-      delivered = true;
+      await this.db.waitlistEntries.updateOne(
+        { _id: entry.id, notifyClaimedAt: claimedAt },
+        {
+          $set: { notifiedAt: new Date() },
+          $unset: { notifyClaimedAt: 1, notifyError: 1 },
+        },
+      );
+      return true;
     } catch (error) {
       // Release them so the next run tries again, and skip them for this run.
       failed.push(entry.id);
       await this.db.waitlistEntries.updateOne(
-        { _id: entry.id },
+        { _id: entry.id, notifyClaimedAt: claimedAt },
         {
-          $unset: { notifiedAt: 1 },
+          $unset: { notifyClaimedAt: 1 },
           $set: { notifyError: String((error as Error)?.message ?? error) },
         },
       );
+      return false;
     }
-
-    await wait(this.sendInterval);
-    return this.sendNext(roles, failed, sent + (delivered ? 1 : 0));
   }
 
   private pendingFilter(
@@ -392,7 +431,15 @@ export class WaitlistService {
       role: { $in: roles },
       notifiedAt: null,
       unsubscribedAt: null,
+      $or: [
+        { notifyClaimedAt: null },
+        { notifyClaimedAt: { $lte: this.leaseCutoff() } },
+      ],
     };
+  }
+
+  private leaseCutoff() {
+    return new Date(Date.now() - DELIVERY_LEASE_MS);
   }
 
   private rolesFor(audience: WaitlistAudience): WaitlistRole[] {
@@ -405,7 +452,9 @@ export class WaitlistService {
   private assertStoreLinks(roles: WaitlistRole[]) {
     const { storeLinks } = config().waitlist;
     const missing = roles.filter(
-      (role) => !storeLinks[role].apple && !storeLinks[role].google,
+      (role) =>
+        !this.validStoreLink('apple', storeLinks[role].apple) &&
+        !this.validStoreLink('google', storeLinks[role].google),
     );
     if (missing.length) {
       throw new BadRequestException(
@@ -413,6 +462,42 @@ export class WaitlistService {
           .map((role) => appNames[role])
           .join(' and ')} before sending the launch email`,
       );
+    }
+  }
+
+  private validStoreLink(
+    platform: 'apple' | 'google',
+    value: string | undefined,
+  ) {
+    if (!value) return false;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:') return false;
+      return platform === 'apple'
+        ? url.hostname === 'apps.apple.com'
+        : url.hostname === 'play.google.com' &&
+            url.pathname.startsWith('/store/apps/');
+    } catch {
+      return false;
+    }
+  }
+
+  private async cleanupExpiredEntries() {
+    const cutoff = new Date(Date.now() - RETENTION_MS);
+    try {
+      const result = await this.db.waitlistEntries.collection.deleteMany({
+        $or: [
+          { notifiedAt: { $lte: cutoff } },
+          { unsubscribedAt: { $lte: cutoff } },
+        ],
+      });
+      if (result.deletedCount) {
+        this.logger.log('Expired waitlist entries deleted', {
+          count: result.deletedCount,
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Unable to delete expired waitlist entries', error);
     }
   }
 
@@ -428,12 +513,17 @@ export class WaitlistService {
     },
   ) {
     const { publicApiUrl, siteUrl, storeLinks } = config().waitlist;
+    const links = storeLinks[entry.role];
     return {
       name: entry.name?.split(' ')[0],
       role: entry.role,
       appName: appNames[entry.role],
-      appStoreUrl: storeLinks[entry.role].apple,
-      playStoreUrl: storeLinks[entry.role].google,
+      appStoreUrl: this.validStoreLink('apple', links.apple)
+        ? links.apple
+        : undefined,
+      playStoreUrl: this.validStoreLink('google', links.google)
+        ? links.google
+        : undefined,
       siteUrl,
       unsubscribeUrl: entry.unsubscribeToken
         ? `${publicApiUrl}/waitlist/unsubscribe?token=${entry.unsubscribeToken}`

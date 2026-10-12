@@ -33,6 +33,15 @@ export class NewsArticle extends BaseSchema {
   @Prop({ required: true, trim: true })
   body: string;
 
+  @Prop({ type: SchemaTypes.Mixed })
+  bodyJson?: Record<string, unknown>;
+
+  @Prop()
+  bodyHtml?: string;
+
+  @Prop({ default: 1 })
+  contentVersion?: number;
+
   @Prop({ required: true, trim: true })
   coverImageUrl: string;
 

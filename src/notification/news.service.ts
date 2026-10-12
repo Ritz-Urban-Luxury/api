@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import * as sanitizeHtml from 'sanitize-html';
 import { DatabaseService } from '../database/database.service';
 import {
   NewsAudience,
@@ -8,6 +9,57 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { CreateNewsDTO, UpdateNewsDTO } from './dto/news.dto';
 
 const DEFAULT_NEWS_SLUG = 'welcome-to-ritz-driver';
+
+const sanitizeNewsHtml = (html?: string) =>
+  html
+    ? sanitizeHtml(html, {
+        allowedTags: [
+          'p',
+          'h2',
+          'h3',
+          'strong',
+          'em',
+          'u',
+          's',
+          'ul',
+          'ol',
+          'li',
+          'blockquote',
+          'a',
+          'img',
+          'br',
+          'hr',
+        ],
+        allowedAttributes: {
+          a: ['href', 'target', 'rel'],
+          img: ['src', 'alt', 'title', 'loading'],
+          p: ['style'],
+          h2: ['style'],
+          h3: ['style'],
+        },
+        allowedSchemes: ['http', 'https', 'mailto'],
+        allowedSchemesByTag: { img: ['http', 'https'] },
+        allowedStyles: {
+          '*': {
+            'text-align': [/^left$/, /^center$/, /^right$/],
+          },
+        },
+        transformTags: {
+          a: (_tagName, attribs) => ({
+            tagName: 'a',
+            attribs: {
+              ...attribs,
+              target: '_blank',
+              rel: 'noopener noreferrer nofollow',
+            },
+          }),
+          img: (_tagName, attribs) => ({
+            tagName: 'img',
+            attribs: { ...attribs, loading: 'lazy' },
+          }),
+        },
+      })
+    : undefined;
 
 @Injectable()
 export class NewsService implements OnModuleInit {
@@ -166,18 +218,23 @@ export class NewsService implements OnModuleInit {
   }
 
   private payloadFields(payload: CreateNewsDTO | UpdateNewsDTO) {
+    let publishedAt: Date | undefined;
+    if (payload.status === NewsStatus.Published) {
+      publishedAt = new Date(payload.publishedAt || Date.now());
+    } else if (payload.publishedAt) {
+      publishedAt = new Date(payload.publishedAt);
+    }
+
     return {
       title: payload.title,
       summary: payload.summary,
       body: payload.body,
+      bodyJson: payload.bodyJson,
+      bodyHtml: sanitizeNewsHtml(payload.bodyHtml),
+      contentVersion: payload.contentVersion || 1,
       audience: payload.audience,
       status: payload.status,
-      publishedAt:
-        payload.status === NewsStatus.Published
-          ? new Date(payload.publishedAt || Date.now())
-          : payload.publishedAt
-          ? new Date(payload.publishedAt)
-          : undefined,
+      publishedAt,
       coverImageUrl: payload.coverImageUrl,
     };
   }

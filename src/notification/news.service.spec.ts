@@ -6,7 +6,12 @@ import { NewsService } from './news.service';
 
 describe('NewsService', () => {
   const admin = { id: '64a000000000000000000001' } as never;
-  let db: any;
+  let db: {
+    newsArticles: {
+      findOne: jest.Mock;
+      findOneAndUpdate: jest.Mock;
+    };
+  };
   let service: NewsService;
 
   beforeEach(() => {
@@ -16,7 +21,7 @@ describe('NewsService', () => {
         findOneAndUpdate: jest.fn(),
       },
     };
-    service = new NewsService(db);
+    service = new NewsService(db as never);
   });
 
   it('inserts the default driver welcome article without overwriting edits', async () => {
@@ -42,12 +47,19 @@ describe('NewsService', () => {
   });
 
   it('keeps the default article published for drivers when its message is edited', async () => {
+    const unsafeProtocol = ['java', 'script:'].join('');
     db.newsArticles.findOne.mockResolvedValue({ isDefault: true });
     db.newsArticles.findOneAndUpdate.mockResolvedValue({ id: 'welcome' });
 
     await service.update(admin, 'welcome', {
       audience: NewsAudience.Rider,
       body: 'An updated welcome message.',
+      bodyHtml: `<p onclick="alert(1)" style="text-align:center">Welcome <a href="${unsafeProtocol}alert(1)">here</a></p><script>alert(1)</script>`,
+      bodyJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      },
+      contentVersion: 1,
       coverImageUrl: 'asset://ritz-driver-welcome',
       status: NewsStatus.Archived,
       summary: 'Updated summary',
@@ -67,5 +79,10 @@ describe('NewsService', () => {
       },
       { new: true, upsert: false },
     );
+    const update = db.newsArticles.findOneAndUpdate.mock.calls[0][1].$set;
+    expect(update.bodyHtml).toContain('style="text-align:center"');
+    expect(update.bodyHtml).not.toContain('onclick');
+    expect(update.bodyHtml).not.toContain(unsafeProtocol);
+    expect(update.bodyHtml).not.toContain('<script');
   });
 });

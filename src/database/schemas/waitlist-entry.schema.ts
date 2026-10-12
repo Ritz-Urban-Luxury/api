@@ -34,9 +34,13 @@ export class WaitlistEntry extends BaseSchema {
   @Prop()
   unsubscribedAt?: Date;
 
-  /** Set when the launch email is claimed for sending, so nobody is emailed twice. */
+  /** Set only after the email provider accepts the launch email. */
   @Prop()
   notifiedAt?: Date;
+
+  /** Temporary delivery lease. Stale leases are eligible for retry after a restart. */
+  @Prop()
+  notifyClaimedAt?: Date;
 
   @Prop()
   notifyError?: string;
@@ -46,5 +50,11 @@ export const WaitlistEntrySchema = SchemaFactory.createForClass(WaitlistEntry);
 
 WaitlistEntrySchema.index({ email: 1 }, { unique: true });
 WaitlistEntrySchema.index({ unsubscribeToken: 1 }, { unique: true });
-WaitlistEntrySchema.index({ role: 1, notifiedAt: 1, unsubscribedAt: 1 });
+WaitlistEntrySchema.index({
+  role: 1,
+  notifiedAt: 1,
+  unsubscribedAt: 1,
+  notifyClaimedAt: 1,
+  createdAt: 1,
+});
 WaitlistEntrySchema.index({ createdAt: -1 });

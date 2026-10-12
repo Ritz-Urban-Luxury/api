@@ -183,7 +183,8 @@ describe('WaitlistService', () => {
     });
 
     it('emails each pending person once and releases failures for a retry', async () => {
-      process.env.RIDER_PLAY_STORE_URL = 'https://play.google.com/rider';
+      process.env.RIDER_PLAY_STORE_URL =
+        'https://play.google.com/store/apps/details?id=com.ritz.rider';
       const { service, waitlistEntries, sendEmail } = setup();
       const people = [
         {
@@ -221,7 +222,8 @@ describe('WaitlistService', () => {
           template: 'waitlist-launch.template.njk',
           recipient: 'a@example.com',
           context: expect.objectContaining({
-            playStoreUrl: 'https://play.google.com/rider',
+            playStoreUrl:
+              'https://play.google.com/store/apps/details?id=com.ritz.rider',
           }),
         }),
       );
@@ -231,14 +233,24 @@ describe('WaitlistService', () => {
           role: { $in: ['rider'] },
           notifiedAt: null,
           unsubscribedAt: null,
+          $or: expect.any(Array),
           _id: { $nin: ['2'] },
         }),
         expect.anything(),
         expect.anything(),
       );
       expect(waitlistEntries.updateOne).toHaveBeenCalledWith(
-        { _id: '2' },
-        { $unset: { notifiedAt: 1 }, $set: { notifyError: 'bounced' } },
+        { _id: '2', notifyClaimedAt: expect.any(Date) },
+        { $unset: { notifyClaimedAt: 1 }, $set: { notifyError: 'bounced' } },
+      );
+    });
+
+    it('does not treat the website URL as an app-store link', async () => {
+      process.env.RIDER_APP_STORE_URL = 'https://www.ritzurbanluxury.com/';
+      const { service } = setup();
+
+      await expect(service.sendLaunch(WaitlistAudience.Rider)).rejects.toThrow(
+        'Add the App Store or Google Play link for Ritz',
       );
     });
   });

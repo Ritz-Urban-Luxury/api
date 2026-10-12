@@ -20,6 +20,10 @@ async function bootstrap() {
   const port = configService.get<string>('port');
   const logger = app.get(Logger);
 
+  // Render terminates the public connection one proxy hop before Express.
+  // This lets Express derive req.ip without trusting arbitrary forwarded chains.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.useGlobalFilters(new AllExceptionsFilter(logger), new ValidationFilter());
   app.useGlobalPipes(new ValidationPipe());
 
