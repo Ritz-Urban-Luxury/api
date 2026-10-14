@@ -88,8 +88,14 @@ export class User extends BaseSchema {
   @Prop()
   licenseExpiry?: Date;
 
-  @Prop()
+  @Prop({ default: false })
   isVerified?: boolean;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.SERVICE_LOCATIONS })
+  serviceLocation?: string;
+
+  @Prop({ enum: ['camera', 'library'] })
+  avatarSource?: 'camera' | 'library';
 
   /** True when the account was created via the driver app signup. */
   @Prop({ default: false })

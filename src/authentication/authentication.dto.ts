@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsIn,
+  IsMongoId,
   IsNotEmpty,
   IsOptional,
   IsPhoneNumber,
@@ -48,6 +49,32 @@ export class SignupDTO {
   @IsString()
   @IsOptional()
   city?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  serviceLocation?: string;
+
+  @IsString()
+  @IsOptional()
+  vehiclesInFleet?: string;
+}
+
+export class DriverSignupDTO {
+  @IsPhoneNumber('NG')
+  @IsNotEmpty()
+  phoneNumber: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phoneOtp: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsMongoId()
+  @IsNotEmpty()
+  locationId: string;
 
   @IsString()
   @IsOptional()

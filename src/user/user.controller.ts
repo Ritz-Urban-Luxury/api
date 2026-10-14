@@ -13,6 +13,7 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
+import { CompleteDriverOnboardingDTO } from './dto/driver-onboarding.dto';
 import {
   ApplyReferralDTO,
   DeleteAccountDTO,
@@ -21,6 +22,7 @@ import {
   UpsertPushTokenDTO,
 } from './dto/user.dto';
 import { UserService } from './user.service';
+import { DriverOnboardingService } from './driver-onboarding.service';
 
 @Controller('users')
 export class UserController {
@@ -28,7 +30,18 @@ export class UserController {
     private readonly userService: UserService,
     private readonly pushNotificationService: PushNotificationService,
     private readonly referralService: ReferralService,
+    private readonly driverOnboardingService: DriverOnboardingService,
   ) {}
+
+  @UseGuards(JwtGuard)
+  @Post('/me/driver-onboarding')
+  async completeDriverOnboarding(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: CompleteDriverOnboardingDTO,
+  ) {
+    const result = await this.driverOnboardingService.complete(user, payload);
+    return Response.json('driver onboarding completed', result);
+  }
 
   @UseGuards(JwtGuard)
   @Put('/me')

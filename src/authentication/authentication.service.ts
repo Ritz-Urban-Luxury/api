@@ -20,6 +20,7 @@ import { Socket } from 'socket.io';
 import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { DatabaseService } from '../database/database.service';
 import { ReferralService } from '../database/referral.service';
+import { LocationsService } from '../locations/locations.service';
 import { ActivityType } from '../database/schemas/activities.schema';
 import { OAuthProvider, UserDocument } from '../database/schemas/user.schema';
 import { FileService } from '../file/file.service';
@@ -34,6 +35,7 @@ import {
   RequestPhoneOTPDTO,
   ResetPasswordDTO,
   SignupDTO,
+  DriverSignupDTO,
 } from './authentication.dto';
 import {
   getPlayReviewAccounts,
@@ -69,6 +71,7 @@ export class AuthenticationService {
     private readonly db: DatabaseService,
     private readonly activityLedger: ActivityLedgerService,
     private readonly referralService: ReferralService,
+    private readonly locationsService: LocationsService,
   ) {
     this.googleOAuthClient = new OAuth2Client({
       redirectUri:
@@ -597,6 +600,7 @@ export class AuthenticationService {
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
       isDriver: true,
+      isVerified: false,
     });
 
     await this.activityLedger.recordActivity({
@@ -608,6 +612,23 @@ export class AuthenticationService {
     await this.referralService.ensureInviteCode(user);
 
     return this.authorizeUser(user);
+  }
+
+  async signUpDriver(payload: DriverSignupDTO) {
+    const location = await this.locationsService.getActiveOrFail(
+      payload.locationId,
+    );
+
+    return this.signUp({
+      city: location.name,
+      email: payload.email,
+      firstName: undefined,
+      lastName: undefined,
+      phoneNumber: payload.phoneNumber,
+      phoneOtp: payload.phoneOtp,
+      serviceLocation: String(location.id),
+      vehiclesInFleet: payload.vehiclesInFleet,
+    });
   }
 
   async login(payload: LoginDTO) {

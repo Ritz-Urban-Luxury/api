@@ -6,11 +6,13 @@ import { DashboardService } from './dashboard.service';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { FinanceModule } from '../finance/finance.module';
+import { RidesModule } from '../rides/rides.module';
+import { DriverOnboardingService } from './driver-onboarding.service';
 
 @Module({
-  imports: [NotificationModule, FinanceModule],
+  imports: [NotificationModule, FinanceModule, RidesModule],
   controllers: [UserController, AdminUserController, AdminDashboardController],
-  providers: [UserService, DashboardService],
+  providers: [UserService, DashboardService, DriverOnboardingService],
   exports: [UserService],
 })
 export class UserModule {}

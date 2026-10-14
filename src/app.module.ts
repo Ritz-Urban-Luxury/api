@@ -21,6 +21,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 import { PricingModule } from './pricing/pricing.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { FinanceModule } from './finance/finance.module';
+import { LocationsModule } from './locations/locations.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { FinanceModule } from './finance/finance.module';
     DatabaseModule,
     UserModule,
     FinanceModule,
+    LocationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

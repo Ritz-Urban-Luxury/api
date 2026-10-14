@@ -278,10 +278,12 @@ export class UserService {
           phoneNumber: 1,
           email: 1,
           avatar: 1,
+          avatarSource: 1,
           license: 1,
           oAuthIdentifier: 1,
           oAuthProvider: 1,
           city: 1,
+          serviceLocation: 1,
           vehiclesInFleet: 1,
           licenseNumber: 1,
           licenseExpiry: 1,
@@ -398,6 +400,19 @@ export class UserService {
   }
 
   async setVerification(userId: string, payload: SetUserVerificationDTO) {
+    const current = await this.db.users.findOne({
+      _id: userId,
+      deleted: { $ne: true },
+    });
+    if (!current) {
+      throw new NotFoundException('user not found');
+    }
+    if (payload.isVerified && (!current.avatar || !current.license)) {
+      throw new BadRequestException(
+        'profile photo and driver license are required before approval',
+      );
+    }
+
     const user = await this.db.users.findOneAndUpdate(
       { _id: userId, deleted: { $ne: true } },
       { $set: { isVerified: payload.isVerified, isDriver: true } },

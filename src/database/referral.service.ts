@@ -183,6 +183,36 @@ export class ReferralService {
     };
   }
 
+  async applyReferralCodeIdempotent(
+    invitee: UserDocument,
+    referralCode: string,
+  ) {
+    if (!invitee.referredBy) {
+      return this.applyReferralCode(invitee, referralCode);
+    }
+
+    const inviter = await this.db.users.findOne({
+      _id: invitee.referredBy,
+      inviteCode: referralCode.trim().toUpperCase(),
+      deleted: { $ne: true },
+    });
+    if (!inviter) {
+      throw new BadRequestException('referral code already applied');
+    }
+
+    const referral = await this.db.referrals.findOne({
+      invitee: invitee.id,
+      deleted: { $ne: true },
+    });
+    return referral
+      ? {
+          inviterId: String(inviter.id),
+          bonusAmount: referral.bonusAmount,
+          status: referral.status,
+        }
+      : { inviterId: String(inviter.id), bonusAmount: 0, status: 'Pending' };
+  }
+
   async recordInviteeHouseRevenue(inviteeId: string, commissionAmount: number) {
     if (!Number.isFinite(commissionAmount) || commissionAmount <= 0) {
       return;

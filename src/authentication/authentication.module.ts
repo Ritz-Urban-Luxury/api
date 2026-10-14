@@ -6,6 +6,7 @@ import { AuthenticationController } from './authentication.controller';
 import { AuthenticationService } from './authentication.service';
 import { AdminJwtStrategy, JwtStrategy } from './strategy/jwt.strategy';
 import { WSJWTStrategy } from './strategy/ws-jwt.guard';
+import { LocationsModule } from '../locations/locations.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { WSJWTStrategy } from './strategy/ws-jwt.guard';
       },
     }),
     NotificationModule,
+    LocationsModule,
   ],
   providers: [
     AuthenticationService,

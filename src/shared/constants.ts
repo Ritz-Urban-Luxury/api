@@ -29,4 +29,5 @@ export const DB_TABLES = {
   PRICING_SETTINGS: 'pricing_settings',
   PRICING_CHANGES: 'pricing_changes',
   PRICING_ZONES: 'pricing_zones',
+  SERVICE_LOCATIONS: 'service_locations',
 };

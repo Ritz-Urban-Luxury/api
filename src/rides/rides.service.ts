@@ -2145,6 +2145,43 @@ export class RidesService implements OnModuleInit {
     return this.db.rides.create(doc);
   }
 
+  async createOnboardingRide(
+    user: UserDocument,
+    payload: Omit<CreateRideDTO, 'type'>,
+  ) {
+    if (
+      !Array.isArray(payload.images) ||
+      payload.images.length < 2 ||
+      payload.images.length > 8 ||
+      !payload.images.every(
+        (url) => typeof url === 'string' && url.trim().length > 0,
+      )
+    ) {
+      throw new BadRequestException(
+        'Onboarding requires valid interior and exterior vehicle photos',
+      );
+    }
+    const registration = payload.registration.trim().toLocaleUpperCase();
+    const existing = await this.db.rides.findOne({
+      driver: user.id,
+      registration,
+      type: RideType.Classic,
+      deleted: { $ne: true },
+    });
+    if (existing) return existing;
+
+    const doc = this.buildRidePayload(
+      user,
+      { ...payload, registration, type: RideType.Classic },
+      {
+        type: RideType.Classic,
+        status: RideStatus.Offline,
+        approvalStatus: RideApprovalStatus.Pending,
+      },
+    );
+    return this.db.rides.create(doc);
+  }
+
   async getMyRides(user: UserDocument, type?: RideType) {
     const query: FilterQuery<RidesDocument> = {
       driver: user.id,

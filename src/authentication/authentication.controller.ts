@@ -13,6 +13,7 @@ import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
 import {
   LoginDTO,
+  DriverSignupDTO,
   RequestEmailOTPDTO,
   RequestPhoneOTPDTO,
   ResetPasswordDTO,
@@ -46,6 +47,13 @@ export class AuthenticationController {
     const loggedInUser = await this.authenticationService.signUp(payload);
 
     return Response.json('sign up successful', loggedInUser);
+  }
+
+  @Post('driver-signup')
+  async driverSignup(@Body() payload: DriverSignupDTO) {
+    const loggedInUser = await this.authenticationService.signUpDriver(payload);
+
+    return Response.json('driver sign up successful', loggedInUser);
   }
 
   @Get('check/:key')

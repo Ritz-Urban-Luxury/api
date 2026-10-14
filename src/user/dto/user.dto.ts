@@ -52,6 +52,10 @@ export class UpdateUserDTO {
   @IsOptional()
   avatar?: string;
 
+  @IsIn(['camera', 'library'])
+  @IsOptional()
+  avatarSource?: 'camera' | 'library';
+
   @IsUrl()
   @IsOptional()
   license?: string;
