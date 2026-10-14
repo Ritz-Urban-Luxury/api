@@ -168,12 +168,6 @@ export class AdminListUsersDTO extends PaginationRequestDTO {
   search?: string;
 }
 
-export class SetUserAdminDTO {
-  @IsBoolean()
-  @IsNotEmpty()
-  isAppAdmin: boolean;
-}
-
 export class AdminCreateDriverDTO {
   @IsString()
   @IsNotEmpty()

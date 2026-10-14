@@ -14,7 +14,6 @@ import {
   AdminGetDriversDTO,
   AdminCreateDriverDTO,
   AdminListUsersDTO,
-  SetUserAdminDTO,
   SetUserVerificationDTO,
 } from './dto/user.dto';
 import { UserService } from './user.service';
@@ -50,16 +49,6 @@ export class AdminUserController {
     const detail = await this.userService.getDriverDetail(userId);
 
     return Response.json('driver', detail);
-  }
-
-  @Put('/:userId/admin')
-  async setAdmin(
-    @Param('userId') userId: string,
-    @Body() payload: SetUserAdminDTO,
-  ) {
-    const user = await this.userService.setAdmin(userId, payload);
-
-    return Response.json('user admin status updated', user);
   }
 
   @Put('/:userId/verification')

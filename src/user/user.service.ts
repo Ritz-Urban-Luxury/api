@@ -21,7 +21,6 @@ import {
   AdminCreateDriverDTO,
   AdminListUsersDTO,
   DeleteAccountDTO,
-  SetUserAdminDTO,
   SetUserVerificationDTO,
   UpdateUserDTO,
 } from './dto/user.dto';
@@ -463,18 +462,5 @@ export class UserService {
       select: '-password -oAuthIdentifier -oAuthProvider',
       sort: { createdAt: -1 },
     });
-  }
-
-  async setAdmin(userId: string, payload: SetUserAdminDTO) {
-    const user = await this.db.users.findOneAndUpdate(
-      { _id: userId, deleted: { $ne: true } },
-      { $set: { isAppAdmin: payload.isAppAdmin } },
-      { new: true, upsert: false },
-    );
-    if (!user) {
-      throw new NotFoundException('user not found');
-    }
-
-    return user;
   }
 }
