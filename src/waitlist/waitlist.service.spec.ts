@@ -27,6 +27,7 @@ describe('WaitlistService', () => {
       create: jest.fn(async (doc) => ({ id: 'new', ...doc })),
       updateOne: jest.fn().mockResolvedValue(undefined),
       countDocuments: jest.fn().mockResolvedValue(0),
+      aggregate: jest.fn().mockResolvedValue([]),
     };
     const cache = {
       get: jest.fn().mockResolvedValue(cached),
@@ -252,6 +253,38 @@ describe('WaitlistService', () => {
       await expect(service.sendLaunch(WaitlistAudience.Rider)).rejects.toThrow(
         'Add the App Store or Google Play link for Ritz',
       );
+    });
+  });
+
+  describe('summary', () => {
+    it('reports which sources sign-ups came from, biggest first', async () => {
+      const { service, waitlistEntries } = setup();
+      waitlistEntries.aggregate
+        .mockResolvedValueOnce([
+          { _id: 'rider', total: 5, notified: 0, unsubscribed: 1 },
+        ])
+        .mockResolvedValueOnce([
+          { _id: 'waitlist-instagram-launch', total: 4, riders: 3, drivers: 1 },
+          { _id: null, total: 1, riders: 1, drivers: 0 },
+        ]);
+
+      const summary = await service.summary();
+
+      expect(summary.rider).toEqual({
+        total: 5,
+        notified: 0,
+        unsubscribed: 1,
+        pending: 4,
+      });
+      expect(summary.sources).toEqual([
+        {
+          source: 'waitlist-instagram-launch',
+          total: 4,
+          riders: 3,
+          drivers: 1,
+        },
+        { source: 'unknown', total: 1, riders: 1, drivers: 0 },
+      ]);
     });
   });
 });

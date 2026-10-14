@@ -218,6 +218,7 @@ export class WaitlistService implements OnModuleInit, OnModuleDestroy {
         notifyClaimedAt: { $gt: this.leaseCutoff() },
       }),
     ]);
+    const sources = await this.sourceBreakdown();
 
     const counts = (role: WaitlistRole): RoleCounts => {
       const row = rows.find((r) => r._id === role);
@@ -235,6 +236,7 @@ export class WaitlistService implements OnModuleInit, OnModuleDestroy {
       rider: counts(WaitlistRole.Rider),
       driver: counts(WaitlistRole.Driver),
       sending: this.sending || activeClaims > 0,
+      sources,
       storeLinksReady: {
         rider:
           this.validStoreLink('apple', storeLinks.rider.apple) ||
@@ -244,6 +246,39 @@ export class WaitlistService implements OnModuleInit, OnModuleDestroy {
           this.validStoreLink('google', storeLinks.driver.google),
       },
     };
+  }
+
+  /**
+   * Sign-ups per source, biggest first, so marketers can see which page or campaign
+   * link brought people in (e.g. "waitlist-instagram-launch").
+   */
+  private async sourceBreakdown(limit = 12) {
+    const rows = await this.db.waitlistEntries.aggregate<{
+      _id: string | null;
+      total: number;
+      riders: number;
+      drivers: number;
+    }>([
+      { $match: { deleted: { $ne: true } } },
+      {
+        $group: {
+          _id: { $ifNull: ['$source', 'unknown'] },
+          total: { $sum: 1 },
+          riders: {
+            $sum: { $cond: [{ $eq: ['$role', WaitlistRole.Rider] }, 1, 0] },
+          },
+          drivers: {
+            $sum: { $cond: [{ $eq: ['$role', WaitlistRole.Driver] }, 1, 0] },
+          },
+        },
+      },
+      { $sort: { total: -1, _id: 1 } },
+      { $limit: limit },
+    ]);
+    return rows.map(({ _id, ...counts }) => ({
+      source: _id || 'unknown',
+      ...counts,
+    }));
   }
 
   async list(query: ListWaitlistDTO) {
