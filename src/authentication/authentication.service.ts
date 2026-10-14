@@ -473,7 +473,8 @@ export class AuthenticationService {
     return otp;
   }
 
-  async signUp(payload: SignupDTO) {
+  async signUp(payload: SignupDTO, options: { isDriver?: boolean } = {}) {
+    const isDriver = options.isDriver === true;
     const {
       oAuthIdentifier,
       oAuthProvider,
@@ -520,7 +521,7 @@ export class AuthenticationService {
             billingType: 'individual',
             password: Crypto.randomBytes(32).toString('hex'),
             oAuthProvider,
-            isDriver: true,
+            isDriver,
           },
           { upsert: true, new: true },
         );
@@ -599,8 +600,8 @@ export class AuthenticationService {
       billingType: userObj.vehiclesInFleet ? 'company' : 'individual',
       password: Crypto.randomBytes(32).toString('hex'),
       oAuthProvider,
-      isDriver: true,
-      isVerified: false,
+      isDriver,
+      ...(isDriver ? { isVerified: false } : {}),
     });
 
     await this.activityLedger.recordActivity({
@@ -619,16 +620,19 @@ export class AuthenticationService {
       payload.locationId,
     );
 
-    return this.signUp({
-      city: location.name,
-      email: payload.email,
-      firstName: undefined,
-      lastName: undefined,
-      phoneNumber: payload.phoneNumber,
-      phoneOtp: payload.phoneOtp,
-      serviceLocation: String(location.id),
-      vehiclesInFleet: payload.vehiclesInFleet,
-    });
+    return this.signUp(
+      {
+        city: location.name,
+        email: payload.email,
+        firstName: undefined,
+        lastName: undefined,
+        phoneNumber: payload.phoneNumber,
+        phoneOtp: payload.phoneOtp,
+        serviceLocation: String(location.id),
+        vehiclesInFleet: payload.vehiclesInFleet,
+      },
+      { isDriver: true },
+    );
   }
 
   async login(payload: LoginDTO) {

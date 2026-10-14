@@ -425,7 +425,7 @@ export class UserService {
     if (payload.isVerified) {
       this.push.sendToUser(user, {
         title: 'Account approved',
-        body: 'You’re verified — open the app and go online to take rides.',
+        body: 'Your driver account is approved. You can go online once your vehicle and any required deposit are also approved.',
         app: 'driver',
         data: {
           type: 'DriverVerified',
