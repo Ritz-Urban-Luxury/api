@@ -349,19 +349,36 @@ export class WaitlistService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Your admin account has no email address');
     }
     const roles = this.rolesFor(audience);
-    this.assertStoreLinks(roles);
+    const { siteUrl } = config().waitlist;
+    const withoutLinks: WaitlistRole[] = [];
 
+    // Unlike the real send, a test goes out before the apps have store links, so
+    // admins can check the email. The buttons then point at the website instead.
     await Promise.all(
-      roles.map((role) =>
-        this.notifications.sendEmail({
+      roles.map((role) => {
+        const context = this.emailContext({ role, name: undefined });
+        const hasLinks = Boolean(context.appStoreUrl || context.playStoreUrl);
+        if (!hasLinks) withoutLinks.push(role);
+        return this.notifications.sendEmail({
           template: 'waitlist-launch.template.njk',
           recipient: adminEmail,
           subject: `[TEST] ${this.launchSubject(role)}`,
-          context: this.emailContext({ role, name: undefined }),
-        }),
-      ),
+          context: hasLinks
+            ? context
+            : {
+                ...context,
+                appStoreUrl: `${siteUrl}/download`,
+                playStoreUrl: `${siteUrl}/download`,
+                previewWithoutLinks: true,
+              },
+        });
+      }),
     );
-    return { sentTo: adminEmail, emails: roles.length };
+    return {
+      sentTo: adminEmail,
+      emails: roles.length,
+      withoutLinks: withoutLinks.map((role) => appNames[role]),
+    };
   }
 
   /**

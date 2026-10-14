@@ -12,6 +12,11 @@
           <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
             <tr>
               <td style="padding: 32px;">
+                {% if previewWithoutLinks %}
+                <div style="margin: 0 0 20px; padding: 12px 16px; border-radius: 8px; background-color: #fff4d1; color: #6b4a0a; font-size: 13px; line-height: 19px;">
+                  Test only: the store links aren't set yet, so the buttons below go to the website. Riders will get the real App Store and Google Play links.
+                </div>
+                {% endif %}
                 <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Ritz Urban Luxury</div>
                 <h1 style="margin: 8px 0 16px; font-size: 22px; line-height: 28px; color: #43005d;">{% if name %}{{ name }}, {{ appName }}{% else %}{{ appName }}{% endif %} is ready.</h1>
                 {% if role == 'driver' %}

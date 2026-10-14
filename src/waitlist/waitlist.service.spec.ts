@@ -287,4 +287,52 @@ describe('WaitlistService', () => {
       ]);
     });
   });
+
+  describe('sendTest', () => {
+    it('sends a preview to the admin before the store links are set', async () => {
+      const { service, sendEmail } = setup();
+
+      await expect(
+        service.sendTest('admin@ritz.com', WaitlistAudience.Rider),
+      ).resolves.toEqual({
+        sentTo: 'admin@ritz.com',
+        emails: 1,
+        withoutLinks: ['Ritz'],
+      });
+      expect(sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipient: 'admin@ritz.com',
+          subject: expect.stringMatching(/^\[TEST\]/),
+          context: expect.objectContaining({
+            previewWithoutLinks: true,
+            appStoreUrl: expect.stringMatching(/\/download$/),
+          }),
+        }),
+      );
+    });
+
+    it('uses the real store link once it is set', async () => {
+      process.env.DRIVER_PLAY_STORE_URL =
+        'https://play.google.com/store/apps/details?id=com.ritz.driver';
+      const { service, sendEmail } = setup();
+
+      await expect(
+        service.sendTest('admin@ritz.com', WaitlistAudience.Driver),
+      ).resolves.toMatchObject({ withoutLinks: [] });
+      const { context } = sendEmail.mock.calls[0][0];
+      expect(context.playStoreUrl).toBe(
+        'https://play.google.com/store/apps/details?id=com.ritz.driver',
+      );
+      expect(context.previewWithoutLinks).toBeUndefined();
+    });
+
+    it('still refuses the real launch email without store links', async () => {
+      const { service, sendEmail } = setup();
+
+      await expect(
+        service.sendLaunch(WaitlistAudience.Rider),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+  });
 });
