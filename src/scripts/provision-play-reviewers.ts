@@ -67,6 +67,8 @@ async function provisionPlayReviewers() {
       $unset: {
         deletedAt: 1,
         deletionRequestedAt: 1,
+        inviteCode: 1,
+        referredBy: 1,
         vehiclesInFleet: 1,
       },
     },
@@ -93,6 +95,8 @@ async function provisionPlayReviewers() {
       $unset: {
         deletedAt: 1,
         deletionRequestedAt: 1,
+        inviteCode: 1,
+        referredBy: 1,
         vehiclesInFleet: 1,
       },
     },
