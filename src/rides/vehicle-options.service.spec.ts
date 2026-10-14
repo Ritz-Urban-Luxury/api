@@ -125,7 +125,7 @@ describe('VehicleOptionsService', () => {
           models: [{ name: 'Corolla', fromYear: 2010 }],
         }),
       ],
-      colours: [{ label: 'Black', value: 'black' }],
+      colours: [{ label: 'Black', value: 'black', hex: '#111111' }],
       allowOther: false,
     });
   });
@@ -149,11 +149,17 @@ describe('VehicleOptionsService', () => {
   });
 
   describe('updateSettings', () => {
-    it('cleans the colour list and drops duplicates', async () => {
+    it('cleans the colour list, keeps valid swatches and drops duplicates', async () => {
       const { service, db } = setup();
 
       await service.updateSettings({
-        colours: [' Black ', 'black', 'Champagne', ''],
+        colours: [
+          { label: ' Black ', hex: '#111111' },
+          { label: 'black', hex: '#000000' },
+          { label: 'Champagne', hex: '#F7E7CE' },
+          { label: 'Navy', hex: 'navy' },
+          { label: '' },
+        ],
         allowOther: false,
       });
 
@@ -162,8 +168,9 @@ describe('VehicleOptionsService', () => {
         {
           $set: {
             colours: [
-              { label: 'Black', value: 'black' },
-              { label: 'Champagne', value: 'champagne' },
+              { label: 'Black', value: 'black', hex: '#111111' },
+              { label: 'Champagne', value: 'champagne', hex: '#f7e7ce' },
+              { label: 'Navy', value: 'navy' },
             ],
             allowOther: false,
           },
@@ -172,11 +179,34 @@ describe('VehicleOptionsService', () => {
       );
     });
 
+    it('gives colours saved without a swatch their default shade', async () => {
+      const { service } = setup({
+        settings: {
+          colours: [
+            { label: 'Champagne', value: 'champagne' },
+            { label: 'Navy', value: 'navy' },
+          ],
+          allowOther: true,
+        },
+      });
+
+      await expect(service.getSettings()).resolves.toEqual({
+        colours: [
+          { label: 'Champagne', value: 'champagne', hex: '#f7e7ce' },
+          { label: 'Navy', value: 'navy' },
+        ],
+        allowOther: true,
+      });
+    });
+
     it('refuses an empty colour list', async () => {
       const { service } = setup();
 
       await expect(
-        service.updateSettings({ colours: ['  '], allowOther: true }),
+        service.updateSettings({
+          colours: [{ label: '  ' }],
+          allowOther: true,
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });

@@ -18,6 +18,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   ValidateNested,
   ValidationArguments,
   ValidationOptions,
@@ -565,13 +566,24 @@ export class AdminCarBrandLogoDTO {
   logoUrl: string;
 }
 
+export class AdminVehicleColourDTO {
+  @IsString()
+  @MaxLength(40)
+  label: string;
+
+  /** Swatch, e.g. "#f7e7ce". */
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  hex?: string;
+}
+
 export class AdminVehicleSettingsDTO {
-  /** Colour names in the order drivers see them, e.g. ["Black", "White"]. */
+  /** Colours in the order drivers see them. */
   @IsArray()
   @ArrayMaxSize(60)
-  @IsString({ each: true })
-  @MaxLength(40, { each: true })
-  colours: string[];
+  @ValidateNested({ each: true })
+  @Type(() => AdminVehicleColourDTO)
+  colours: AdminVehicleColourDTO[];
 
   @IsBoolean()
   allowOther: boolean;

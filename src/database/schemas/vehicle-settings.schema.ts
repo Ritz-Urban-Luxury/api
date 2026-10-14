@@ -11,6 +11,10 @@ export class VehicleColour {
   /** Stored on the driver's vehicle, e.g. "champagne". */
   @Prop({ required: true, trim: true })
   value: string;
+
+  /** Swatch shown next to the name, e.g. "#f7e7ce". */
+  @Prop({ trim: true, lowercase: true })
+  hex?: string;
 }
 
 export const VehicleColourSchema = SchemaFactory.createForClass(VehicleColour);

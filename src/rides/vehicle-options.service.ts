@@ -77,23 +77,31 @@ export const STARTER_CATALOGUE: Record<string, string[]> = {
 };
 
 /** The colours the driver app shipped with; seeded with the settings, then admins edit them. */
-export const DEFAULT_VEHICLE_COLOURS: VehicleColour[] = [
-  'Black',
-  'White',
-  'Silver',
-  'Grey',
-  'Blue',
-  'Red',
-  'Green',
-  'Gold',
-  'Beige',
-  'Brown',
-  'Burgundy',
-  'Champagne',
-  'Orange',
-  'Purple',
-  'Yellow',
-].map((label) => ({ label, value: label.toLowerCase() }));
+export const DEFAULT_VEHICLE_COLOURS: VehicleColour[] = (
+  [
+    ['Black', '#111111'],
+    ['White', '#ffffff'],
+    ['Silver', '#c0c0c0'],
+    ['Grey', '#808080'],
+    ['Blue', '#1f4e9e'],
+    ['Red', '#c62828'],
+    ['Green', '#2e7d32'],
+    ['Gold', '#d4af37'],
+    ['Beige', '#d9c8a9'],
+    ['Brown', '#6d4c41'],
+    ['Burgundy', '#800020'],
+    ['Champagne', '#f7e7ce'],
+    ['Orange', '#ef6c00'],
+    ['Purple', '#6a1b9a'],
+    ['Yellow', '#f9d71c'],
+  ] as const
+).map(([label, hex]) => ({ label, value: label.toLowerCase(), hex }));
+
+const DEFAULT_HEX = new Map(
+  DEFAULT_VEHICLE_COLOURS.map((colour) => [colour.value, colour.hex]),
+);
+
+const HEX_PATTERN = /^#[0-9a-f]{6}$/;
 
 export type VehicleOptions = {
   manufacturers: {
@@ -218,20 +226,34 @@ export class VehicleOptionsService implements OnApplicationBootstrap {
       { new: true, upsert: true },
     );
     return {
-      colours: (doc.colours ?? []).map(({ label, value }) => ({
+      colours: (doc.colours ?? []).map(({ label, value, hex }) => ({
         label,
         value,
+        // Colours saved before swatches existed borrow the default shade if there is one.
+        ...(hex ?? DEFAULT_HEX.get(value)
+          ? { hex: hex ?? DEFAULT_HEX.get(value) }
+          : {}),
       })),
       allowOther: doc.allowOther !== false,
     };
   }
 
-  async updateSettings(input: { colours: string[]; allowOther: boolean }) {
+  async updateSettings(input: {
+    colours: { label: string; hex?: string }[];
+    allowOther: boolean;
+  }) {
     const seen = new Set<string>();
     const colours = input.colours
-      .map((label) => label.trim())
-      .filter(Boolean)
-      .map((label) => ({ label, value: toVehicleSlug(label) }))
+      .map(({ label, hex }) => ({
+        label: label.trim(),
+        hex: hex?.trim().toLowerCase(),
+      }))
+      .filter(({ label }) => Boolean(label))
+      .map(({ label, hex }) => ({
+        label,
+        value: toVehicleSlug(label),
+        ...(hex && HEX_PATTERN.test(hex) ? { hex } : {}),
+      }))
       .filter(({ value }) => {
         if (!value || seen.has(value)) return false;
         seen.add(value);

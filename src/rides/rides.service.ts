@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { isMongoId } from 'class-validator';
-import { FilterQuery, Types } from 'mongoose';
+import { FilterQuery, Types, isValidObjectId } from 'mongoose';
 import {
   RentalBillingType,
   RentalDocument,
@@ -2572,6 +2572,9 @@ export class RidesService implements OnModuleInit {
   }
 
   async updateCarBrandLogo(logoId: string, payload: AdminCarBrandLogoDTO) {
+    if (!isValidObjectId(logoId)) {
+      throw new NotFoundException('car brand logo not found');
+    }
     const slug = toCarBrandSlug(payload.name);
     const duplicate = await this.db.carBrandLogos.exists({
       _id: { $ne: logoId },
@@ -2595,6 +2598,9 @@ export class RidesService implements OnModuleInit {
   }
 
   async deleteCarBrandLogo(logoId: string) {
+    if (!isValidObjectId(logoId)) {
+      throw new NotFoundException('car brand logo not found');
+    }
     const logo = await this.db.carBrandLogos.findOneAndUpdate(
       { _id: logoId, deleted: { $ne: true } },
       { $set: { deleted: true } },
@@ -2627,6 +2633,9 @@ export class RidesService implements OnModuleInit {
   }
 
   async updateCarBrand(brandId: string, payload: AdminCarBrandDTO) {
+    if (!isValidObjectId(brandId)) {
+      throw new NotFoundException('car brand not found');
+    }
     const brand = await this.db.carBrands.findOneAndUpdate(
       { _id: brandId, deleted: { $ne: true } },
       {
@@ -2643,6 +2652,9 @@ export class RidesService implements OnModuleInit {
   }
 
   async deleteCarBrand(brandId: string) {
+    if (!isValidObjectId(brandId)) {
+      throw new NotFoundException('car brand not found');
+    }
     const brand = await this.db.carBrands.findOneAndUpdate(
       { _id: brandId, deleted: { $ne: true } },
       { $set: { deleted: true } },
