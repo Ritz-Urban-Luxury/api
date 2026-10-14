@@ -42,6 +42,7 @@ import { WaitlistEntryDocument } from './schemas/waitlist-entry.schema';
 import { PricingSettingsDocument } from './schemas/pricing-settings.schema';
 import { PricingChangeDocument } from './schemas/pricing-change.schema';
 import { PricingZoneDocument } from './schemas/pricing-zone.schema';
+import { VehicleSettingsDocument } from './schemas/vehicle-settings.schema';
 import { ServiceLocationDocument } from './schemas/service-location.schema';
 
 @Injectable()
@@ -107,6 +108,8 @@ export class DatabaseService {
     public readonly pricingChanges: Model<PricingChangeDocument>,
     @InjectModel(DB_TABLES.PRICING_ZONES)
     public readonly pricingZones: Model<PricingZoneDocument>,
+    @InjectModel(DB_TABLES.VEHICLE_SETTINGS)
+    public readonly vehicleSettings: Model<VehicleSettingsDocument>,
     @InjectModel(DB_TABLES.SERVICE_LOCATIONS)
     public readonly serviceLocations: Model<ServiceLocationDocument>,
   ) {}

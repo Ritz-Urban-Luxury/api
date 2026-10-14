@@ -35,6 +35,7 @@ import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
 import { PricingSettingsSchema } from './schemas/pricing-settings.schema';
 import { PricingChangeSchema } from './schemas/pricing-change.schema';
 import { PricingZoneSchema } from './schemas/pricing-zone.schema';
+import { VehicleSettingsSchema } from './schemas/vehicle-settings.schema';
 import { ServiceLocationSchema } from './schemas/service-location.schema';
 import { PricingService } from './pricing.service';
 
@@ -82,6 +83,7 @@ import { PricingService } from './pricing.service';
       { name: DB_TABLES.PRICING_SETTINGS, schema: PricingSettingsSchema },
       { name: DB_TABLES.PRICING_CHANGES, schema: PricingChangeSchema },
       { name: DB_TABLES.PRICING_ZONES, schema: PricingZoneSchema },
+      { name: DB_TABLES.VEHICLE_SETTINGS, schema: VehicleSettingsSchema },
       { name: DB_TABLES.SERVICE_LOCATIONS, schema: ServiceLocationSchema },
     ]),
   ],

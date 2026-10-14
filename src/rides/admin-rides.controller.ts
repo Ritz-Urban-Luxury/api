@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -23,12 +24,43 @@ import {
   AdminUpdateFleetApprovalDTO,
   AdminUpdateRentalStatusDTO,
   AdminUpdateUserReportDTO,
+  AdminRenameManufacturerDTO,
+  AdminVehicleSettingsDTO,
 } from './dto/rides.dto';
+import { VehicleOptionsService } from './vehicle-options.service';
 
 @Controller('admin/rides')
 @UseGuards(AdminJwtGuard)
 export class AdminRideController {
-  constructor(private readonly ridesService: RidesService) {}
+  constructor(
+    private readonly ridesService: RidesService,
+    private readonly vehicleOptions: VehicleOptionsService,
+  ) {}
+
+  /** Colours and the "Other" switch for the vehicle step of driver onboarding. */
+  @Get('/vehicle-settings')
+  async getVehicleSettings() {
+    return Response.json(
+      'vehicle settings',
+      await this.vehicleOptions.getSettings(),
+    );
+  }
+
+  @Put('/vehicle-settings')
+  async updateVehicleSettings(@Body() payload: AdminVehicleSettingsDTO) {
+    return Response.json(
+      'vehicle settings updated',
+      await this.vehicleOptions.updateSettings(payload),
+    );
+  }
+
+  @Post('/manufacturers/rename')
+  async renameManufacturer(@Body() payload: AdminRenameManufacturerDTO) {
+    return Response.json(
+      'manufacturer renamed',
+      await this.vehicleOptions.renameManufacturer(payload.from, payload.to),
+    );
+  }
 
   @Get('/trips')
   async getRides(@Query() query: AdminGetTripsDTO) {

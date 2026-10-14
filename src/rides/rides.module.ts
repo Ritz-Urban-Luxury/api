@@ -4,12 +4,13 @@ import { DriverStatsController } from './driver-stats.controller';
 import { DriverStatsService } from './driver-stats.service';
 import { RidesController } from './rides.controller';
 import { RidesService } from './rides.service';
+import { VehicleOptionsService } from './vehicle-options.service';
 import { AdminRideController } from './admin-rides.controller';
 import { FinanceModule } from '../finance/finance.module';
 
 @Module({
   imports: [PaymentModule, FinanceModule],
-  providers: [RidesService, DriverStatsService],
+  providers: [RidesService, DriverStatsService, VehicleOptionsService],
   exports: [RidesService, DriverStatsService],
   controllers: [DriverStatsController, RidesController, AdminRideController],
 })

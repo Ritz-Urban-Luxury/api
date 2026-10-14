@@ -564,3 +564,27 @@ export class AdminCarBrandLogoDTO {
   @IsUrl()
   logoUrl: string;
 }
+
+export class AdminVehicleSettingsDTO {
+  /** Colour names in the order drivers see them, e.g. ["Black", "White"]. */
+  @IsArray()
+  @ArrayMaxSize(60)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  colours: string[];
+
+  @IsBoolean()
+  allowOther: boolean;
+}
+
+export class AdminRenameManufacturerDTO {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  from: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  to: string;
+}

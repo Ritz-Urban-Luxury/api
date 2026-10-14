@@ -38,11 +38,15 @@ import {
 } from './dto/rides.dto';
 import { GeolocationService } from './geolocation.service';
 import { RidesService } from './rides.service';
+import { VehicleOptionsService } from './vehicle-options.service';
 import { RideType } from '../database/schemas/rides.schema';
 
 @Controller('rides')
 export class RidesController {
-  constructor(private readonly ridesService: RidesService) {}
+  constructor(
+    private readonly ridesService: RidesService,
+    private readonly vehicleOptions: VehicleOptionsService,
+  ) {}
 
   @UseGuards(JwtGuard)
   @Get()
@@ -60,6 +64,18 @@ export class RidesController {
     const brands = await this.ridesService.getCarBrands();
 
     return Response.json('car brands', brands);
+  }
+
+  /**
+   * The makes (with logos), models and colours drivers choose from when they sign up.
+   * Public, like /brands, because onboarding starts before a driver is verified.
+   */
+  @Get('/vehicle-options')
+  async getVehicleOptions() {
+    return Response.json(
+      'vehicle options',
+      await this.vehicleOptions.getOptions(),
+    );
   }
 
   @Get('/brand-logos')
