@@ -4,7 +4,14 @@ import { DB_TABLES } from '../shared/constants';
 import config from '../shared/config';
 
 async function main() {
-  await connect(config().database.url);
+  const databaseUrl = config().database.url;
+  if (!databaseUrl) {
+    throw new Error(
+      'DATABASE_URL is required. Set it in api/.env or in the command environment.',
+    );
+  }
+
+  await connect(databaseUrl);
   const users = model(DB_TABLES.USERS, UserSchema);
   const result = await users.updateMany(
     { isDriver: true, isVerified: { $exists: false } },
