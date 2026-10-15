@@ -8,7 +8,10 @@ import {
   RideStatus,
   RideType,
 } from '../database/schemas/rides.schema';
-import { PaymentMethod } from '../database/schemas/trips.schema';
+import {
+  PaymentMethod,
+  TripStatus,
+} from '../database/schemas/trips.schema';
 import { UserReportReason } from '../database/schemas/user-report.schema';
 import {
   RentalBillingType,
@@ -535,6 +538,59 @@ describe('RidesService Play reviewer sandbox', () => {
       driverReviewer,
       syntheticTrip.id,
     );
+  });
+
+  it('advances the complete rider demo lifecycle and leaves completion idempotent', async () => {
+    const reviewTrip = {
+      driver: driverReviewer,
+      id: 'synthetic-trip-id',
+      meta: { playReviewSynthetic: true },
+      user: riderId,
+    };
+    db.trips.findOne
+      .mockReturnValueOnce(
+        populatedQuery({ ...reviewTrip, status: TripStatus.Started }),
+      )
+      .mockReturnValueOnce(
+        populatedQuery({ ...reviewTrip, status: TripStatus.DriverArrived }),
+      )
+      .mockReturnValueOnce(
+        populatedQuery({ ...reviewTrip, status: TripStatus.InProgress }),
+      )
+      .mockReturnValueOnce(
+        populatedQuery({ ...reviewTrip, status: TripStatus.Completed }),
+      );
+    const announceArrival = jest
+      .spyOn(service, 'annouceArrival')
+      .mockResolvedValue({
+        ...reviewTrip,
+        status: TripStatus.DriverArrived,
+      } as never);
+    const startTrip = jest.spyOn(service, 'startTrip').mockResolvedValue({
+      ...reviewTrip,
+      status: TripStatus.InProgress,
+    } as never);
+    const endTrip = jest.spyOn(service, 'endTrip').mockResolvedValue({
+      ...reviewTrip,
+      status: TripStatus.Completed,
+    } as never);
+
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, reviewTrip.id),
+    ).resolves.toMatchObject({ status: TripStatus.DriverArrived });
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, reviewTrip.id),
+    ).resolves.toMatchObject({ status: TripStatus.InProgress });
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, reviewTrip.id),
+    ).resolves.toMatchObject({ status: TripStatus.Completed });
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, reviewTrip.id),
+    ).resolves.toMatchObject({ status: TripStatus.Completed });
+
+    expect(announceArrival).toHaveBeenCalledTimes(1);
+    expect(startTrip).toHaveBeenCalledTimes(1);
+    expect(endTrip).toHaveBeenCalledTimes(1);
   });
 
   it('advances a rider synthetic rental one valid status at a time', async () => {
