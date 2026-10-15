@@ -48,7 +48,10 @@ describe('DashboardService.getAttention', () => {
   it('counts the work waiting on an admin with the same filters as each list', async () => {
     const count = (n: number) => jest.fn().mockResolvedValue(n);
     const db = {
-      users: { countDocuments: count(3) },
+      users: {
+        distinct: jest.fn().mockResolvedValue([]),
+        countDocuments: count(3),
+      },
       rentals: { countDocuments: count(2) },
       rides: {
         distinct: jest.fn().mockResolvedValue(['driver-1']),
@@ -68,11 +71,14 @@ describe('DashboardService.getAttention', () => {
     });
     expect(db.users.countDocuments).toHaveBeenCalledWith({
       deleted: { $ne: true },
+      isTestAccount: { $ne: true },
       $or: [{ isDriver: true }, { _id: { $in: ['driver-1'] } }],
       isVerified: { $ne: true },
     });
     expect(db.rides.countDocuments).toHaveBeenNthCalledWith(1, {
       deleted: { $ne: true },
+      'specs.synthetic': { $ne: true },
+      driver: { $nin: [] },
       type: { $in: ['Classic', 'Luxury'] },
       approvalStatus: 'Pending',
     });

@@ -2,8 +2,8 @@
 
 The driver review environment is isolated from live riders, vehicles, and
 payments. The reusable driver account can generate a synthetic ride request
-from the Home screen. Account deletion is tested with a separate disposable
-driver account so the main review login remains available.
+from the Home screen and can exercise account deletion. Its verified profile
+and synthetic vehicles are restored on the next successful review login.
 
 ## Required environment variables
 
@@ -19,8 +19,10 @@ PLAY_DRIVER_DELETE_REVIEW_EMAIL=driver-delete-review@ritzurbanluxury.com
 
 `PLAY_REVIEW_OTP` is the only reviewer OTP setting and is reused by all four
 accounts. Store it in the deployment secret store, not in source control. The
-rider phone numbers are canonical constants in `play-review-accounts.ts`, so
-deployment variables cannot drift away from the credentials supplied to Apple.
+reusable review phone number is a canonical constant in
+`play-review-accounts.ts` and is shared by the rider and driver apps. Each app
+sends its role to the API so the same credential resolves to the correct
+account.
 
 ## Provision or restore the accounts
 
@@ -30,35 +32,39 @@ Run this against the same database used by the submitted build:
 npm run provision:app-reviewers -- --confirm
 ```
 
-The command is idempotent. Run it again before a new submission, or after Apple
-deletes a disposable account. It restores the reusable rider and driver,
-recreates both disposable deletion accounts, and provisions the approved
-synthetic trip and hire vehicles.
+The command is idempotent. Run it again before a new submission. It restores
+the reviewer accounts and provisions the approved synthetic trip and hire
+vehicles.
+
+For a Docker deployment, set `PROVISION_APP_REVIEWERS=true`. The container will
+run `yarn start:provision-app-reviewers`, which provisions the accounts and then
+starts the API. Leave the variable unset or set it to `false` when automatic
+startup provisioning is not wanted.
 
 ## Reviewer flow
 
 1. Sign in to the driver app as `driver-review@ritzurbanluxury.com` using the
-   shared fixed OTP.
+   shared fixed OTP, or use phone `07064192718` with the same OTP.
 2. Grant location permission and go online with the preselected review vehicle.
 3. Tap **Generate demo ride** on the Home screen.
 4. Accept the request and exercise arrival, start, chat, safety reporting,
    completion, rating, and history using the normal app UI.
-5. For deletion testing, sign out and sign in as
-   `driver-delete-review@ritzurbanluxury.com`. Use Settings > Account > Delete
-   account. Do not use the reusable driver account for this test.
+5. For deletion testing, use Settings > Account > Delete account while signed
+   in as `driver-review@ritzurbanluxury.com`. The next successful login with
+   that email or phone `07064192718` recreates the verified driver profile and
+   reconnects both synthetic vehicles.
 
-For the rider app, sign in to the reusable account with phone `07064192718`
-and the shared OTP. Use phone `07063650902` and the same shared OTP only for
-Profile > Delete account > Review > Close account. The deletion account cannot
-create synthetic bookings and can be restored by rerunning the provisioning
-command.
+For the rider app, sign in with phone `07064192718` and the shared OTP. Use this
+same account for Profile > Delete account > Review > Close account. The API
+anonymizes the deleted account normally, then creates a fresh isolated review
+account when `07064192718` next signs in with the shared OTP. No second rider
+phone number is required.
 
 The reusable rider sees an **App Review Demo** panel on Home. **Test a ride**
 loads fixed Abuja pickup/destination locations and Cash payment before opening
 the normal confirmation flow. **Test car hire** opens the isolated hire
 catalogue containing `PLAY-REVIEW-HIRE`. The capability is granted by the API
-only when both the reusable reviewer email and canonical phone number match;
-the disposable deletion account never receives it.
+only when both the reusable reviewer email and canonical phone number match.
 
 The synthetic ride automatically progresses from driver approaching to driver
 arrived after 5 seconds, starts 5 seconds later, and completes after another

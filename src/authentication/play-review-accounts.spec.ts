@@ -52,7 +52,7 @@ describe('Play review accounts', () => {
     expect(getPlayReviewAccount('ordinary@example.com')).toBeNull();
   });
 
-  it('attaches canonical phone numbers only to the rider accounts', () => {
+  it('attaches the canonical phone number to both reusable app accounts', () => {
     process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
     process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
@@ -68,8 +68,8 @@ describe('Play review accounts', () => {
 
     expect(rider?.phoneNumber).toBe(PLAY_REVIEW_PHONE_NUMBERS.rider);
     expect(rider?.phoneNumber).toBe('2347064192718');
-    expect(riderDeletion?.phoneNumber).toBe('2347063650902');
-    expect(driver?.phoneNumber).toBeUndefined();
+    expect(driver?.phoneNumber).toBe('2347064192718');
+    expect(riderDeletion?.phoneNumber).toBeUndefined();
   });
 
   it('rejects a malformed reviewer OTP', () => {
@@ -108,7 +108,7 @@ describe('Play review accounts', () => {
     });
   });
 
-  it('configures a distinct disposable rider account with canonical phone login', () => {
+  it('keeps the separate rider deletion account email-only', () => {
     process.env.PLAY_REVIEW_OTP = '1847';
     process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
       'rider-delete-review@ritzurbanluxury.com';
@@ -120,7 +120,7 @@ describe('Play review accounts', () => {
     expect(account).toMatchObject({
       kind: 'riderDeletion',
       otp: '1847',
-      phoneNumber: '2347063650902',
     });
+    expect(account?.phoneNumber).toBeUndefined();
   });
 });

@@ -44,6 +44,7 @@ import { PricingChangeDocument } from './schemas/pricing-change.schema';
 import { PricingZoneDocument } from './schemas/pricing-zone.schema';
 import { VehicleSettingsDocument } from './schemas/vehicle-settings.schema';
 import { ServiceLocationDocument } from './schemas/service-location.schema';
+import { AdminAuditLogDocument } from './schemas/admin-audit-log.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -112,6 +113,8 @@ export class DatabaseService {
     public readonly vehicleSettings: Model<VehicleSettingsDocument>,
     @InjectModel(DB_TABLES.SERVICE_LOCATIONS)
     public readonly serviceLocations: Model<ServiceLocationDocument>,
+    @InjectModel(DB_TABLES.ADMIN_AUDIT_LOGS)
+    public readonly adminAuditLogs: Model<AdminAuditLogDocument>,
   ) {}
 
   async findOrFail<

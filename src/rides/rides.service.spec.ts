@@ -262,7 +262,7 @@ describe('RidesService Play reviewer sandbox', () => {
       service.getReviewMode({
         email: 'rider-review@ritzurbanluxury.com',
         id: riderId,
-        phoneNumber: '2347063650902',
+        phoneNumber: '2347000000000',
       } as never),
     ).toMatchObject({ canUseRiderDemo: false });
   });

@@ -22,7 +22,16 @@ import { DatabaseService } from '../database/database.service';
 import { ReferralService } from '../database/referral.service';
 import { LocationsService } from '../locations/locations.service';
 import { ActivityType } from '../database/schemas/activities.schema';
-import { OAuthProvider, UserDocument } from '../database/schemas/user.schema';
+import {
+  RideApprovalStatus,
+  RideStatus,
+  RideType,
+} from '../database/schemas/rides.schema';
+import {
+  OAuthProvider,
+  TestAccountPurpose,
+  UserDocument,
+} from '../database/schemas/user.schema';
 import { FileService } from '../file/file.service';
 import { Logger } from '../logger/logger.service';
 import { NotificationService } from '../notification';
@@ -50,6 +59,8 @@ const moment = require('moment');
 
 const PLAY_REVIEW_ATTEMPT_WINDOW_MINUTES = 15;
 const PLAY_REVIEW_MAX_FAILED_ATTEMPTS = 5;
+const PLAY_REVIEW_SYNTHETIC_IMAGE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 @Injectable()
 export class AuthenticationService {
@@ -80,9 +91,9 @@ export class AuthenticationService {
   }
 
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {
-    const { phoneNumber } = payload;
+    const { phoneNumber, app = 'rider' } = payload;
     const phone = Util.formatPhoneNumber(phoneNumber, 'NG');
-    const reviewerAccount = this.getReviewerAccountByPhone(phone);
+    const reviewerAccount = this.getReviewerAccountByPhone(phone, app);
     const tokenType = reviewerAccount
       ? 'play-review-phone-otp-request'
       : 'phone-otp';
@@ -215,12 +226,129 @@ export class AuthenticationService {
 
   private getReviewerAccountByPhone(
     phoneNumber: string,
+    app: 'rider' | 'driver' = 'rider',
   ): PlayReviewAccount | null {
+    const accountKind = app === 'driver' ? 'driver' : 'rider';
     return (
       this.playReviewAccounts.find(
-        (account) => account.phoneNumber === phoneNumber,
+        (account) =>
+          account.kind === accountKind && account.phoneNumber === phoneNumber,
       ) || null
     );
+  }
+
+  private async restoreDriverReviewerVehicles(driverId: string) {
+    await Promise.all([
+      this.db.rides.findOneAndUpdate(
+        { registration: 'PLAY-REVIEW', 'specs.synthetic': true },
+        {
+          $set: {
+            approvalStatus: RideApprovalStatus.Approved,
+            brand: 'Toyota',
+            cautionDeposit: 0,
+            color: 'Black',
+            deleted: false,
+            driver: driverId,
+            hourlyRate: 0,
+            images: [PLAY_REVIEW_SYNTHETIC_IMAGE],
+            insuranceFee: 0,
+            model: 'Camry',
+            registration: 'PLAY-REVIEW',
+            specs: { seats: 4, synthetic: true, year: '2024' },
+            status: RideStatus.Offline,
+            type: RideType.Classic,
+          },
+          $unset: { approvalReason: 1, location: 1 },
+        },
+        { new: true, upsert: true },
+      ),
+      this.db.rides.findOneAndUpdate(
+        { registration: 'PLAY-REVIEW-HIRE', 'specs.synthetic': true },
+        {
+          $set: {
+            approvalStatus: RideApprovalStatus.Approved,
+            brand: 'Mercedes-Benz',
+            cautionDeposit: 0,
+            color: 'Black',
+            dailyRate: 0,
+            deleted: false,
+            driver: driverId,
+            hourlyRate: 0,
+            images: [],
+            insuranceFee: 0,
+            model: 'V-Class',
+            registration: 'PLAY-REVIEW-HIRE',
+            specs: { seats: 6, synthetic: true, year: '2024' },
+            status: RideStatus.Online,
+            type: RideType.Hire,
+          },
+          $unset: { approvalReason: 1, location: 1 },
+        },
+        { new: true, upsert: true },
+      ),
+    ]);
+  }
+
+  private async findOrRecreateReviewer(
+    account: PlayReviewAccount,
+    phoneNumber: string,
+  ): Promise<UserDocument | null> {
+    const existing = await this.db.users.findOne({
+      email: account.email,
+      phoneNumber,
+      deleted: { $ne: true },
+    });
+    if (existing) return existing;
+    if (account.kind !== 'rider' && account.kind !== 'driver') return null;
+
+    const password = await hash(Crypto.randomBytes(32).toString('hex'), 8);
+    const isDriver = account.kind === 'driver';
+    const user = await this.db.users.findOneAndUpdate(
+      { email: account.email, deleted: { $ne: true } },
+      {
+        $set: {
+          ...(isDriver
+            ? {
+                accountNumber: '0000000000',
+                address: 'Synthetic Google Play review account, Abuja',
+                avatar: PLAY_REVIEW_SYNTHETIC_IMAGE,
+                bank: 'Review Bank',
+                bankHolderName: 'Play Driver Reviewer',
+                city: 'Abuja',
+                languages: ['English'],
+                license: PLAY_REVIEW_SYNTHETIC_IMAGE,
+                licenseExpiry: new Date('2035-12-31T00:00:00.000Z'),
+                licenseNumber: 'PLAY-REVIEW-0001',
+              }
+            : {}),
+          billingType: 'individual',
+          deleted: false,
+          email: account.email,
+          firstName: 'Play',
+          isAppAdmin: false,
+          isDriver,
+          isTestAccount: true,
+          isVerified: isDriver,
+          lastName: isDriver ? 'Driver Reviewer' : 'Rider Reviewer',
+          phoneNumber,
+          preferences: {
+            playReview: true,
+            syntheticDataOnly: true,
+          },
+          testAccountPurpose: TestAccountPurpose.AppReview,
+        },
+        $setOnInsert: { password },
+        $unset: {
+          deletedAt: 1,
+          deletionRequestedAt: 1,
+        },
+      },
+      { new: true, upsert: true },
+    );
+    if (user && isDriver) {
+      await this.restoreDriverReviewerVehicles(user.id);
+    }
+    return user;
   }
 
   private reviewerRoleIsValid(
@@ -636,28 +764,24 @@ export class AuthenticationService {
   }
 
   async login(payload: LoginDTO) {
-    const { phoneNumber, otp, identifier, password } = payload;
+    const { phoneNumber, otp, identifier, password, app = 'rider' } = payload;
     if (phoneNumber && otp) {
       const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
-      const reviewerAccount = this.getReviewerAccountByPhone(_phoneNumber);
+      const reviewerAccount = this.getReviewerAccountByPhone(_phoneNumber, app);
       if (reviewerAccount) {
-        const [user, otpIsValid] = await Promise.all([
-          this.db.users.findOne({
-            email: reviewerAccount.email,
-            phoneNumber: _phoneNumber,
-            deleted: { $ne: true },
-          }),
-          this.verifyReviewerOtp(reviewerAccount, otp),
-        ]);
-        if (
-          user &&
-          otpIsValid &&
-          this.reviewerRoleIsValid(reviewerAccount, user)
-        ) {
+        const otpIsValid = await this.verifyReviewerOtp(reviewerAccount, otp);
+        if (!otpIsValid) {
+          throw new UnauthorizedException('invalid credentials');
+        }
+        const user = await this.findOrRecreateReviewer(
+          reviewerAccount,
+          _phoneNumber,
+        );
+        if (user && this.reviewerRoleIsValid(reviewerAccount, user)) {
           return this.authorizeUser(user);
         }
 
-        if (user && otpIsValid) {
+        if (user) {
           this.logger.error('Play reviewer account has an invalid role', {
             phoneNumber: _phoneNumber,
             reviewerType: reviewerAccount.kind,
@@ -687,22 +811,27 @@ export class AuthenticationService {
       const email = identifier.toLowerCase().trim();
       const reviewerAccount = this.getReviewerAccount(email);
       if (reviewerAccount) {
-        const [user, otpIsValid] = await Promise.all([
-          this.db.users.findOne({
-            email,
-            deleted: { $ne: true },
-          }),
-          this.verifyReviewerOtp(reviewerAccount, otp),
-        ]);
-        if (
-          user &&
-          otpIsValid &&
-          this.reviewerRoleIsValid(reviewerAccount, user)
-        ) {
+        const otpIsValid = await this.verifyReviewerOtp(reviewerAccount, otp);
+        if (!otpIsValid) {
+          throw new UnauthorizedException('invalid credentials');
+        }
+        const user =
+          (reviewerAccount.kind === 'rider' ||
+            reviewerAccount.kind === 'driver') &&
+          reviewerAccount.phoneNumber
+            ? await this.findOrRecreateReviewer(
+                reviewerAccount,
+                reviewerAccount.phoneNumber,
+              )
+            : await this.db.users.findOne({
+                email,
+                deleted: { $ne: true },
+              });
+        if (user && this.reviewerRoleIsValid(reviewerAccount, user)) {
           return this.authorizeUser(user);
         }
 
-        if (user && otpIsValid) {
+        if (user) {
           this.logger.error('Play reviewer account has an invalid role', {
             email,
             reviewerType: reviewerAccount.kind,

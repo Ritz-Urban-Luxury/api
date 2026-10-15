@@ -23,16 +23,15 @@ export const PLAY_REVIEW_EMAILS: Record<PlayReviewAccountKind, string> = {
   driverDeletion: 'driver-delete-review@ritzurbanluxury.com',
 };
 
-// Real riders only ever sign in with Google or a phone number - never email -
-// so both rider reviewer accounts need to be reachable through that same
-// phone-OTP flow for App Store review. These are public review credentials,
-// not secrets, and keeping them canonical prevents deployment configuration
-// from drifting away from the phone numbers supplied to Apple.
+// Both mobile apps can use the same canonical review number. They identify
+// themselves as rider or driver in the authentication request so the API can
+// resolve the correct reusable account. After Apple tests rider deletion,
+// authentication recreates that rider on the next successful fixed-OTP login.
 export const PLAY_REVIEW_PHONE_NUMBERS: Partial<
   Record<PlayReviewAccountKind, string>
 > = {
   rider: Util.formatPhoneNumber('07064192718', 'NG'),
-  riderDeletion: Util.formatPhoneNumber('07063650902', 'NG'),
+  driver: Util.formatPhoneNumber('07064192718', 'NG'),
 };
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();

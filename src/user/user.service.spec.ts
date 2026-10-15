@@ -197,24 +197,43 @@ describe('UserService.deleteAccount', () => {
     delete process.env.PLAY_REVIEW_OTP;
   });
 
-  it('allows the disposable rider reviewer account to exercise deletion', async () => {
+  it('allows the reusable driver reviewer account to exercise deletion', async () => {
     process.env.PLAY_REVIEW_OTP = '1847';
-    process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL =
-      'rider-delete-review@ritzurbanluxury.com';
+    process.env.PLAY_DRIVER_REVIEW_EMAIL = 'driver-review@ritzurbanluxury.com';
 
     await expect(
       service.deleteAccount(
         {
-          email: 'rider-delete-review@ritzurbanluxury.com',
+          email: 'driver-review@ritzurbanluxury.com',
           id: userId,
-          isDriver: false,
-          phoneNumber: '2347063650902',
+          isDriver: true,
+          phoneNumber: '2347064192718',
         } as never,
         { confirm: true },
       ),
     ).resolves.toMatchObject({ deleted: true });
 
-    delete process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL;
+    delete process.env.PLAY_DRIVER_REVIEW_EMAIL;
+    delete process.env.PLAY_REVIEW_OTP;
+  });
+
+  it('allows the reusable rider reviewer account to exercise deletion', async () => {
+    process.env.PLAY_REVIEW_OTP = '1847';
+    process.env.PLAY_RIDER_REVIEW_EMAIL = 'rider-review@ritzurbanluxury.com';
+
+    await expect(
+      service.deleteAccount(
+        {
+          email: 'rider-review@ritzurbanluxury.com',
+          id: userId,
+          isDriver: false,
+          phoneNumber: '2347064192718',
+        } as never,
+        { confirm: true },
+      ),
+    ).resolves.toMatchObject({ deleted: true });
+
+    delete process.env.PLAY_RIDER_REVIEW_EMAIL;
     delete process.env.PLAY_REVIEW_OTP;
   });
 });

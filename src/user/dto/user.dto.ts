@@ -187,3 +187,13 @@ export class AdminCreateDriverDTO {
   @MinLength(8)
   password: string;
 }
+
+export class PurgeTestAccountDTO {
+  @IsString()
+  @IsNotEmpty()
+  confirmation: string;
+
+  @IsString()
+  @MinLength(8)
+  reason: string;
+}

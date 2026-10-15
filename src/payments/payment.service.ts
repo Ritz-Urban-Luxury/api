@@ -13,6 +13,7 @@ import { Util } from '../shared/util';
 import { RequestReferenceDTO } from './dto/payment.dto';
 import { PaymentProvider } from './types';
 import { WalletTransactionType } from '../database/schemas/wallet-transaction.schema';
+import config from '../shared/config';
 
 @Injectable()
 export class PaymentService {
@@ -110,6 +111,7 @@ export class PaymentService {
       { new: true },
     );
     await this.db.walletTransactions.create({
+      appEnvironment: config().appEnvironment,
       user: user.id,
       type: WalletTransactionType.Debit,
       amountKobo: -Math.round(debit * 100),
@@ -144,6 +146,7 @@ export class PaymentService {
       { new: true },
     );
     await this.db.walletTransactions.create({
+      appEnvironment: config().appEnvironment,
       user: user.id,
       type:
         kind === 'ride-credit'

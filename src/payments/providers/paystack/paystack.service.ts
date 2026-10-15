@@ -226,7 +226,9 @@ export class PaystackService implements PaymentProvider {
         },
       );
       if (!response.status || !response.data?.recipient_code) {
-        throw new Error(response.message || 'Unable to create transfer recipient');
+        throw new Error(
+          response.message || 'Unable to create transfer recipient',
+        );
       }
       return response.data;
     } catch (error) {
@@ -452,9 +454,15 @@ export class PaystackService implements PaymentProvider {
         if (meta.purpose === 'driver-debt-payment') {
           const expectedAmount = Number(meta.amount || 0);
           if (!Number.isFinite(expectedAmount) || expectedAmount !== amount) {
-            throw new BadRequestException('Driver debt payment amount mismatch');
+            throw new BadRequestException(
+              'Driver debt payment amount mismatch',
+            );
           }
-          await this.applyDriverDebtPayment(String(meta.user), amount, reference);
+          await this.applyDriverDebtPayment(
+            String(meta.user),
+            amount,
+            reference,
+          );
           return;
         }
 
@@ -472,11 +480,13 @@ export class PaystackService implements PaymentProvider {
             { upsert: true, new: true },
           ),
           this.db.walletTransactions.create({
+            appEnvironment: config().appEnvironment,
             user: meta.user,
             type: 'CashCredit',
             amountKobo: Math.round(amount * 100),
             purpose: 'wallet-top-up',
             provider: this.name,
+            providerMode: config().paystack.mode,
             providerReference: reference,
           }),
         ]);
@@ -574,7 +584,8 @@ export class PaystackService implements PaymentProvider {
       { new: true },
     );
     if (request) await this.finalizePaidRequest(request);
-    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout is complete');
+    if (request)
+      this.notifyPayoutStatus(request, 'Your Ritz payout is complete');
   }
 
   private async handleTransferFailedEvent(payload: WebhookPayload) {
@@ -592,7 +603,8 @@ export class PaystackService implements PaymentProvider {
       },
       { new: true },
     );
-    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout needs attention');
+    if (request)
+      this.notifyPayoutStatus(request, 'Your Ritz payout needs attention');
   }
 
   private async handleTransferReversedEvent(payload: WebhookPayload) {
@@ -610,7 +622,8 @@ export class PaystackService implements PaymentProvider {
       },
       { new: true },
     );
-    if (request) this.notifyPayoutStatus(request, 'Your Ritz payout was reversed');
+    if (request)
+      this.notifyPayoutStatus(request, 'Your Ritz payout was reversed');
   }
 
   private async handleRefundEvent(payload: WebhookPayload) {
@@ -626,7 +639,10 @@ export class PaystackService implements PaymentProvider {
     };
     const status = statusByEvent[payload.event];
     const request = await this.db.payoutRequests.findOneAndUpdate(
-      { providerTransactionReference: transactionReference, status: { $ne: status } },
+      {
+        providerTransactionReference: transactionReference,
+        status: { $ne: status },
+      },
       {
         $set: {
           status,
@@ -639,7 +655,10 @@ export class PaystackService implements PaymentProvider {
     if (status === 'Paid' && request) await this.finalizePaidRequest(request);
     if (request && status === 'Paid') {
       this.notifyPayoutStatus(request, 'Your Ritz refund is complete');
-    } else if (request && ['ActionRequired', 'FailedRetryable'].includes(status)) {
+    } else if (
+      request &&
+      ['ActionRequired', 'FailedRetryable'].includes(status)
+    ) {
       this.notifyPayoutStatus(request, 'Your Ritz refund needs attention');
     }
   }
@@ -704,11 +723,13 @@ export class PaystackService implements PaymentProvider {
           },
           {
             $setOnInsert: {
+              appEnvironment: config().appEnvironment,
               user: userId,
               type: 'WithdrawalPaid',
               amountKobo: -Math.abs(request.amountKobo),
               purpose: 'account-closure',
               provider: this.name,
+              providerMode: config().paystack.mode,
               providerReference: request.providerReference,
             },
           },

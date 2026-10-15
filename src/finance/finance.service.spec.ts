@@ -36,7 +36,11 @@ describe('FinanceService.listWalletTransactions', () => {
       countDocuments: jest.fn(),
     };
     const service = Object.create(FinanceService.prototype) as FinanceService;
-    Reflect.set(service, 'db', { walletTransactions, activities });
+    Reflect.set(service, 'db', {
+      users: { distinct: jest.fn().mockResolvedValue([]) },
+      walletTransactions,
+      activities,
+    });
 
     const result = await service.listWalletTransactions({
       page: 1,
@@ -68,6 +72,7 @@ describe('FinanceService.listWalletTransactions', () => {
     };
     const service = Object.create(FinanceService.prototype) as FinanceService;
     Reflect.set(service, 'db', {
+      users: { distinct: jest.fn().mockResolvedValue([]) },
       walletTransactions: {
         find: jest.fn().mockReturnValue(queryResult([])),
         countDocuments: jest.fn().mockResolvedValue(0),

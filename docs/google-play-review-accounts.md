@@ -18,10 +18,12 @@ same `PLAY_REVIEW_OTP`. Real riders only ever sign in with Google or a
 phone number, never email, so store reviewers should be given the phone-number
 credential below rather than the email one - it exercises the same flow a real
 user goes through. The phone number itself is not a secret (it's meant to go
-in review notes), so both rider phone numbers are canonical values in code
-(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`). The reusable rider
-uses `07064192718`; the disposable deletion rider uses `07063650902`. The
-driver reviewers still sign in with email only.
+in review notes), so the rider phone number is a canonical value in code
+(`PLAY_REVIEW_PHONE_NUMBERS` in `play-review-accounts.ts`). Both apps use
+`07064192718`; the mobile clients identify themselves as `rider` or `driver`
+so the backend selects the correct account. The rider uses it for normal review
+and account-deletion testing. After deletion, the next successful rider login
+with that phone number and the shared OTP creates a fresh isolated account.
 
 After deploying the backend configuration, provision or repair the two accounts
 against the intended production database:
@@ -31,8 +33,9 @@ npm run provision:play-reviewers -- --confirm
 ```
 
 The command is idempotent. It creates a normal rider, a verified non-admin
-driver, and approved synthetic trip and hire vehicles. Reviewer-email changes
-and in-app account deletion are blocked.
+driver, and approved synthetic trip and hire vehicles. Both reusable accounts
+can exercise in-app account deletion and sign in again afterward. A restored
+driver is reverified and reconnected to both synthetic vehicles automatically.
 
 Reviewer activity runs in an isolated sandbox:
 
@@ -78,10 +81,12 @@ Instructions:
 
 ```text
 Email: driver-review@ritzurbanluxury.com
+Phone number: 07064192718
 Reusable OTP: [PLAY_REVIEW_OTP from the production secret manager]
 
 Instructions:
-1. Choose Continue with email and enter the email address above.
+1. Choose Continue with email and enter the email address above, or choose
+   Continue with phone and enter the phone number above.
 2. Tap Continue.
 3. Enter the reusable four-digit OTP provided above.
 4. The OTP does not expire and no access to the email inbox is required.

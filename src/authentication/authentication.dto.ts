@@ -85,6 +85,10 @@ export class RequestPhoneOTPDTO {
   @IsPhoneNumber('NG')
   @IsNotEmpty()
   phoneNumber: string;
+
+  @IsIn(['rider', 'driver'])
+  @IsOptional()
+  app?: 'rider' | 'driver';
 }
 
 export class RequestEmailOTPDTO {
@@ -113,6 +117,10 @@ export class LoginDTO {
   @IsString()
   @IsOptional()
   password?: string;
+
+  @IsIn(['rider', 'driver'])
+  @IsOptional()
+  app?: 'rider' | 'driver';
 }
 
 export class ResetPasswordDTO {

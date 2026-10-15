@@ -32,4 +32,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "if [ \"$PROVISION_APP_REVIEWERS\" = \"true\" ]; then yarn start:provision-app-reviewers; else node dist/main.js; fi"]

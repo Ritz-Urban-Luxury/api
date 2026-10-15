@@ -1,138 +1,162 @@
-const config = () => ({
-  env: process.env.NODE_ENV,
-  port: Number.parseInt(process.env.PORT, 10) || 3000,
-  database: {
-    url: process.env.DATABASE_URL,
-  },
-  termii: {
-    key: process.env.TERMII_API_KEY,
-    url: process.env.TERMII_API_URL,
-    from: process.env.TERMII_FROM,
-    dndFrom: process.env.TERMII_DND_FROM || 'OE Alert',
-  },
-  email: {
-    provider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
-  },
-  contact: {
-    supportEmail:
-      process.env.CONTACT_SUPPORT_EMAIL || 'support@ritzurbanluxury.com',
-  },
-  waitlist: {
-    // Public address of this API, used for unsubscribe links in emails.
-    publicApiUrl: (
-      process.env.PUBLIC_API_URL || 'https://rul-api.onrender.com'
-    ).replace(/\/+$/, ''),
-    siteUrl: (
-      process.env.SITE_URL || 'https://www.ritzurbanluxury.com'
-    ).replace(/\/+$/, ''),
-    storeLinks: {
+export type AppEnvironment = 'development' | 'staging' | 'production' | 'test';
+export type PaystackMode = 'test' | 'live';
+
+const resolveAppEnvironment = (): AppEnvironment => {
+  const configured = process.env.APP_ENV?.trim().toLowerCase();
+  if (
+    configured === 'development' ||
+    configured === 'staging' ||
+    configured === 'production' ||
+    configured === 'test'
+  ) {
+    return configured;
+  }
+  return process.env.NODE_ENV === 'production' ? 'production' : 'development';
+};
+
+const config = () => {
+  const appEnvironment = resolveAppEnvironment();
+  const paystackMode = (process.env.PAYSTACK_MODE?.trim().toLowerCase() ||
+    (appEnvironment === 'production' ? 'live' : 'test')) as PaystackMode;
+
+  return {
+    env: process.env.NODE_ENV,
+    appEnvironment,
+    port: Number.parseInt(process.env.PORT, 10) || 3000,
+    database: {
+      url: process.env.DATABASE_URL,
+    },
+    termii: {
+      key: process.env.TERMII_API_KEY,
+      url: process.env.TERMII_API_URL,
+      from: process.env.TERMII_FROM,
+      dndFrom: process.env.TERMII_DND_FROM || 'OE Alert',
+    },
+    email: {
+      provider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
+    },
+    contact: {
+      supportEmail:
+        process.env.CONTACT_SUPPORT_EMAIL || 'support@ritzurbanluxury.com',
+    },
+    waitlist: {
+      // Public address of this API, used for unsubscribe links in emails.
+      publicApiUrl: (
+        process.env.PUBLIC_API_URL || 'https://rul-api.onrender.com'
+      ).replace(/\/+$/, ''),
+      siteUrl: (
+        process.env.SITE_URL || 'https://www.ritzurbanluxury.com'
+      ).replace(/\/+$/, ''),
+      storeLinks: {
+        rider: {
+          apple: process.env.RIDER_APP_STORE_URL,
+          google: process.env.RIDER_PLAY_STORE_URL,
+        },
+        driver: {
+          apple: process.env.DRIVER_APP_STORE_URL,
+          google: process.env.DRIVER_PLAY_STORE_URL,
+        },
+      },
+    },
+    resend: {
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.RESEND_DEFAULT_FROM,
+    },
+    sendGrid: {
+      from: {
+        name: process.env.SENDGRID_DEFAULT_FROM_NAME,
+        email: process.env.SENDGRID_DEFAULT_FROM_EMAIL,
+      },
+      apiKey: process.env.SENDGRID_API_KEY,
+    },
+    google: {
+      IOSOAuthClientID: process.env.GOOGLE_IOS_OAUTH_CLIENT_ID,
+      webOAuthClientID: process.env.GOOGLE_WEB_OAUTH_CLIENT_ID,
+      androidOAuthClientID: process.env.GOOGLE_ANDROID_OAUTH_CLIENT_ID,
+      mapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+      mapsApiUrl: process.env.GOOGLE_MAPS_API,
+      redirectUri: process.env.GOOGLE_REDIRECT_URI,
+    },
+    facebook: {
+      appId: process.env.FACEBOOK_APP_ID,
+      accessToken: process.env.FACEBOOK_ACCESS_TOKEN,
+    },
+    apple: {
+      // Bundle IDs allowed as the identity token's `aud` claim for native
+      // Sign in with Apple (one per app variant: dev/preview/production).
+      bundleIds: (
+        process.env.APPLE_APP_BUNDLE_IDS ||
+        'com.ritz.riderapp,com.ritz.riderapp.preview,com.ritz.riderapp.dev'
+      )
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    },
+    jwt: {
+      secret: process.env.JWT_SECRET,
+      expiresIn: process.env.JWT_EXPIRES_IN,
+    },
+    cloudinary: {
+      name: process.env.CLOUDINARY_NAME,
+      key: process.env.CLOUDINARY_KEY,
+      secret: process.env.CLOUDINARY_SECRET,
+    },
+    redis: {
+      url: process.env.REDIS_URL,
+      password: process.env.REDIS_PASSWORD,
+    },
+    cache: {
+      ttl: Number.parseInt(process.env.CACHE_TTL, 10) || 0,
+    },
+    monnify: {
+      apiKey: process.env.MONNIFY_API_KEY,
+      secret: process.env.MONNIFY_SECRET,
+      contractCode: process.env.MONNIFY_CONTRACT_CODE,
+      apiUrl: process.env.MONNIFY_API_URL,
+    },
+    turnOffSMS: process.env.TURN_OFF_SMS?.toLocaleLowerCase() === 'true',
+    turnOffGeolaction:
+      process.env.TURN_OFF_GEOLOCATOIN?.toLocaleLowerCase() === 'true',
+    paystack: {
+      url: process.env.PAYSTACK_API_URL,
+      mode: paystackMode,
+      secretKey:
+        paystackMode === 'live'
+          ? process.env.PAYSTACK_SECRET_KEY_LIVE
+          : process.env.PAYSTACK_SECRET_KEY,
+    },
+    firebase: {
+      serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+    },
+    expo: {
+      accessToken: process.env.EXPO_ACCESS_TOKEN,
+    },
+    driverCommissionRate: Number.parseFloat(
+      process.env.DRIVER_COMMISSION_RATE || '0.2',
+    ),
+    referralBonusAmount: Number.parseFloat(
+      process.env.REFERRAL_BONUS_AMOUNT || '7500',
+    ),
+    playReview: {
       rider: {
-        apple: process.env.RIDER_APP_STORE_URL,
-        google: process.env.RIDER_PLAY_STORE_URL,
+        email: process.env.PLAY_RIDER_REVIEW_EMAIL,
+        otp: process.env.PLAY_REVIEW_OTP,
+      },
+      riderDeletion: {
+        email: process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL,
+        otp: process.env.PLAY_REVIEW_OTP,
       },
       driver: {
-        apple: process.env.DRIVER_APP_STORE_URL,
-        google: process.env.DRIVER_PLAY_STORE_URL,
+        email: process.env.PLAY_DRIVER_REVIEW_EMAIL,
+        otp: process.env.PLAY_REVIEW_OTP,
+      },
+      driverDeletion: {
+        email: process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL,
+        otp: process.env.PLAY_REVIEW_OTP,
       },
     },
-  },
-  resend: {
-    apiKey: process.env.RESEND_API_KEY,
-    from: process.env.RESEND_DEFAULT_FROM,
-  },
-  sendGrid: {
-    from: {
-      name: process.env.SENDGRID_DEFAULT_FROM_NAME,
-      email: process.env.SENDGRID_DEFAULT_FROM_EMAIL,
-    },
-    apiKey: process.env.SENDGRID_API_KEY,
-  },
-  google: {
-    IOSOAuthClientID: process.env.GOOGLE_IOS_OAUTH_CLIENT_ID,
-    webOAuthClientID: process.env.GOOGLE_WEB_OAUTH_CLIENT_ID,
-    androidOAuthClientID: process.env.GOOGLE_ANDROID_OAUTH_CLIENT_ID,
-    mapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
-    mapsApiUrl: process.env.GOOGLE_MAPS_API,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI,
-  },
-  facebook: {
-    appId: process.env.FACEBOOK_APP_ID,
-    accessToken: process.env.FACEBOOK_ACCESS_TOKEN,
-  },
-  apple: {
-    // Bundle IDs allowed as the identity token's `aud` claim for native
-    // Sign in with Apple (one per app variant: dev/preview/production).
-    bundleIds: (
-      process.env.APPLE_APP_BUNDLE_IDS ||
-      'com.ritz.riderapp,com.ritz.riderapp.preview,com.ritz.riderapp.dev'
-    )
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean),
-  },
-  jwt: {
-    secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN,
-  },
-  cloudinary: {
-    name: process.env.CLOUDINARY_NAME,
-    key: process.env.CLOUDINARY_KEY,
-    secret: process.env.CLOUDINARY_SECRET,
-  },
-  redis: {
-    url: process.env.REDIS_URL,
-    password: process.env.REDIS_PASSWORD,
-  },
-  cache: {
-    ttl: Number.parseInt(process.env.CACHE_TTL, 10) || 0,
-  },
-  monnify: {
-    apiKey: process.env.MONNIFY_API_KEY,
-    secret: process.env.MONNIFY_SECRET,
-    contractCode: process.env.MONNIFY_CONTRACT_CODE,
-    apiUrl: process.env.MONNIFY_API_URL,
-  },
-  turnOffSMS: process.env.TURN_OFF_SMS?.toLocaleLowerCase() === 'true',
-  turnOffGeolaction:
-    process.env.TURN_OFF_GEOLOCATOIN?.toLocaleLowerCase() === 'true',
-  paystack: {
-    url: process.env.PAYSTACK_API_URL,
-    secretKey:
-      process.env.NODE_ENV === 'production'
-        ? process.env.PAYSTACK_SECRET_KEY_LIVE
-        : process.env.PAYSTACK_SECRET_KEY,
-  },
-  firebase: {
-    serviceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
-  },
-  expo: {
-    accessToken: process.env.EXPO_ACCESS_TOKEN,
-  },
-  driverCommissionRate: Number.parseFloat(
-    process.env.DRIVER_COMMISSION_RATE || '0.2',
-  ),
-  referralBonusAmount: Number.parseFloat(
-    process.env.REFERRAL_BONUS_AMOUNT || '7500',
-  ),
-  playReview: {
-    rider: {
-      email: process.env.PLAY_RIDER_REVIEW_EMAIL,
-      otp: process.env.PLAY_REVIEW_OTP,
-    },
-    riderDeletion: {
-      email: process.env.PLAY_RIDER_DELETE_REVIEW_EMAIL,
-      otp: process.env.PLAY_REVIEW_OTP,
-    },
-    driver: {
-      email: process.env.PLAY_DRIVER_REVIEW_EMAIL,
-      otp: process.env.PLAY_REVIEW_OTP,
-    },
-    driverDeletion: {
-      email: process.env.PLAY_DRIVER_DELETE_REVIEW_EMAIL,
-      otp: process.env.PLAY_REVIEW_OTP,
-    },
-  },
-});
+  };
+};
 
 export type Configuration = ReturnType<typeof config>;
 

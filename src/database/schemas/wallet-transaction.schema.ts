@@ -21,7 +21,11 @@ export class WalletTransaction extends BaseSchema {
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS, required: true })
   user: string | UserDocument;
 
-  @Prop({ type: String, enum: Object.values(WalletTransactionType), required: true })
+  @Prop({
+    type: String,
+    enum: Object.values(WalletTransactionType),
+    required: true,
+  })
   type: WalletTransactionType;
 
   /** Signed integer amount in kobo. */
@@ -36,6 +40,16 @@ export class WalletTransaction extends BaseSchema {
 
   @Prop()
   providerReference?: string;
+
+  /** Payment-provider mode used to create this ledger entry. */
+  @Prop({ type: String, enum: ['test', 'live'] })
+  providerMode?: 'test' | 'live';
+
+  @Prop({
+    type: String,
+    enum: ['development', 'staging', 'production', 'test'],
+  })
+  appEnvironment?: 'development' | 'staging' | 'production' | 'test';
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   meta?: Record<string, unknown>;

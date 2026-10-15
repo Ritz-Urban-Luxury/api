@@ -42,6 +42,10 @@ describe('AuthenticationService Play reviewer authentication', () => {
       },
       users: {
         findOne: jest.fn().mockResolvedValue(reviewerUser),
+        findOneAndUpdate: jest.fn().mockResolvedValue(reviewerUser),
+      },
+      rides: {
+        findOneAndUpdate: jest.fn().mockResolvedValue({}),
       },
     };
 
@@ -51,6 +55,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
       jwtService as never,
       {} as never,
       db as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -182,23 +187,109 @@ describe('AuthenticationService Play reviewer authentication', () => {
     );
   });
 
-  it('authorizes the disposable deletion phone number with the same reusable OTP', async () => {
+  it('authorizes the driver reviewer with the same phone and OTP when the driver app is specified', async () => {
     const { db, jwtService, service } = createService();
-    const deletionReviewer = {
+    const driverReviewer = {
       ...reviewerUser,
-      email: 'rider-delete-review@ritzurbanluxury.com',
-      phoneNumber: '2347063650902',
+      email: 'driver-review@ritzurbanluxury.com',
+      isDriver: true,
+      isVerified: true,
     };
-    db.users.findOne.mockResolvedValueOnce(deletionReviewer);
+    db.users.findOne.mockResolvedValueOnce(driverReviewer);
 
     await expect(
       service.login({
-        phoneNumber: '07063650902',
+        app: 'driver',
+        phoneNumber: '07064192718',
         otp: '1847',
       }),
-    ).resolves.toEqual({ token: 'reviewer-jwt', user: deletionReviewer });
+    ).resolves.toEqual({ token: 'reviewer-jwt', user: driverReviewer });
 
     expect(jwtService.sign).toHaveBeenCalled();
+    expect(db.users.findOne).toHaveBeenCalledWith({
+      email: driverReviewer.email,
+      phoneNumber: driverReviewer.phoneNumber,
+      deleted: { $ne: true },
+    });
+  });
+
+  it('recreates the driver reviewer and reconnects both synthetic vehicles after deletion', async () => {
+    const { db, service } = createService();
+    const recreatedDriver = {
+      ...reviewerUser,
+      email: 'driver-review@ritzurbanluxury.com',
+      id: 'recreated-driver-id',
+      isDriver: true,
+      isVerified: true,
+    };
+    db.users.findOne.mockResolvedValueOnce(null);
+    db.users.findOneAndUpdate.mockResolvedValueOnce(recreatedDriver);
+
+    await expect(
+      service.login({
+        app: 'driver',
+        phoneNumber: '07064192718',
+        otp: '1847',
+      }),
+    ).resolves.toEqual({ token: 'reviewer-jwt', user: recreatedDriver });
+
+    expect(db.users.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        email: recreatedDriver.email,
+        deleted: { $ne: true },
+      },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          email: recreatedDriver.email,
+          isDriver: true,
+          isVerified: true,
+          phoneNumber: recreatedDriver.phoneNumber,
+        }),
+      }),
+      { new: true, upsert: true },
+    );
+    expect(db.rides.findOneAndUpdate).toHaveBeenCalledTimes(2);
+    expect(db.rides.findOneAndUpdate).toHaveBeenCalledWith(
+      { registration: 'PLAY-REVIEW', 'specs.synthetic': true },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          deleted: false,
+          driver: recreatedDriver.id,
+          registration: 'PLAY-REVIEW',
+        }),
+      }),
+      { new: true, upsert: true },
+    );
+  });
+
+  it('recreates the reusable rider account after account deletion', async () => {
+    const { db, jwtService, service } = createService();
+    db.users.findOne.mockResolvedValueOnce(null);
+    db.users.findOneAndUpdate.mockResolvedValueOnce(reviewerUser);
+
+    await expect(
+      service.login({
+        phoneNumber: '07064192718',
+        otp: '1847',
+      }),
+    ).resolves.toEqual({ token: 'reviewer-jwt', user: reviewerUser });
+
+    expect(jwtService.sign).toHaveBeenCalled();
+    expect(db.users.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        email: reviewerUser.email,
+        deleted: { $ne: true },
+      },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          email: reviewerUser.email,
+          isTestAccount: true,
+          phoneNumber: reviewerUser.phoneNumber,
+          testAccountPurpose: 'app-review',
+        }),
+      }),
+      { new: true, upsert: true },
+    );
   });
 
   it('sends the former reviewer phone number through the normal DND OTP route', async () => {

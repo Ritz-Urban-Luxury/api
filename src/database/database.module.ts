@@ -38,6 +38,7 @@ import { PricingZoneSchema } from './schemas/pricing-zone.schema';
 import { VehicleSettingsSchema } from './schemas/vehicle-settings.schema';
 import { ServiceLocationSchema } from './schemas/service-location.schema';
 import { PricingService } from './pricing.service';
+import { AdminAuditLogSchema } from './schemas/admin-audit-log.schema';
 
 @Global()
 @Module({
@@ -85,6 +86,7 @@ import { PricingService } from './pricing.service';
       { name: DB_TABLES.PRICING_ZONES, schema: PricingZoneSchema },
       { name: DB_TABLES.VEHICLE_SETTINGS, schema: VehicleSettingsSchema },
       { name: DB_TABLES.SERVICE_LOCATIONS, schema: ServiceLocationSchema },
+      { name: DB_TABLES.ADMIN_AUDIT_LOGS, schema: AdminAuditLogSchema },
     ]),
   ],
   providers: [

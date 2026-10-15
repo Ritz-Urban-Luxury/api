@@ -1414,19 +1414,21 @@ export class RidesService implements OnModuleInit {
     await this.openOnlineSession(driver.id, String(trip.ride));
 
     const paymentSucceeded = status === TripStatus.Completed;
-    await this.activityLedger.recordActivity({
-      type: paymentSucceeded
-        ? ActivityType.PaymentSucceeded
-        : ActivityType.PaymentFailed,
-      title: this.activityLedger.paymentActivityTitle(
-        trip.paymentMethod,
-        paymentSucceeded,
-      ),
-      meta: this.activityLedger.formatAmountMeta(amount),
-      amount,
-      user: user.id,
-      trip: trip.id,
-    });
+    if (!isPlayReviewSynthetic) {
+      await this.activityLedger.recordActivity({
+        type: paymentSucceeded
+          ? ActivityType.PaymentSucceeded
+          : ActivityType.PaymentFailed,
+        title: this.activityLedger.paymentActivityTitle(
+          trip.paymentMethod,
+          paymentSucceeded,
+        ),
+        meta: this.activityLedger.formatAmountMeta(amount),
+        amount,
+        user: user.id,
+        trip: trip.id,
+      });
+    }
 
     if (paymentSucceeded && !isPlayReviewSynthetic) {
       await this.activityLedger.recordDriverEarning({

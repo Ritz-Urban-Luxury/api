@@ -8,8 +8,10 @@ import cors from './shared/cors';
 import { AllExceptionsFilter } from './shared/filter/all-exception.filter';
 import { ValidationFilter } from './shared/filter/validation.filter';
 import { ValidationPipe } from './shared/pipes/validation.pipe';
+import { validateEnvironmentSafety } from './shared/environment-safety';
 
 async function bootstrap() {
+  validateEnvironmentSafety();
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     cors,

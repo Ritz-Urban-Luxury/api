@@ -22,6 +22,7 @@ import { PaymentMethod } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 import { WalletTransactionType } from '../database/schemas/wallet-transaction.schema';
 import { ActivityType } from '../database/schemas/activities.schema';
+import config from '../shared/config';
 import { NotificationService } from '../notification';
 import { PaystackService } from '../payments/providers/paystack/paystack.service';
 import {
@@ -73,6 +74,12 @@ export class FinanceService {
       path: 'user',
       select: 'firstName lastName email phoneNumber',
     };
+    const testUserIds = await this.db.users.distinct('_id', {
+      isTestAccount: true,
+    });
+    const productionUserFilter = testUserIds.length
+      ? { user: { $nin: testUserIds } }
+      : {};
 
     const [walletRows, paymentRows, walletCount, paymentCount] =
       await Promise.all([
@@ -80,6 +87,7 @@ export class FinanceService {
           ? this.db.walletTransactions
               .find({
                 deleted: { $ne: true },
+                ...productionUserFilter,
                 ...(type ? { type } : {}),
               })
               .populate(userPopulate)
@@ -90,6 +98,7 @@ export class FinanceService {
           ? this.db.activities
               .find({
                 deleted: { $ne: true },
+                ...productionUserFilter,
                 type: type || { $in: paymentTypes },
               })
               .populate(userPopulate)
@@ -99,12 +108,14 @@ export class FinanceService {
         includeWallet
           ? this.db.walletTransactions.countDocuments({
               deleted: { $ne: true },
+              ...productionUserFilter,
               ...(type ? { type } : {}),
             })
           : 0,
         includePayments
           ? this.db.activities.countDocuments({
               deleted: { $ne: true },
+              ...productionUserFilter,
               type: type || { $in: paymentTypes },
             })
           : 0,
@@ -426,6 +437,7 @@ export class FinanceService {
         },
       ),
       this.db.walletTransactions.create({
+        appEnvironment: config().appEnvironment,
         user: user.id,
         type: WalletTransactionType.Reserve,
         amountKobo: -toKobo(parts.cash),

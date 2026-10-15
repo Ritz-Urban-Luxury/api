@@ -153,16 +153,6 @@ export class UserService {
   }
 
   async deleteAccount(user: UserDocument, payload: DeleteAccountDTO) {
-    const reviewAccount = getPlayReviewAccount(user.email);
-    if (
-      reviewAccount &&
-      reviewAccount.kind !== 'driverDeletion' &&
-      reviewAccount.kind !== 'riderDeletion'
-    ) {
-      throw new BadRequestException(
-        'Play reviewer accounts cannot be deleted in the app',
-      );
-    }
     if (!payload.confirm) {
       throw new BadRequestException('account deletion must be confirmed');
     }

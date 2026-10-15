@@ -101,6 +101,9 @@ export class DashboardService {
 
   async getAttention(): Promise<DashboardAttention> {
     const notDeleted = { deleted: { $ne: true } };
+    const testUserIds = await this.db.users.distinct('_id', {
+      isTestAccount: true,
+    });
     // Same definition of "driver" as the admin drivers list.
     const rideDriverIds = await this.db.rides.distinct('driver', notDeleted);
 
@@ -113,24 +116,33 @@ export class DashboardService {
     ] = await Promise.all([
       this.db.users.countDocuments({
         ...notDeleted,
+        isTestAccount: { $ne: true },
         $or: [{ isDriver: true }, { _id: { $in: rideDriverIds } }],
         isVerified: { $ne: true },
       }),
       this.db.rentals.countDocuments({
         ...notDeleted,
+        'meta.playReviewSynthetic': { $ne: true },
+        user: { $nin: testUserIds },
+        driver: { $nin: testUserIds },
         status: RentalStatus.Pending,
       }),
       this.db.rides.countDocuments({
         ...notDeleted,
+        'specs.synthetic': { $ne: true },
+        driver: { $nin: testUserIds },
         type: { $in: [RideType.Classic, RideType.Luxury] },
         approvalStatus: RideApprovalStatus.Pending,
       }),
       this.db.userReports.countDocuments({
         ...notDeleted,
+        reporter: { $nin: testUserIds },
+        reportedUser: { $nin: testUserIds },
         status: UserReportStatus.Open,
       }),
       this.db.payoutRequests.countDocuments({
         ...notDeleted,
+        user: { $nin: testUserIds },
         status: PayoutRequestStatus.Requested,
       }),
     ]);
@@ -146,6 +158,14 @@ export class DashboardService {
 
   async getDashboard() {
     const notDeleted: FilterQuery<unknown> = { deleted: { $ne: true } };
+    const testUserIds = await this.db.users.distinct('_id', {
+      isTestAccount: true,
+    });
+    const realTrip = {
+      'meta.playReviewSynthetic': { $ne: true },
+      user: { $nin: testUserIds },
+      driver: { $nin: testUserIds },
+    };
     const startOfToday = moment().startOf('day').toDate();
     const startOfMonth = moment().startOf('month').toDate();
     const startOfPreviousMonth = moment()
@@ -179,28 +199,37 @@ export class DashboardService {
     ] = await Promise.all([
       this.db.users.countDocuments({
         ...notDeleted,
+        isTestAccount: { $ne: true },
         isDriver: { $ne: true },
         isAppAdmin: { $ne: true },
       }),
-      this.db.users.countDocuments({ ...notDeleted, isDriver: true }),
+      this.db.users.countDocuments({
+        ...notDeleted,
+        isDriver: true,
+        isTestAccount: { $ne: true },
+      }),
       this.db.carBrands.countDocuments(notDeleted),
-      this.db.trips.countDocuments(notDeleted),
+      this.db.trips.countDocuments({ ...notDeleted, ...realTrip }),
       this.db.trips.countDocuments({
         ...notDeleted,
+        ...realTrip,
         status: { $in: CANCELLED_STATUSES },
       }),
       this.db.trips.countDocuments({
         ...notDeleted,
+        ...realTrip,
         status: { $in: RUNNING_STATUSES },
       }),
       this.db.trips.countDocuments({
         ...notDeleted,
+        ...realTrip,
         status: TripStatus.Completed,
       }),
       this.db.trips.aggregate<{ total: number; count: number }>([
         {
           $match: {
             deleted: { $ne: true },
+            ...realTrip,
             status: TripStatus.Completed,
             amount: { $type: 'number' },
           },
@@ -217,6 +246,7 @@ export class DashboardService {
         {
           $match: {
             deleted: { $ne: true },
+            ...realTrip,
             status: TripStatus.Completed,
             amount: { $type: 'number' },
             createdAt: { $gte: startOfMonth },
@@ -228,6 +258,7 @@ export class DashboardService {
         {
           $match: {
             deleted: { $ne: true },
+            ...realTrip,
             status: TripStatus.Completed,
             amount: { $type: 'number' },
             createdAt: { $gte: startOfPreviousMonth, $lt: startOfMonth },
@@ -236,7 +267,7 @@ export class DashboardService {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       this.db.trips
-        .find(notDeleted)
+        .find({ ...notDeleted, ...realTrip })
         .sort({ createdAt: -1 })
         .limit(12)
         .populate('user')
@@ -245,6 +276,7 @@ export class DashboardService {
         {
           $match: {
             deleted: { $ne: true },
+            driver: { $nin: testUserIds },
             earnedAt: { $gte: startOfToday },
           },
         },
@@ -254,13 +286,14 @@ export class DashboardService {
         {
           $match: {
             deleted: { $ne: true },
+            driver: { $nin: testUserIds },
             earnedAt: { $gte: startOfMonth, $lt: startOfToday },
           },
         },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       this.db.activities
-        .find(notDeleted)
+        .find({ ...notDeleted, user: { $nin: testUserIds } })
         .sort({ createdAt: -1 })
         .limit(10)
         .lean(),
@@ -269,6 +302,7 @@ export class DashboardService {
           $match: {
             ...notDeleted,
             isAppAdmin: { $ne: true },
+            isTestAccount: { $ne: true },
             createdAt: { $gte: trendStartDate },
           },
         },
@@ -292,6 +326,7 @@ export class DashboardService {
         {
           $match: {
             ...notDeleted,
+            ...realTrip,
             createdAt: { $gte: trendStartDate },
           },
         },

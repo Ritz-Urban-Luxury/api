@@ -13,6 +13,14 @@ export enum OAuthProvider {
 
 export const OAuthProviders = Object.values(OAuthProvider);
 
+export enum TestAccountPurpose {
+  Development = 'development',
+  QA = 'qa',
+  AppReview = 'app-review',
+}
+
+export const TestAccountPurposes = Object.values(TestAccountPurpose);
+
 export type PushPlatform = 'ios' | 'android';
 export type PushApp = 'rider' | 'driver';
 
@@ -134,6 +142,13 @@ export class User extends BaseSchema {
 
   @Prop()
   isAppAdmin?: boolean;
+
+  /** Server-controlled marker for accounts whose data may be destructively purged. */
+  @Prop({ default: false })
+  isTestAccount?: boolean;
+
+  @Prop({ type: String, enum: TestAccountPurposes })
+  testAccountPurpose?: TestAccountPurpose;
 
   @Prop()
   deletionRequestedAt?: Date;

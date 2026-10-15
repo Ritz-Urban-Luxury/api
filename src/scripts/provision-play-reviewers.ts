@@ -11,7 +11,10 @@ import {
   RideStatus,
   RideType,
 } from '../database/schemas/rides.schema';
-import { UserSchema } from '../database/schemas/user.schema';
+import {
+  TestAccountPurpose,
+  UserSchema,
+} from '../database/schemas/user.schema';
 import config from '../shared/config';
 import { DB_TABLES } from '../shared/constants';
 
@@ -30,11 +33,9 @@ async function provisionPlayReviewers() {
     throw new Error('Configure all Play reviewer accounts before provisioning');
   }
   const riderAccount = accounts.find((account) => account.kind === 'rider');
-  const deletionRiderAccount = accounts.find(
-    (account) => account.kind === 'riderDeletion',
-  );
-  if (!riderAccount?.phoneNumber || !deletionRiderAccount?.phoneNumber) {
-    throw new Error('Configure phone numbers for both rider review accounts');
+  const driverAccount = accounts.find((account) => account.kind === 'driver');
+  if (!riderAccount?.phoneNumber || !driverAccount?.phoneNumber) {
+    throw new Error('Configure the rider and driver review phone number');
   }
 
   const databaseUrl = config().database.url;
@@ -58,8 +59,10 @@ async function provisionPlayReviewers() {
         isAppAdmin: false,
         isDriver: false,
         isVerified: false,
+        isTestAccount: true,
         lastName: 'Rider Reviewer',
         phoneNumber: riderAccount.phoneNumber,
+        testAccountPurpose: TestAccountPurpose.AppReview,
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },
@@ -86,8 +89,9 @@ async function provisionPlayReviewers() {
         isAppAdmin: false,
         isDriver: false,
         isVerified: false,
+        isTestAccount: true,
         lastName: 'Rider Deletion Reviewer',
-        phoneNumber: deletionRiderAccount.phoneNumber,
+        testAccountPurpose: TestAccountPurpose.AppReview,
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },
@@ -96,6 +100,7 @@ async function provisionPlayReviewers() {
         deletedAt: 1,
         deletionRequestedAt: 1,
         inviteCode: 1,
+        phoneNumber: 1,
         referredBy: 1,
         vehiclesInFleet: 1,
       },
@@ -120,11 +125,14 @@ async function provisionPlayReviewers() {
         isAppAdmin: false,
         isDriver: true,
         isVerified: true,
+        isTestAccount: true,
         languages: ['English'],
         lastName: 'Driver Reviewer',
         license: SYNTHETIC_IMAGE,
         licenseExpiry: new Date('2035-12-31T00:00:00.000Z'),
         licenseNumber: 'PLAY-REVIEW-0001',
+        phoneNumber: driverAccount.phoneNumber,
+        testAccountPurpose: TestAccountPurpose.AppReview,
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },
@@ -151,11 +159,13 @@ async function provisionPlayReviewers() {
         isAppAdmin: false,
         isDriver: true,
         isVerified: true,
+        isTestAccount: true,
         languages: ['English'],
         lastName: 'Deletion Reviewer',
         license: SYNTHETIC_IMAGE,
         licenseExpiry: new Date('2035-12-31T00:00:00.000Z'),
         licenseNumber: 'APPLE-DELETE-0001',
+        testAccountPurpose: TestAccountPurpose.AppReview,
         'preferences.playReview': true,
         'preferences.syntheticDataOnly': true,
       },
@@ -166,7 +176,7 @@ async function provisionPlayReviewers() {
   );
 
   const vehicle = await RideModel.findOneAndUpdate(
-    { driver: driver.id, registration: 'PLAY-REVIEW' },
+    { registration: 'PLAY-REVIEW', 'specs.synthetic': true },
     {
       $set: {
         approvalStatus: RideApprovalStatus.Approved,
@@ -190,7 +200,7 @@ async function provisionPlayReviewers() {
   );
 
   const hireVehicle = await RideModel.findOneAndUpdate(
-    { driver: driver.id, registration: 'PLAY-REVIEW-HIRE' },
+    { registration: 'PLAY-REVIEW-HIRE', 'specs.synthetic': true },
     {
       $set: {
         approvalStatus: RideApprovalStatus.Approved,

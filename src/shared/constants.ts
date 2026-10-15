@@ -31,4 +31,5 @@ export const DB_TABLES = {
   PRICING_ZONES: 'pricing_zones',
   VEHICLE_SETTINGS: 'vehicle_settings',
   SERVICE_LOCATIONS: 'service_locations',
+  ADMIN_AUDIT_LOGS: 'admin_audit_logs',
 };
