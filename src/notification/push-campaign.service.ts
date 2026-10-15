@@ -145,9 +145,16 @@ export class PushCampaignService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sendTest(admin: UserDocument, payload: SendTestPushCampaignDTO) {
-    const user = await this.db.users.findById(admin.id).select('pushDevices');
+    const userQuery = payload.recipientEmail
+      ? this.db.users.findOne({ email: payload.recipientEmail })
+      : this.db.users.findById(admin.id);
+    const user = await userQuery.select('email pushDevices');
     if (!user) {
-      throw new BadRequestException('admin account not found');
+      throw new BadRequestException(
+        payload.recipientEmail
+          ? 'No account was found for the test recipient email'
+          : 'Admin account not found',
+      );
     }
 
     const apps = this.appsForAudience(payload.audience);
@@ -155,8 +162,17 @@ export class PushCampaignService implements OnModuleInit, OnModuleDestroy {
       apps.includes(device.app),
     );
     if (!devices.length) {
+      let deviceLabel = 'Driver';
+      if (payload.audience === PushCampaignAudience.Rider) {
+        deviceLabel = 'Rider';
+      } else if (payload.audience === PushCampaignAudience.Both) {
+        deviceLabel = 'Rider or Driver';
+      }
+      const accountLabel = payload.recipientEmail
+        ? 'that account'
+        : 'your admin account';
       throw new BadRequestException(
-        'No matching Rider or Driver device is registered for your admin account',
+        `No matching ${deviceLabel} device is registered for ${accountLabel}. Open the relevant mobile app on that account and enable notifications first.`,
       );
     }
 

@@ -9,6 +9,7 @@ describe('PushCampaignService', () => {
   const users = {
     aggregate: jest.fn(),
     findById: jest.fn(),
+    findOne: jest.fn(),
     updateMany: jest.fn(),
   };
   const push = {
@@ -115,5 +116,33 @@ describe('PushCampaignService', () => {
         }),
       }),
     );
+  });
+
+  it('can send a test to a mobile account selected by email', async () => {
+    const select = jest.fn().mockResolvedValue({
+      email: 'rider@example.com',
+      pushDevices: [{ token: 'rider-token', platform: 'ios', app: 'rider' }],
+    });
+    users.findOne.mockReturnValue({ select });
+    push.dispatchToDevices.mockResolvedValue({
+      targeted: 1,
+      accepted: 1,
+      failed: 0,
+      invalidTokens: [],
+    });
+
+    await expect(
+      service.sendTest({ id: 'admin-id' } as never, {
+        audience: PushCampaignAudience.Rider,
+        title: 'Rider offer',
+        body: 'Save on your next trip.',
+        recipientEmail: 'rider@example.com',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ accepted: 1 }));
+
+    expect(users.findOne).toHaveBeenCalledWith({
+      email: 'rider@example.com',
+    });
+    expect(users.findById).not.toHaveBeenCalled();
   });
 });

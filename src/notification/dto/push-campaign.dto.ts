@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
   IsDateString,
+  IsEmail,
   IsEnum,
   IsOptional,
   IsString,
@@ -50,4 +51,14 @@ export class CreatePushCampaignDTO extends PushCampaignAudienceDTO {
   scheduledAt?: string;
 }
 
-export class SendTestPushCampaignDTO extends CreatePushCampaignDTO {}
+export class SendTestPushCampaignDTO extends CreatePushCampaignDTO {
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.trim()
+      ? value.trim().toLowerCase()
+      : undefined,
+  )
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(254)
+  recipientEmail?: string;
+}
