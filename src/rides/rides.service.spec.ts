@@ -1067,6 +1067,81 @@ describe('RidesService notification sounds', () => {
         sound: 'booking_accepted.wav',
       }),
     );
+    expect(websocket.emitToUser).not.toHaveBeenCalledWith(
+      driver,
+      'RideRequestExpired',
+      expect.anything(),
+    );
+  });
+
+  it('expires the driver request before telling the rider that drivers are busy', async () => {
+    const ride = {
+      approvalStatus: RideApprovalStatus.Approved,
+      driver,
+      id: rideId,
+      status: RideStatus.Online,
+      type: RideType.Classic,
+      vehicleCategory: VehicleCategory.Classic,
+    } as never;
+    cache.get.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const internals = service as unknown as {
+      recordRideOffer: () => Promise<void>;
+      resolveRideOffer: () => Promise<void>;
+    };
+    jest.spyOn(internals, 'recordRideOffer').mockResolvedValue(undefined);
+    jest.spyOn(internals, 'resolveRideOffer').mockResolvedValue(undefined);
+
+    await service.connectToDriver(rider, [ride], 'connection-id', {
+      amount: 5000,
+      distance: 3,
+      fromAddress: 'Pickup',
+      fromLat: 9.1,
+      fromLon: 7.1,
+      paymentMethod: PaymentMethod.Cash,
+      stops: [],
+      toAddress: 'Destination',
+      toLat: 9.2,
+      toLon: 7.2,
+      type: VehicleCategory.Classic,
+    });
+
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      driver,
+      'RideRequest',
+      expect.objectContaining({
+        expiresAt: expect.any(String),
+        trackingId: expect.any(String),
+      }),
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      driver,
+      'RideRequestExpired',
+      expect.objectContaining({
+        reason: 'timed_out',
+        trackingId: expect.any(String),
+      }),
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      rider,
+      'DriversBusy',
+      'All drivers are busy at this time',
+    );
+
+    const offerReadyCall = cache.set.mock.invocationCallOrder.find(
+      (_, index) => cache.set.mock.calls[index][0] !== 'connection-id',
+    );
+    const rideRequestCall = websocket.emitToUser.mock.invocationCallOrder.find(
+      (_, index) => websocket.emitToUser.mock.calls[index][1] === 'RideRequest',
+    );
+    const expiredCall = websocket.emitToUser.mock.invocationCallOrder.find(
+      (_, index) =>
+        websocket.emitToUser.mock.calls[index][1] === 'RideRequestExpired',
+    );
+    const driversBusyCall = websocket.emitToUser.mock.invocationCallOrder.find(
+      (_, index) => websocket.emitToUser.mock.calls[index][1] === 'DriversBusy',
+    );
+    expect(offerReadyCall).toBeLessThan(rideRequestCall);
+    expect(expiredCall).toBeLessThan(driversBusyCall);
   });
 
   it('uses the chat sound only for the message recipient', async () => {

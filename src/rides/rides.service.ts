@@ -1014,6 +1014,7 @@ export class RidesService implements OnModuleInit {
       }
 
       trackingId = Math.random().toString(32).substring(2);
+      const expiresAt = new Date(Date.now() + this.WAIT_TIME).toISOString();
 
       await this.recordRideOffer({
         driverId: driver.id,
@@ -1022,9 +1023,11 @@ export class RidesService implements OnModuleInit {
         userId: user.id,
         trackingId,
       });
+      await this.cache.set(trackingId, false, offerTtl);
 
       this.websocket.emitToUser(user, 'ConnectingToDriver', ride);
       this.websocket.emitToUser(driver, 'RideRequest', {
+        expiresAt,
         trackingId,
         user,
         payload,
@@ -1043,7 +1046,6 @@ export class RidesService implements OnModuleInit {
         },
       });
 
-      await this.cache.set(trackingId, false, offerTtl);
       await new Promise((resolve) => {
         setTimeout(resolve, this.WAIT_TIME);
       });
@@ -1095,6 +1097,10 @@ export class RidesService implements OnModuleInit {
         });
         if (!eligibleRide) {
           await this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut);
+          this.websocket.emitToUser(driver, 'RideRequestExpired', {
+            reason: 'vehicle_ineligible',
+            trackingId,
+          });
           continue;
         }
         const [trip] = await Promise.all([
@@ -1148,6 +1154,10 @@ export class RidesService implements OnModuleInit {
       }
 
       await this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut);
+      this.websocket.emitToUser(driver, 'RideRequestExpired', {
+        reason: 'timed_out',
+        trackingId,
+      });
     }
 
     await Promise.all([
