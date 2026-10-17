@@ -28,6 +28,8 @@ import {
   AdminVehicleSettingsDTO,
 } from './dto/rides.dto';
 import { VehicleOptionsService } from './vehicle-options.service';
+import { CurrentUser } from '../shared/decorators/current-user.decorator';
+import { UserDocument } from '../database/schemas/user.schema';
 
 @Controller('admin/rides')
 @UseGuards(AdminJwtGuard)
@@ -173,12 +175,15 @@ export class AdminRideController {
 
   @Patch('/fleet/:rideId/approval')
   async updateFleetApproval(
+    @CurrentUser() admin: UserDocument,
     @Param('rideId') rideId: string,
     @Body() payload: AdminUpdateFleetApprovalDTO,
   ) {
     const ride = await this.ridesService.setAdminFleetApproval(
+      admin,
       rideId,
       payload.status,
+      payload.vehicleCategory,
       payload.reason,
     );
     return Response.json('fleet approval updated', ride);

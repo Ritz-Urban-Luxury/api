@@ -253,7 +253,7 @@ export class RidesController {
     return Response.json('Connecting you to driver', driver);
   }
 
-  @UseGuards(JwtGuard)
+  @UseVerifiedDriver()
   @Put('trips')
   async acceptRideRequest(
     @CurrentUser() user: UserDocument,

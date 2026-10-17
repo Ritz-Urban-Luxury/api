@@ -5,6 +5,11 @@ import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
 import { TripDocument } from './trips.schema';
 import { UserDocument } from './user.schema';
+import {
+  RidesDocument,
+  VehicleCategory,
+  VehicleCategories,
+} from './rides.schema';
 
 export type DriverRideOfferDocument = DriverRideOffer & Document;
 
@@ -24,6 +29,12 @@ export class DriverRideOffer extends BaseSchema {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS, required: true })
   user: string | UserDocument;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.RIDES, required: true })
+  ride: string | RidesDocument;
+
+  @Prop({ type: String, enum: VehicleCategories, required: true })
+  requestedCategory: VehicleCategory;
 
   @Prop({ required: true, unique: true })
   trackingId: string;

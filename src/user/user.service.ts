@@ -11,7 +11,11 @@ import { getPlayReviewAccount } from '../authentication/play-review-accounts';
 import { DatabaseService } from '../database/database.service';
 import { UserDocument } from '../database/schemas/user.schema';
 import { RentalStatus } from '../database/schemas/rentals.schema';
-import { RideStatus } from '../database/schemas/rides.schema';
+import {
+  RideApprovalStatus,
+  RideStatus,
+  RideType,
+} from '../database/schemas/rides.schema';
 import { InactiveTripStatuses } from '../database/schemas/trips.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { Util } from '../shared/util';
@@ -400,6 +404,20 @@ export class UserService {
       throw new BadRequestException(
         'profile photo and driver license are required before approval',
       );
+    }
+    if (payload.isVerified) {
+      const approvedVehicle = await this.db.rides.exists({
+        driver: current.id,
+        deleted: { $ne: true },
+        type: { $in: [RideType.Classic, RideType.Luxury] },
+        approvalStatus: RideApprovalStatus.Approved,
+        vehicleCategory: { $in: [RideType.Classic, RideType.Luxury] },
+      });
+      if (!approvedVehicle) {
+        throw new BadRequestException(
+          'approve and classify a trip vehicle before approving the driver',
+        );
+      }
     }
 
     const user = await this.db.users.findOneAndUpdate(

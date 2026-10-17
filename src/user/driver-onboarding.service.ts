@@ -58,6 +58,7 @@ export class DriverOnboardingService {
 
     const vehicle = await this.rides.createOnboardingRide(updatedUser, {
       brand: payload.vehicle.brand,
+      claimedCategory: payload.vehicle.category,
       color: payload.vehicle.color,
       images: [
         ...payload.vehicle.exteriorImages,

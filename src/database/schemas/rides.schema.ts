@@ -20,6 +20,11 @@ export enum RideType {
   Hire = 'Hire',
 }
 
+export enum VehicleCategory {
+  Classic = 'Classic',
+  Luxury = 'Luxury',
+}
+
 export enum RideApprovalStatus {
   Pending = 'Pending',
   Approved = 'Approved',
@@ -28,6 +33,7 @@ export enum RideApprovalStatus {
 
 export const RideStatuses = Object.values(RideStatus);
 export const RideTypes = Object.values(RideType);
+export const VehicleCategories = Object.values(VehicleCategory);
 export const RideApprovalStatuses = Object.values(RideApprovalStatus);
 
 @EmbeddedSchema()
@@ -83,6 +89,24 @@ export class Ride extends BaseSchema {
 
   @Prop({ type: String, enum: RideType, required: true })
   type: RideType;
+
+  /** Category selected by the driver. It is not authoritative until review. */
+  @Prop({
+    type: String,
+    enum: VehicleCategories,
+    default: VehicleCategory.Classic,
+  })
+  claimedCategory: VehicleCategory;
+
+  /** Category finalized by an administrator. Matching must use this field. */
+  @Prop({ type: String, enum: VehicleCategories })
+  vehicleCategory?: VehicleCategory;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  categoryReviewedBy?: UserDocument | string;
+
+  @Prop()
+  categoryReviewedAt?: Date;
 
   @Prop([{ type: String }])
   images: string[];

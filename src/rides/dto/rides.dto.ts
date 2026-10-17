@@ -44,6 +44,8 @@ import {
   RideApprovalStatuses,
   RideType,
   RideTypes,
+  VehicleCategories,
+  VehicleCategory,
   RideStatus,
   RideStatuses,
 } from '../../database/schemas/rides.schema';
@@ -138,9 +140,9 @@ export class RideStopsDTO {
 }
 
 export class RequestRideDTO {
-  @IsIn(RideTypes)
+  @IsIn(VehicleCategories)
   @IsNotEmpty()
-  type: RideType;
+  type: VehicleCategory;
 
   @IsLatitude()
   @IsNotEmpty()
@@ -303,6 +305,10 @@ export class HireRideDTO {
 }
 
 export class CreateRideDTO {
+  @IsIn(VehicleCategories)
+  @IsOptional()
+  claimedCategory?: VehicleCategory;
+
   @IsString()
   @IsNotEmpty()
   model: string;
@@ -360,6 +366,10 @@ export class CreateRideDTO {
 }
 
 export class UpdateRideDTO {
+  @IsIn(VehicleCategories)
+  @IsOptional()
+  claimedCategory?: VehicleCategory;
+
   @IsString()
   @IsOptional()
   model?: string;
@@ -456,6 +466,10 @@ export class AdminUpdateFleetApprovalDTO {
   @IsIn([RideApprovalStatus.Approved, RideApprovalStatus.Rejected])
   @IsNotEmpty()
   status: RideApprovalStatus.Approved | RideApprovalStatus.Rejected;
+
+  @IsIn(VehicleCategories)
+  @IsOptional()
+  vehicleCategory?: VehicleCategory;
 
   @IsString()
   @IsOptional()

@@ -24,12 +24,14 @@ import { ActivityLedgerService } from '../database/activity-ledger.service';
 import { PricingService } from '../database/pricing.service';
 import { DatabaseService } from '../database/database.service';
 import { ActivityType } from '../database/schemas/activities.schema';
+import { AdminAuditAction } from '../database/schemas/admin-audit-log.schema';
 import { RideOfferOutcome } from '../database/schemas/driver-ride-offer.schema';
 import {
   RideApprovalStatus,
   RidesDocument,
   RideStatus,
   RideType,
+  VehicleCategory,
 } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
@@ -247,6 +249,10 @@ export class RidesService implements OnModuleInit {
     }
 
     const trackingId = `review-${Math.random().toString(32).substring(2)}`;
+    const reviewCategory =
+      ride.type === RideType.Luxury
+        ? VehicleCategory.Luxury
+        : VehicleCategory.Classic;
     const payload: ReviewRideOffer['payload'] = {
       amount: 0,
       distance: 3200,
@@ -258,7 +264,7 @@ export class RidesService implements OnModuleInit {
       toAddress: 'Millennium Park, Abuja',
       toLat: 9.0667,
       toLon: 7.5008,
-      type: ride.type,
+      type: reviewCategory,
     };
     const offer: ReviewRideOffer = {
       driverId: String(driver.id),
@@ -272,6 +278,8 @@ export class RidesService implements OnModuleInit {
       this.cache.set(`review-offer:${trackingId}`, offer, this.WAIT_TIME * 2),
       this.recordRideOffer({
         driverId: String(driver.id),
+        rideId: String(ride.id),
+        requestedCategory: reviewCategory,
         userId: String(rider.id),
         trackingId,
       }),
@@ -317,6 +325,7 @@ export class RidesService implements OnModuleInit {
       },
       meta: { playReviewSynthetic: true },
       ride,
+      rideCategory: offer.payload.type,
       status: TripStatus.Started,
       to: {
         type: 'Point',
@@ -564,6 +573,12 @@ export class RidesService implements OnModuleInit {
 
     if (types) {
       query.type = { $in: types };
+      if (!isHireOnly) {
+        query.$or = [
+          { vehicleCategory: { $in: types } },
+          { vehicleCategory: { $exists: false }, type: { $in: types } },
+        ];
+      }
     } else {
       // Default trip catalogue excludes Hire fleet cars
       query.type = { $ne: RideType.Hire };
@@ -705,9 +720,15 @@ export class RidesService implements OnModuleInit {
     const [_available, route] = await Promise.all([
       this.db.rides
         .find({
+          approvalStatus: RideApprovalStatus.Approved,
+          deleted: { $ne: true },
           'specs.synthetic': { $ne: true },
           status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
           type,
+          $or: [
+            { vehicleCategory: type },
+            { vehicleCategory: { $exists: false }, type },
+          ],
           location: {
             $near: {
               $geometry: { type: 'Point', coordinates: [fromLat, fromLon] },
@@ -828,6 +849,7 @@ export class RidesService implements OnModuleInit {
       },
       paymentMethod: payload.paymentMethod,
       ride,
+      rideCategory: payload.type,
       status: TripStatus.Started,
       to: {
         type: 'Point',
@@ -902,6 +924,36 @@ export class RidesService implements OnModuleInit {
       );
     }
     const { trackingId } = payload;
+    const offer = await this.db.driverRideOffers.findOne({
+      trackingId,
+      driver: driver.id,
+      outcome: RideOfferOutcome.Pending,
+    });
+    if (!offer) {
+      throw new BadRequestException('invalid tracking id');
+    }
+    const offeredRideId =
+      typeof offer.ride === 'string' ? offer.ride : String(offer.ride?.id);
+    const eligibleRide = await this.db.rides.findOne({
+      _id: offeredRideId,
+      driver: driver.id,
+      approvalStatus: RideApprovalStatus.Approved,
+      deleted: { $ne: true },
+      status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+      type: offer.requestedCategory,
+      $or: [
+        { vehicleCategory: offer.requestedCategory },
+        {
+          vehicleCategory: { $exists: false },
+          type: offer.requestedCategory,
+        },
+      ],
+    });
+    if (!eligibleRide) {
+      throw new BadRequestException(
+        'vehicle is no longer eligible for this ride',
+      );
+    }
     const value = await this.cache.get<boolean>(trackingId);
     if (typeof value !== 'boolean') {
       throw new BadRequestException('invalid tracking id');
@@ -948,6 +1000,8 @@ export class RidesService implements OnModuleInit {
 
       await this.recordRideOffer({
         driverId: driver.id,
+        rideId: ride.id,
+        requestedCategory: payload.type,
         userId: user.id,
         trackingId,
       });
@@ -1010,6 +1064,22 @@ export class RidesService implements OnModuleInit {
       }
 
       if (accepted === true) {
+        const eligibleRide = await this.db.rides.findOne({
+          _id: ride.id,
+          driver: driver.id,
+          approvalStatus: RideApprovalStatus.Approved,
+          deleted: { $ne: true },
+          status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+          type: payload.type,
+          $or: [
+            { vehicleCategory: payload.type },
+            { vehicleCategory: { $exists: false }, type: payload.type },
+          ],
+        });
+        if (!eligibleRide) {
+          await this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut);
+          continue;
+        }
         const [trip] = await Promise.all([
           this.db.trips.create({
             ...payload,
@@ -1022,8 +1092,9 @@ export class RidesService implements OnModuleInit {
               coordinates: [payload.fromLat, payload.fromLon],
             },
             user,
-            ride,
+            ride: eligibleRide,
             driver,
+            rideCategory: payload.type,
             stops: (payload.stops || []).map((stop) => ({
               to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
               toAddress: stop.toAddress,
@@ -2070,10 +2141,16 @@ export class RidesService implements OnModuleInit {
         : 4;
 
     const type = payload.type || defaults.type || RideType.Classic;
+    const claimedCategory =
+      payload.claimedCategory ||
+      (type === RideType.Luxury
+        ? VehicleCategory.Luxury
+        : VehicleCategory.Classic);
     const doc: Record<string, unknown> = {
       ...payload,
       driver: user.id,
       type,
+      claimedCategory,
       specs: {
         ...(payload.specs || {}),
         seats,
@@ -2089,6 +2166,7 @@ export class RidesService implements OnModuleInit {
     }
 
     if (type === RideType.Hire) {
+      doc.vehicleCategory = claimedCategory;
       const dailyRate = Number(payload.dailyRate);
       const hourlyRate = Number(payload.hourlyRate);
       const baseRate =
@@ -2164,19 +2242,24 @@ export class RidesService implements OnModuleInit {
       );
     }
     const registration = payload.registration.trim().toLocaleUpperCase();
+    const claimedCategory = payload.claimedCategory || VehicleCategory.Classic;
+    const requestedType =
+      claimedCategory === VehicleCategory.Luxury
+        ? RideType.Luxury
+        : RideType.Classic;
     const existing = await this.db.rides.findOne({
       driver: user.id,
       registration,
-      type: RideType.Classic,
+      type: requestedType,
       deleted: { $ne: true },
     });
     if (existing) return existing;
 
     const doc = this.buildRidePayload(
       user,
-      { ...payload, registration, type: RideType.Classic },
+      { ...payload, claimedCategory, registration, type: requestedType },
       {
-        type: RideType.Classic,
+        type: requestedType,
         status: RideStatus.Offline,
         approvalStatus: RideApprovalStatus.Pending,
       },
@@ -2219,15 +2302,46 @@ export class RidesService implements OnModuleInit {
     ) {
       throw new BadRequestException('Cars require at least 1 photo');
     }
-    const $set = this.buildRidePayload(user, payload, { type: ride.type });
+    const requestedClaim = payload.claimedCategory;
+    const $set = this.buildRidePayload(
+      user,
+      { ...payload, type: ride.type },
+      { type: ride.type },
+    );
     // Never overwrite ownership or soft-delete via update
     delete $set.driver;
+    delete $set.vehicleCategory;
+    $set.type = ride.type;
+    if (
+      ride.type !== RideType.Hire &&
+      requestedClaim &&
+      requestedClaim !== ride.claimedCategory
+    ) {
+      $set.approvalStatus = RideApprovalStatus.Pending;
+      $set.status = RideStatus.Offline;
+      $set.type =
+        requestedClaim === VehicleCategory.Luxury
+          ? RideType.Luxury
+          : RideType.Classic;
+      delete $set.vehicleCategory;
+    }
 
-    return this.db.rides.findOneAndUpdate(
-      { _id: ride.id },
-      { $set },
-      { new: true },
-    );
+    const update: Record<string, unknown> = { $set };
+    if (
+      ride.type !== RideType.Hire &&
+      requestedClaim &&
+      requestedClaim !== ride.claimedCategory
+    ) {
+      update.$unset = {
+        vehicleCategory: 1,
+        categoryReviewedBy: 1,
+        categoryReviewedAt: 1,
+      };
+    }
+
+    return this.db.rides.findOneAndUpdate({ _id: ride.id }, update, {
+      new: true,
+    });
   }
 
   async deleteMyRide(user: UserDocument, rideId: string) {
@@ -2463,26 +2577,26 @@ export class RidesService implements OnModuleInit {
 
   private async recordRideOffer(payload: {
     driverId: string;
+    rideId: string;
+    requestedCategory: VehicleCategory;
     userId: string;
     trackingId: string;
   }) {
-    try {
-      await this.db.driverRideOffers.updateOne(
-        { trackingId: payload.trackingId },
-        {
-          $setOnInsert: {
-            driver: payload.driverId,
-            user: payload.userId,
-            trackingId: payload.trackingId,
-            offeredAt: new Date(),
-            outcome: RideOfferOutcome.Pending,
-          },
+    await this.db.driverRideOffers.updateOne(
+      { trackingId: payload.trackingId },
+      {
+        $setOnInsert: {
+          driver: payload.driverId,
+          ride: payload.rideId,
+          requestedCategory: payload.requestedCategory,
+          user: payload.userId,
+          trackingId: payload.trackingId,
+          offeredAt: new Date(),
+          outcome: RideOfferOutcome.Pending,
         },
-        { upsert: true },
-      );
-    } catch {
-      // best-effort stats persistence
-    }
+      },
+      { upsert: true },
+    );
   }
 
   private async resolveRideOffer(
@@ -3393,8 +3507,10 @@ export class RidesService implements OnModuleInit {
   }
 
   async setAdminFleetApproval(
+    admin: UserDocument,
     rideId: string,
     status: RideApprovalStatus.Approved | RideApprovalStatus.Rejected,
+    vehicleCategory?: VehicleCategory,
     reason?: string,
   ) {
     const ride = await this.db.rides.findOne({
@@ -3410,12 +3526,26 @@ export class RidesService implements OnModuleInit {
       );
     }
 
+    if (status === RideApprovalStatus.Approved && !vehicleCategory) {
+      throw new BadRequestException(
+        'vehicle category is required before approval',
+      );
+    }
+
     const $set: Record<string, unknown> = { approvalStatus: status };
     if (reason !== undefined) {
       $set.approvalReason = reason;
     }
     if (status === RideApprovalStatus.Rejected) {
       $set.status = RideStatus.Offline;
+    } else {
+      $set.vehicleCategory = vehicleCategory;
+      $set.type =
+        vehicleCategory === VehicleCategory.Luxury
+          ? RideType.Luxury
+          : RideType.Classic;
+      $set.categoryReviewedBy = admin.id;
+      $set.categoryReviewedAt = new Date();
     }
 
     const updated = await this.db.rides.findOneAndUpdate(
@@ -3427,6 +3557,28 @@ export class RidesService implements OnModuleInit {
     if (!updated) {
       throw new NotFoundException('Ride not found');
     }
+
+    await this.db.adminAuditLogs.create({
+      action: AdminAuditAction.VehicleReviewed,
+      actor: admin.id,
+      reason:
+        reason?.trim() ||
+        (status === RideApprovalStatus.Approved
+          ? 'Vehicle approved during application review'
+          : 'Vehicle rejected during application review'),
+      targetUserId:
+        typeof ride.driver === 'string'
+          ? ride.driver
+          : String(ride.driver?.id || ''),
+      meta: {
+        rideId: String(ride.id),
+        claimedCategory: ride.claimedCategory,
+        previousCategory: ride.vehicleCategory,
+        vehicleCategory: updated.vehicleCategory,
+        previousStatus: ride.approvalStatus,
+        status: updated.approvalStatus,
+      },
+    });
 
     return updated;
   }

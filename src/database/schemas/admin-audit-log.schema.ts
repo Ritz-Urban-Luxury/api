@@ -10,6 +10,7 @@ export type AdminAuditLogDocument = AdminAuditLog & Document;
 export enum AdminAuditAction {
   TestAccountPurged = 'test-account.purged',
   AppReviewDataReset = 'app-review-data.reset',
+  VehicleReviewed = 'vehicle.reviewed',
 }
 
 @Schema()

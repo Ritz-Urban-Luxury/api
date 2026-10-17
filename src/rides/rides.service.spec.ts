@@ -7,11 +7,9 @@ import {
   RideApprovalStatus,
   RideStatus,
   RideType,
+  VehicleCategory,
 } from '../database/schemas/rides.schema';
-import {
-  PaymentMethod,
-  TripStatus,
-} from '../database/schemas/trips.schema';
+import { PaymentMethod, TripStatus } from '../database/schemas/trips.schema';
 import { UserReportReason } from '../database/schemas/user-report.schema';
 import {
   RentalBillingType,
@@ -453,6 +451,29 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
+  it('lists only approved vehicles in the requested category', async () => {
+    db.rides.find.mockReturnValue({
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockResolvedValue([]),
+    });
+
+    await service.getAvailableRides(riderReviewer, {
+      lat: 9.0765,
+      lon: 7.3986,
+      type: RideType.Luxury,
+    });
+
+    expect(db.rides.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalStatus: RideApprovalStatus.Approved,
+        type: { $in: [RideType.Luxury] },
+        $or: expect.arrayContaining([
+          { vehicleCategory: { $in: [RideType.Luxury] } },
+        ]),
+      }),
+    );
+  });
+
   it('returns only synthetic hire vehicles to the reusable rider reviewer', async () => {
     db.rides.find.mockReturnValue({
       populate: jest.fn().mockReturnThis(),
@@ -491,7 +512,7 @@ describe('RidesService Play reviewer sandbox', () => {
       toAddress: 'Review destination',
       toLat: 9.082,
       toLon: 7.402,
-      type: RideType.Classic,
+      type: VehicleCategory.Classic,
     });
 
     expect(db.trips.create).toHaveBeenCalledWith(
@@ -786,7 +807,7 @@ describe('RidesService notification sounds', () => {
     findAndUpdateOrFail: jest.Mock;
     findOrFail: jest.Mock;
     messages: { create: jest.Mock };
-    rides: { updateOne: jest.Mock };
+    rides: { findOne: jest.Mock; updateOne: jest.Mock };
     trips: { create: jest.Mock };
     userBlocks: { exists: jest.Mock };
   };
@@ -803,7 +824,7 @@ describe('RidesService notification sounds', () => {
       findAndUpdateOrFail: jest.fn(),
       findOrFail: jest.fn(),
       messages: { create: jest.fn() },
-      rides: { updateOne: jest.fn() },
+      rides: { findOne: jest.fn(), updateOne: jest.fn() },
       trips: { create: jest.fn() },
       userBlocks: { exists: jest.fn().mockResolvedValue(false) },
     };
@@ -822,7 +843,15 @@ describe('RidesService notification sounds', () => {
   });
 
   it('uses the ride-request and booking-accepted sounds', async () => {
-    const ride = { driver, id: rideId } as never;
+    const ride = {
+      approvalStatus: RideApprovalStatus.Approved,
+      driver,
+      id: rideId,
+      status: RideStatus.Online,
+      type: RideType.Classic,
+      vehicleCategory: VehicleCategory.Classic,
+    } as never;
+    db.rides.findOne.mockResolvedValue(ride);
     cache.get.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
     db.trips.create.mockResolvedValue(trip);
     const internals = service as unknown as {
@@ -845,7 +874,7 @@ describe('RidesService notification sounds', () => {
       toAddress: 'Destination',
       toLat: 9.2,
       toLon: 7.2,
-      type: RideType.Classic,
+      type: VehicleCategory.Classic,
     });
 
     expect(push.sendToUser).toHaveBeenCalledWith(
@@ -894,6 +923,90 @@ describe('RidesService notification sounds', () => {
         sound: 'driver_arrived.wav',
       }),
     );
+  });
+});
+
+describe('RidesService vehicle category review', () => {
+  it('atomically approves an admin-selected category and writes an audit log', async () => {
+    const admin = { id: '64a000000000000000000099' };
+    const ride = {
+      approvalStatus: RideApprovalStatus.Pending,
+      claimedCategory: VehicleCategory.Classic,
+      driver: ownerId,
+      id: rideId,
+      type: RideType.Classic,
+    };
+    const updated = {
+      ...ride,
+      approvalStatus: RideApprovalStatus.Approved,
+      type: RideType.Luxury,
+      vehicleCategory: VehicleCategory.Luxury,
+    };
+    const db = {
+      adminAuditLogs: { create: jest.fn().mockResolvedValue(undefined) },
+      rides: {
+        findOne: jest.fn().mockResolvedValue(ride),
+        findOneAndUpdate: jest.fn().mockResolvedValue(updated),
+      },
+    };
+    const service = Object.create(RidesService.prototype);
+    Object.assign(service, { db });
+
+    await expect(
+      service.setAdminFleetApproval(
+        admin as never,
+        rideId,
+        RideApprovalStatus.Approved,
+        VehicleCategory.Luxury,
+      ),
+    ).resolves.toMatchObject({
+      type: RideType.Luxury,
+      vehicleCategory: VehicleCategory.Luxury,
+    });
+
+    expect(db.rides.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: rideId },
+      {
+        $set: expect.objectContaining({
+          approvalStatus: RideApprovalStatus.Approved,
+          type: RideType.Luxury,
+          vehicleCategory: VehicleCategory.Luxury,
+        }),
+      },
+      { new: true },
+    );
+    expect(db.adminAuditLogs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: admin.id,
+        meta: expect.objectContaining({
+          claimedCategory: VehicleCategory.Classic,
+          vehicleCategory: VehicleCategory.Luxury,
+        }),
+      }),
+    );
+  });
+
+  it('does not approve a vehicle without an admin-selected category', async () => {
+    const service = Object.create(RidesService.prototype);
+    Object.assign(service, {
+      db: {
+        rides: {
+          findOne: jest.fn().mockResolvedValue({
+            claimedCategory: VehicleCategory.Classic,
+            id: rideId,
+            type: RideType.Classic,
+          }),
+        },
+      },
+    });
+
+    await expect(
+      service.setAdminFleetApproval(
+        { id: ownerId } as never,
+        rideId,
+        RideApprovalStatus.Approved,
+      ),
+    ).rejects.toThrow('vehicle category is required');
   });
 });
 

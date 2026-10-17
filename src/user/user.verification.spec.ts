@@ -4,9 +4,14 @@ import { UserService } from './user.service';
 describe('UserService driver verification', () => {
   const setup = (user: Record<string, unknown>) => {
     const db = {
+      rides: {
+        exists: jest.fn().mockResolvedValue(true),
+      },
       users: {
         findOne: jest.fn().mockResolvedValue(user),
-        findOneAndUpdate: jest.fn().mockResolvedValue({ ...user, isVerified: true }),
+        findOneAndUpdate: jest
+          .fn()
+          .mockResolvedValue({ ...user, isVerified: true }),
       },
     };
     const push = { sendToUser: jest.fn() };
@@ -15,7 +20,10 @@ describe('UserService driver verification', () => {
   };
 
   it('does not approve a driver without a profile photo', async () => {
-    const { service } = setup({ id: 'driver', license: 'https://files/license.jpg' });
+    const { service } = setup({
+      id: 'driver',
+      license: 'https://files/license.jpg',
+    });
 
     await expect(
       service.setVerification('driver', { isVerified: true }),
@@ -34,5 +42,18 @@ describe('UserService driver verification', () => {
       service.setVerification('driver', { isVerified: true }),
     ).resolves.toMatchObject({ isVerified: true });
     expect(push.sendToUser).toHaveBeenCalled();
+  });
+
+  it('does not approve a driver before a vehicle category is approved', async () => {
+    const { db, service } = setup({
+      avatar: 'https://files/avatar.jpg',
+      id: 'driver',
+      license: 'https://files/license.jpg',
+    });
+    db.rides.exists.mockResolvedValue(false);
+
+    await expect(
+      service.setVerification('driver', { isVerified: true }),
+    ).rejects.toThrow('approve and classify a trip vehicle');
   });
 });

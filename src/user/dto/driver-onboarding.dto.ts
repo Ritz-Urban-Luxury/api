@@ -14,8 +14,16 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  VehicleCategories,
+  VehicleCategory,
+} from '../../database/schemas/rides.schema';
 
 export class DriverOnboardingVehicleDTO {
+  @IsIn(VehicleCategories)
+  @IsOptional()
+  category?: VehicleCategory = VehicleCategory.Classic;
+
   @IsString()
   @IsNotEmpty()
   brand: string;

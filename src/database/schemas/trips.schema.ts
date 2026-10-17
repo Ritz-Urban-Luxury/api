@@ -11,7 +11,13 @@ import { SchemaTypes } from 'mongoose';
 import { BaseSchema, EmbeddedSchema, Schema } from '../../shared/base.schema';
 import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
-import { Location, LocationSchema, RidesDocument } from './rides.schema';
+import {
+  Location,
+  LocationSchema,
+  RidesDocument,
+  VehicleCategories,
+  VehicleCategory,
+} from './rides.schema';
 import { UserDocument } from './user.schema';
 
 export type TripDocument = Trip & Document;
@@ -140,6 +146,10 @@ export class Trip extends BaseSchema {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.RIDES, required: true })
   ride: RidesDocument | string;
+
+  /** Immutable category assigned at booking time. */
+  @Prop({ type: String, enum: VehicleCategories, required: true })
+  rideCategory: VehicleCategory;
 
   @Prop({ type: String, enum: TripStatuses, default: TripStatus.Started })
   status?: TripStatus;
