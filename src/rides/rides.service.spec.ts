@@ -689,6 +689,182 @@ describe('RidesService Play reviewer sandbox', () => {
   });
 });
 
+describe('RidesService early rider trip completion', () => {
+  const tripId = '64a000000000000000000005';
+  const rider = { id: riderId } as any;
+  const driver = { id: ownerId } as any;
+  const ride = {
+    id: rideId,
+    location: {
+      coordinates: [9.1, 7.4],
+      recordedAt: new Date('2026-10-17T12:09:55.000Z'),
+      type: 'Point',
+    },
+    type: RideType.Classic,
+  } as any;
+  let service: RidesService;
+  let db: any;
+  let paymentService: any;
+  let websocket: any;
+  let activityLedger: any;
+
+  const makeTrip = () => ({
+    distance: 20_000,
+    driver,
+    fare: {
+      amount: 3000,
+      baseFare: 500,
+      commissionPercent: 20,
+      distanceMeters: 20_000,
+      durationSeconds: 1800,
+      minimumFare: 700,
+      perKm: 100,
+      perMinute: 10,
+      quotedAt: new Date('2026-10-17T11:55:00.000Z'),
+      rideType: RideType.Classic,
+    },
+    from: { coordinates: [9.0, 7.3], type: 'Point' },
+    id: tripId,
+    meta: {},
+    paymentMethod: PaymentMethod.RULBalance,
+    ride,
+    startedAt: new Date('2026-10-17T12:00:00.000Z'),
+    status: TripStatus.InProgress,
+    tripStops: [],
+    user: rider,
+  });
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T12:10:00.000Z'));
+    db = {
+      rides: {
+        updateMany: jest.fn().mockResolvedValue(undefined),
+        updateOne: jest.fn().mockResolvedValue(undefined),
+      },
+      trips: {
+        findOne: jest.fn(),
+        findOneAndUpdate: jest.fn(),
+      },
+    };
+    paymentService = {
+      chargeUser: jest.fn().mockResolvedValue({ reference: 'charge-1' }),
+    };
+    websocket = {
+      emitToUser: jest.fn(),
+      getLastRideLocation: jest.fn().mockReturnValue({
+        accuracy: 8,
+        lat: 9.1,
+        lon: 7.4,
+        recordedAt: '2026-10-17T12:09:58.000Z',
+        tripId,
+        updatedAt: '2026-10-17T12:09:58.000Z',
+      }),
+    };
+    activityLedger = {
+      formatAmountMeta: jest.fn().mockReturnValue('Total ₦1,100'),
+      paymentActivityTitle: jest.fn().mockReturnValue('Ride payment'),
+      recordActivity: jest.fn().mockResolvedValue(undefined),
+      recordDriverEarning: jest.fn().mockResolvedValue(undefined),
+    };
+    service = Object.create(RidesService.prototype);
+    Object.assign(service as any, {
+      activityLedger,
+      db,
+      finance: {
+        ensureDriverRestrictionState: jest
+          .fn()
+          .mockResolvedValue({ restricted: false }),
+      },
+      paymentService,
+      pricing: { fareFor: jest.fn() },
+      push: { sendToUser: jest.fn() },
+      websocket,
+    });
+    jest
+      .spyOn(service as any, 'openOnlineSession')
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('ends an in-progress rider trip at the live driver location and charges a partial fare', async () => {
+    const existing = makeTrip();
+    const completed = {
+      ...existing,
+      endedEarly: true,
+      meta: { amount: 1100, distance: 5000, durationSeconds: 600 },
+      status: TripStatus.Completed,
+    };
+    db.trips.findOne.mockReturnValue(populatedQuery(existing));
+    db.trips.findOneAndUpdate.mockResolvedValue(completed);
+    jest.spyOn(GeolocationService, 'getRouteSummary').mockResolvedValue({
+      distance: 5000,
+      duration: 500,
+    });
+
+    await expect(
+      service.cancelTrip(rider, tripId, 'User ended ride early'),
+    ).resolves.toBe(completed);
+
+    expect(GeolocationService.getRouteSummary).toHaveBeenCalledWith(
+      [9.0, 7.3],
+      [9.1, 7.4],
+    );
+    expect(paymentService.chargeUser).toHaveBeenCalledWith(rider, {
+      amount: 1100,
+      method: PaymentMethod.RULBalance,
+    });
+    expect(db.trips.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: tripId, status: TripStatus.InProgress },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          endedBy: riderId,
+          endedEarly: true,
+          endLocation: expect.objectContaining({ coordinates: [9.1, 7.4] }),
+          endReason: 'User ended ride early',
+          status: TripStatus.Completed,
+        }),
+      }),
+      { new: true, upsert: false },
+    );
+  });
+
+  it('does not let the driver use the rider early-end cancellation flow', async () => {
+    db.trips.findOne.mockReturnValue(populatedQuery(makeTrip()));
+
+    await expect(
+      service.cancelTrip(driver, tripId, 'Driver cancelled'),
+    ).rejects.toThrow('Only the rider can end an in-progress trip early');
+    expect(paymentService.chargeUser).not.toHaveBeenCalled();
+  });
+
+  it('keeps the trip active when no fresh driver endpoint is available', async () => {
+    db.trips.findOne.mockReturnValue(
+      populatedQuery({
+        ...makeTrip(),
+        ride: {
+          ...ride,
+          location: {
+            coordinates: [9.1, 7.4],
+            recordedAt: new Date('2026-10-17T11:00:00.000Z'),
+            type: 'Point',
+          },
+        },
+      }),
+    );
+    websocket.getLastRideLocation.mockReturnValue(null);
+
+    await expect(
+      service.cancelTrip(rider, tripId, 'User ended ride early'),
+    ).rejects.toThrow('Current driver location is unavailable');
+    expect(paymentService.chargeUser).not.toHaveBeenCalled();
+    expect(db.trips.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe('RidesService rider safety controls', () => {
   const driver = { id: ownerId } as never;
   const rider = { id: riderId } as never;

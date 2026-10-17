@@ -40,6 +40,7 @@ import { GeolocationService } from './geolocation.service';
 import { RidesService } from './rides.service';
 import { VehicleOptionsService } from './vehicle-options.service';
 import { RideType } from '../database/schemas/rides.schema';
+import { TripStatus } from '../database/schemas/trips.schema';
 
 @Controller('rides')
 export class RidesController {
@@ -334,7 +335,10 @@ export class RidesController {
   ) {
     const _trip = await this.ridesService.cancelTrip(user, trip, reason);
 
-    return Response.json('Trip cancelled', _trip);
+    return Response.json(
+      _trip.status === TripStatus.Cancelled ? 'Trip cancelled' : 'Trip ended',
+      _trip,
+    );
   }
 
   @UseGuards(JwtGuard)

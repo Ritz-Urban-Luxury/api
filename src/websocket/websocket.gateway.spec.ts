@@ -32,11 +32,7 @@ describe('WebsocketGateway', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     findOneAndUpdate.mockResolvedValue(ride);
-    gateway = new WebsocketGateway(
-      {} as AuthenticationService,
-      logger,
-      db,
-    );
+    gateway = new WebsocketGateway({} as AuthenticationService, logger, db);
   });
 
   describe('updateRideLocation', () => {
@@ -50,7 +46,12 @@ describe('WebsocketGateway', () => {
       });
 
       expect(findOneAndUpdate).toHaveBeenCalledWith(
-        { driver: driver.id },
+        {
+          deleted: { $ne: true },
+          driver: driver.id,
+          status: { $in: ['Online', 'Busy', 'FinishingTrip'] },
+          type: { $ne: 'Hire' },
+        },
         {
           $set: {
             location: {
@@ -92,7 +93,12 @@ describe('WebsocketGateway', () => {
       });
 
       expect(findOneAndUpdate).toHaveBeenCalledWith(
-        { driver: driver.id },
+        {
+          deleted: { $ne: true },
+          driver: driver.id,
+          status: { $in: ['Online', 'Busy', 'FinishingTrip'] },
+          type: { $ne: 'Hire' },
+        },
         {
           $set: {
             location: {

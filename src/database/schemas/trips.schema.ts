@@ -157,6 +157,18 @@ export class Trip extends BaseSchema {
   @Prop()
   cancellationReason?: string;
 
+  @Prop({ default: false })
+  endedEarly?: boolean;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  endedBy?: UserDocument | string;
+
+  @Prop()
+  endReason?: string;
+
+  @Prop({ type: LocationSchema })
+  endLocation?: Location;
+
   @Prop({ type: String, enum: PaymentMethods, required: true })
   paymentMethod: PaymentMethod;
 
