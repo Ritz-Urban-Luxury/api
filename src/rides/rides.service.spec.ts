@@ -274,6 +274,7 @@ describe('RidesService Play reviewer sandbox', () => {
 
     service = Object.create(RidesService.prototype);
     Object.assign(service as any, {
+      WAIT_TIME: 30_000,
       cache,
       db,
       finance: { canDriverReceiveRides: jest.fn().mockResolvedValue(true) },
@@ -412,15 +413,35 @@ describe('RidesService Play reviewer sandbox', () => {
     const result = await service.createReviewDemoOffer(driverReviewer);
 
     expect(result.trackingId).toMatch(/^review-/);
+    expect(result).toMatchObject({
+      expiresAt: expect.any(String),
+      expiresInSeconds: expect.any(Number),
+      payload: expect.objectContaining({ amount: 0 }),
+      user: riderReviewer,
+    });
     expect(websocket.emitToUser).toHaveBeenCalledWith(
       driverReviewer,
       'RideRequest',
       expect.objectContaining({
+        expiresAt: result.expiresAt,
         payload: expect.objectContaining({ amount: 0 }),
+        trackingId: result.trackingId,
         user: riderReviewer,
       }),
     );
     expect(db.driverRideOffers.updateOne).toHaveBeenCalled();
+  });
+
+  it('does not generate demo offers for ordinary driver accounts', async () => {
+    await expect(
+      service.createReviewDemoOffer({
+        email: 'driver@example.com',
+        id: ownerId,
+      } as never),
+    ).rejects.toThrow('review demo is not available');
+
+    expect(db.trips.findOne).not.toHaveBeenCalled();
+    expect(websocket.emitToUser).not.toHaveBeenCalled();
   });
 
   it('accepts a generated offer as a zero-charge synthetic trip', async () => {

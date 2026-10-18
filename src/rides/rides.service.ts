@@ -317,6 +317,14 @@ export class RidesService implements OnModuleInit {
       rideId: String(ride.id),
       payload,
     };
+    const expiresInSeconds = (this.WAIT_TIME * 2) / 1000;
+    const rideRequest = {
+      expiresAt: new Date(Date.now() + this.WAIT_TIME * 2).toISOString(),
+      expiresInSeconds,
+      trackingId,
+      user: rider,
+      payload,
+    };
 
     await Promise.all([
       this.cache.set(trackingId, false, this.WAIT_TIME * 2),
@@ -330,13 +338,9 @@ export class RidesService implements OnModuleInit {
       }),
     ]);
 
-    this.websocket.emitToUser(driver, 'RideRequest', {
-      trackingId,
-      user: rider,
-      payload,
-    });
+    this.websocket.emitToUser(driver, 'RideRequest', rideRequest);
 
-    return { expiresInSeconds: (this.WAIT_TIME * 2) / 1000, trackingId };
+    return rideRequest;
   }
 
   private async acceptReviewDemoOffer(
