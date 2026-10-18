@@ -122,6 +122,29 @@ export class GeolocationService {
       });
   }
 
+  static async getRouteSummaryWithStops(
+    from: [number, number],
+    to: [number, number],
+    stops: [number, number][] = [],
+  ): Promise<{ distance: number; duration: number }> {
+    const points = [from, ...stops, to];
+    const legs = await Promise.all(
+      points
+        .slice(0, -1)
+        .map((origin, index) =>
+          GeolocationService.getRouteSummary(origin, points[index + 1]),
+        ),
+    );
+
+    return legs.reduce(
+      (total, leg) => ({
+        distance: total.distance + leg.distance,
+        duration: total.duration + leg.duration,
+      }),
+      { distance: 0, duration: 0 },
+    );
+  }
+
   static async getETA(from: [number, number], to: [number, number]) {
     if (config().turnOffGeolaction) {
       return 5;
@@ -156,11 +179,16 @@ export class GeolocationService {
       });
   }
 
-  static async getDrivingRoute(from: [number, number], to: [number, number]) {
+  static async getDrivingRoute(
+    from: [number, number],
+    to: [number, number],
+    stops: [number, number][] = [],
+  ) {
     if (config().turnOffGeolaction) {
       return {
         coordinates: [
           { latitude: from[0], longitude: from[1] },
+          ...stops.map(([latitude, longitude]) => ({ latitude, longitude })),
           { latitude: to[0], longitude: to[1] },
         ],
         durationMinutes: 5,
@@ -179,6 +207,13 @@ export class GeolocationService {
         params: {
           origin: `${from[0]},${from[1]}`,
           destination: `${to[0]},${to[1]}`,
+          ...(stops.length
+            ? {
+                waypoints: stops
+                  .map(([latitude, longitude]) => `${latitude},${longitude}`)
+                  .join('|'),
+              }
+            : {}),
           key: mapsApiKey,
           ...TRAFFIC_AWARE_PARAMS,
         },

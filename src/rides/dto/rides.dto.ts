@@ -173,9 +173,11 @@ export class RequestRideDTO {
   paymentMethod: PaymentMethod;
 
   @IsArray()
+  @ArrayMaxSize(1)
   @IsOptional()
+  @Type(() => RideStopsDTO)
   @ValidateNested({ each: true })
-  stops: RideStopsDTO[];
+  stops?: RideStopsDTO[];
 }
 
 export class AcceptRideDTO {
@@ -204,6 +206,16 @@ export class GetDrivingRouteDTO {
   @IsLongitude()
   @IsNotEmpty()
   toLon: number;
+
+  @Type(() => Number)
+  @IsLatitude()
+  @IsOptional()
+  stopLat?: number;
+
+  @Type(() => Number)
+  @IsLongitude()
+  @IsOptional()
+  stopLon?: number;
 }
 
 export class MessageDTO {
@@ -247,12 +259,19 @@ export class UpdateTripDTO {
   @IsOptional()
   status?: TripStatus;
 
+  @IsBoolean()
+  @IsOptional()
+  completeStop?: boolean;
+
   @ValidateNested()
   @IsOptional()
   rating?: Rating;
 
   @ValidateNested({ each: true })
+  @IsArray()
+  @ArrayMaxSize(1)
   @IsOptional()
+  @Type(() => RideStopsDTO)
   stops?: RideStopsDTO[];
 }
 

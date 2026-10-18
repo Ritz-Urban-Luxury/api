@@ -13,6 +13,7 @@ import { RideStatus, RidesDocument } from '../database/schemas/rides.schema';
 import {
   InactiveTripStatuses,
   TripDocument,
+  TripStopStatus,
   TripStatus,
 } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
@@ -77,7 +78,7 @@ export class WebsocketGateway {
     const roomId =
       typeof user === 'string'
         ? user
-        : (user?.id ?? String((user as { _id?: unknown })?._id ?? ''));
+        : user?.id ?? String((user as { _id?: unknown })?._id ?? '');
 
     if (!roomId) {
       this.logger.warn(`emitToUser skipped — missing user room for ${event}`);
@@ -111,7 +112,11 @@ export class WebsocketGateway {
         trip.nextDestination.to.coordinates,
       );
 
-      if (distance <= 1000) {
+      const hasPendingStop = trip.tripStops?.some(
+        (stop) => stop.status !== TripStopStatus.Completed,
+      );
+
+      if (!hasPendingStop && distance <= 1000) {
         await this.db.rides.updateOne(
           { _id: ride },
           { $set: { status: RideStatus.FinishingTrip } },
@@ -182,8 +187,8 @@ export class WebsocketGateway {
     const riderRoomId =
       typeof trip.user === 'string'
         ? trip.user
-        : ((trip.user as UserDocument)?.id ??
-          String((trip.user as { _id?: unknown })?._id ?? ''));
+        : (trip.user as UserDocument)?.id ??
+          String((trip.user as { _id?: unknown })?._id ?? '');
 
     await this.emitToUser(
       riderRoomId,

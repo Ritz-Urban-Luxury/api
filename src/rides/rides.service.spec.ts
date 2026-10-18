@@ -9,7 +9,11 @@ import {
   RideType,
   VehicleCategory,
 } from '../database/schemas/rides.schema';
-import { PaymentMethod, TripStatus } from '../database/schemas/trips.schema';
+import {
+  PaymentMethod,
+  TripStatus,
+  TripStopStatus,
+} from '../database/schemas/trips.schema';
 import { UserReportReason } from '../database/schemas/user-report.schema';
 import {
   RentalBillingType,
@@ -25,6 +29,36 @@ const rideId = '64a000000000000000000004';
 
 const populatedQuery = <T>(value: T) => ({
   populate: jest.fn().mockResolvedValue(value),
+});
+
+describe('GeolocationService waypoint routes', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('sums pickup-to-stop and stop-to-destination route totals', async () => {
+    jest
+      .spyOn(GeolocationService, 'getRouteSummary')
+      .mockResolvedValueOnce({ distance: 4000, duration: 600 })
+      .mockResolvedValueOnce({ distance: 7000, duration: 900 });
+
+    await expect(
+      GeolocationService.getRouteSummaryWithStops(
+        [9.0, 7.3],
+        [9.2, 7.5],
+        [[9.1, 7.4]],
+      ),
+    ).resolves.toEqual({ distance: 11000, duration: 1500 });
+
+    expect(GeolocationService.getRouteSummary).toHaveBeenNthCalledWith(
+      1,
+      [9.0, 7.3],
+      [9.1, 7.4],
+    );
+    expect(GeolocationService.getRouteSummary).toHaveBeenNthCalledWith(
+      2,
+      [9.1, 7.4],
+      [9.2, 7.5],
+    );
+  });
 });
 
 describe('RidesService.cancelRiderRental', () => {
@@ -561,6 +595,30 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
+  it('returns the latest review trip when a duplicate advance loses the status race', async () => {
+    const startedTrip = {
+      driver: driverReviewer,
+      id: 'synthetic-trip-id',
+      meta: { playReviewSynthetic: true },
+      status: TripStatus.Started,
+      user: riderId,
+    };
+    const arrivedTrip = {
+      ...startedTrip,
+      status: TripStatus.DriverArrived,
+    };
+    db.trips.findOne
+      .mockReturnValueOnce(populatedQuery(startedTrip))
+      .mockReturnValueOnce(populatedQuery(arrivedTrip));
+    jest
+      .spyOn(service, 'annouceArrival')
+      .mockRejectedValue(new NotFoundException('trip not found'));
+
+    await expect(
+      service.advancePlayReviewTrip(riderReviewer, startedTrip.id),
+    ).resolves.toMatchObject({ status: TripStatus.DriverArrived });
+  });
+
   it('advances the complete rider demo lifecycle and leaves completion idempotent', async () => {
     const reviewTrip = {
       driver: driverReviewer,
@@ -832,13 +890,62 @@ describe('RidesService early rider trip completion', () => {
     );
   });
 
-  it('does not let the driver use the rider early-end cancellation flow', async () => {
-    db.trips.findOne.mockReturnValue(populatedQuery(makeTrip()));
+  it('lets the driver end early with a pending stop and charges only the partial fare', async () => {
+    const existing = {
+      ...makeTrip(),
+      tripStops: [
+        {
+          status: TripStopStatus.Pending,
+          to: { coordinates: [9.2, 7.5], type: 'Point' },
+          toAddress: 'Scheduled stop',
+        },
+      ],
+    };
+    const completed = {
+      ...existing,
+      endedEarly: true,
+      meta: { amount: 1100, distance: 5000, durationSeconds: 600 },
+      status: TripStatus.Completed,
+    };
+    db.trips.findOne.mockReturnValue(populatedQuery(existing));
+    db.trips.findOneAndUpdate.mockResolvedValue(completed);
+    jest.spyOn(GeolocationService, 'getRouteSummary').mockResolvedValue({
+      distance: 5000,
+      duration: 500,
+    });
 
     await expect(
-      service.cancelTrip(driver, tripId, 'Driver cancelled'),
-    ).rejects.toThrow('Only the rider can end an in-progress trip early');
-    expect(paymentService.chargeUser).not.toHaveBeenCalled();
+      service.cancelTrip(driver, tripId, 'Safety concern'),
+    ).resolves.toBe(completed);
+
+    expect(paymentService.chargeUser).toHaveBeenCalledWith(rider, {
+      amount: 1100,
+      method: PaymentMethod.RULBalance,
+    });
+    expect(db.trips.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: tripId, status: TripStatus.InProgress },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          endedBy: ownerId,
+          endedEarly: true,
+          endReason: 'Safety concern',
+          status: TripStatus.Completed,
+        }),
+      }),
+      { new: true, upsert: false },
+    );
+  });
+
+  it('ends a trip without a stop through the normal completion flow', async () => {
+    const existing = makeTrip();
+    db.findOrFail = jest.fn().mockResolvedValue(existing);
+    const completeTrip = jest
+      .spyOn(service as any, 'completeTrip')
+      .mockResolvedValue({ ...existing, status: TripStatus.Completed });
+
+    await service.endTrip(driver, tripId);
+
+    expect(completeTrip).toHaveBeenCalledWith(existing, driver);
   });
 
   it('keeps the trip active when no fresh driver endpoint is available', async () => {
@@ -862,6 +969,64 @@ describe('RidesService early rider trip completion', () => {
     ).rejects.toThrow('Current driver location is unavailable');
     expect(paymentService.chargeUser).not.toHaveBeenCalled();
     expect(db.trips.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('prevents the driver from ending a trip before its scheduled stop', async () => {
+    const trip = {
+      ...makeTrip(),
+      tripStops: [
+        {
+          status: TripStopStatus.Pending,
+          to: { coordinates: [9.1, 7.4], type: 'Point' },
+          toAddress: 'Stop address',
+        },
+      ],
+    };
+    db.findOrFail = jest.fn().mockResolvedValue(trip);
+
+    await expect(service.endTrip(driver, tripId)).rejects.toThrow(
+      'complete the scheduled stop before ending the trip',
+    );
+    expect(paymentService.chargeUser).not.toHaveBeenCalled();
+  });
+
+  it('completes the pending stop and broadcasts the updated trip', async () => {
+    const trip = {
+      ...makeTrip(),
+      tripStops: [
+        {
+          status: TripStopStatus.Pending,
+          to: { coordinates: [9.1, 7.4], type: 'Point' },
+          toAddress: 'Stop address',
+        },
+      ],
+    };
+    const updatedTrip = {
+      ...trip,
+      tripStops: [{ ...trip.tripStops[0], status: TripStopStatus.Completed }],
+    };
+    db.findOrFail = jest.fn().mockResolvedValue(trip);
+    db.findAndUpdateOrFail = jest.fn().mockResolvedValue(updatedTrip);
+
+    await expect(service.completeTripStop(driver, tripId)).resolves.toBe(
+      updatedTrip,
+    );
+    expect(db.findAndUpdateOrFail).toHaveBeenCalledWith(
+      db.trips,
+      { _id: tripId, driver: ownerId, status: TripStatus.InProgress },
+      { $set: { 'tripStops.0.status': TripStopStatus.Completed } },
+      expect.objectContaining({ options: { new: true, upsert: false } }),
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      rider,
+      'TripInProgress',
+      updatedTrip,
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      driver,
+      'TripInProgress',
+      updatedTrip,
+    );
   });
 });
 

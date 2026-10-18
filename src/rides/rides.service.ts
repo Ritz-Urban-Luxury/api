@@ -162,10 +162,8 @@ export class RidesService implements OnModuleInit {
     }
   }
 
-  async advancePlayReviewTrip(user: UserDocument, tripId: string) {
-    this.assertReusableRiderReviewAccount(user);
-
-    const trip = await this.db.trips
+  private findPlayReviewTrip(user: UserDocument, tripId: string) {
+    return this.db.trips
       .findOne({
         _id: tripId,
         user: user.id,
@@ -173,23 +171,53 @@ export class RidesService implements OnModuleInit {
         deleted: { $ne: true },
       })
       .populate('driver');
+  }
+
+  async advancePlayReviewTrip(user: UserDocument, tripId: string) {
+    this.assertReusableRiderReviewAccount(user);
+
+    const trip = await this.findPlayReviewTrip(user, tripId);
 
     if (!trip || !trip.driver) {
       throw new NotFoundException('review trip not found');
     }
 
     const driver = trip.driver as UserDocument;
-    switch (trip.status) {
-      case TripStatus.Started:
-        return this.annouceArrival(driver, tripId);
-      case TripStatus.DriverArrived:
-        return this.startTrip(driver, tripId);
-      case TripStatus.InProgress:
-        return this.endTrip(driver, tripId);
-      case TripStatus.Completed:
-        return trip;
-      default:
-        throw new BadRequestException('review trip cannot be advanced');
+    const startingStatus = trip.status;
+
+    try {
+      switch (startingStatus) {
+        case TripStatus.Started:
+          return await this.annouceArrival(driver, tripId);
+        case TripStatus.DriverArrived:
+          return await this.startTrip(driver, tripId);
+        case TripStatus.InProgress:
+          if (
+            trip.tripStops?.some(
+              (stop) => stop.status !== TripStopStatus.Completed,
+            )
+          ) {
+            return await this.completeTripStop(driver, tripId);
+          }
+          return await this.endTrip(driver, tripId);
+        case TripStatus.Completed:
+          return trip;
+        default:
+          throw new BadRequestException('review trip cannot be advanced');
+      }
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+
+      // Two mounted clients or delayed timers can request the same demo phase.
+      // If another request already moved the trip forward, return that state.
+      const currentTrip = await this.findPlayReviewTrip(user, tripId);
+      if (currentTrip?.driver && currentTrip.status !== startingStatus) {
+        return currentTrip;
+      }
+
+      throw error;
     }
   }
 
@@ -754,9 +782,10 @@ export class RidesService implements OnModuleInit {
           },
         })
         .populate('driver'),
-      GeolocationService.getRouteSummary(
+      GeolocationService.getRouteSummaryWithStops(
         [payload.fromLat, payload.fromLon],
         [payload.toLat, payload.toLon],
+        (payload.stops || []).map((stop) => [stop.toLat, stop.toLon]),
       ),
     ]);
     const { distance } = route;
@@ -1118,7 +1147,10 @@ export class RidesService implements OnModuleInit {
             ride: eligibleRide,
             driver,
             rideCategory: payload.type,
-            stops: (payload.stops || []).map((stop) => ({
+            meta: {
+              bookedStopsIncludedInFare: (payload.stops?.length || 0) > 0,
+            },
+            tripStops: (payload.stops || []).map((stop) => ({
               to: { type: 'Point', coordinates: [stop.toLat, stop.toLon] },
               toAddress: stop.toAddress,
             })),
@@ -1188,13 +1220,6 @@ export class RidesService implements OnModuleInit {
     }
 
     if (existing.status === TripStatus.InProgress) {
-      const rider = existing.user as UserDocument;
-      if (String(rider.id) !== String(user.id)) {
-        throw new BadRequestException(
-          'Only the rider can end an in-progress trip early',
-        );
-      }
-
       return this.endTripEarly(user, existing, reason);
     }
 
@@ -1353,6 +1378,9 @@ export class RidesService implements OnModuleInit {
     if (payload.stops) {
       trip = await this.updateTripStops(user, tripId, payload.stops);
     }
+    if (payload.completeStop) {
+      trip = await this.completeTripStop(user, tripId);
+    }
 
     if (!trip) {
       throw new BadRequestException('trip not updated');
@@ -1456,11 +1484,64 @@ export class RidesService implements OnModuleInit {
       },
     );
 
+    if (
+      (trip.tripStops || []).some(
+        (stop) => stop.status !== TripStopStatus.Completed,
+      )
+    ) {
+      throw new BadRequestException(
+        'complete the scheduled stop before ending the trip',
+      );
+    }
+
     return this.completeTrip(trip, driver);
   }
 
+  async completeTripStop(driver: UserDocument, tripId: string) {
+    const trip = await this.db.findOrFail<TripDocument>(this.db.trips, {
+      _id: tripId,
+      driver: driver.id,
+      status: TripStatus.InProgress,
+    });
+    const stopIndex = (trip.tripStops || []).findIndex(
+      (stop) => stop.status !== TripStopStatus.Completed,
+    );
+
+    if (stopIndex < 0) {
+      throw new BadRequestException('trip has no pending stop');
+    }
+
+    const updatedTrip = await this.db.findAndUpdateOrFail<TripDocument>(
+      this.db.trips,
+      { _id: trip.id, driver: driver.id, status: TripStatus.InProgress },
+      {
+        $set: {
+          [`tripStops.${stopIndex}.status`]: TripStopStatus.Completed,
+        },
+      },
+      {
+        populate: [{ path: 'user' }, { path: 'driver' }],
+        options: { upsert: false, new: true },
+        error: new NotFoundException('trip not found'),
+      },
+    );
+
+    this.websocket.emitToUser(
+      updatedTrip.user as UserDocument,
+      'TripInProgress',
+      updatedTrip,
+    );
+    this.websocket.emitToUser(
+      updatedTrip.driver as UserDocument,
+      'TripInProgress',
+      updatedTrip,
+    );
+
+    return updatedTrip;
+  }
+
   private async endTripEarly(
-    rider: UserDocument,
+    endedBy: UserDocument,
     trip: TripDocument,
     reason: string,
   ) {
@@ -1472,7 +1553,7 @@ export class RidesService implements OnModuleInit {
     if (isPlayReviewSynthetic) {
       return this.completeTrip(trip, driver, {
         endedAt,
-        endedBy: rider,
+        endedBy,
         endReason: reason,
         partialDistance: 0,
         partialDuration: 0,
@@ -1495,7 +1576,7 @@ export class RidesService implements OnModuleInit {
       endedAt.getTime() - recordedAt.getTime() > EARLY_END_LOCATION_MAX_AGE_MS
     ) {
       throw new BadRequestException(
-        'Current driver location is unavailable. Please try again shortly or ask the driver to end the trip.',
+        'Current driver location is unavailable. Please try again shortly.',
       );
     }
 
@@ -1520,7 +1601,7 @@ export class RidesService implements OnModuleInit {
 
     return this.completeTrip(trip, driver, {
       endedAt,
-      endedBy: rider,
+      endedBy,
       endLocation: {
         type: 'Point',
         coordinates: [latitude, longitude],
@@ -1547,7 +1628,10 @@ export class RidesService implements OnModuleInit {
     let paymentError: string;
     let distance = options.partialDistance ?? trip.distance;
 
-    if (options.partialDistance === undefined) {
+    if (
+      options.partialDistance === undefined &&
+      trip.meta?.bookedStopsIncludedInFare !== true
+    ) {
       trip.tripStops.forEach((stop) => {
         distance += stop?.distance || 0;
       });
@@ -1700,13 +1784,19 @@ export class RidesService implements OnModuleInit {
     }
 
     const event = paymentSucceeded ? 'TripEnded' : 'PaymentFailed';
+    const endedByDriver =
+      options.endedBy && String(options.endedBy.id) === String(driver.id);
 
     this.websocket.emitToUser(user, event, trip);
     this.websocket.emitToUser(driver, event, trip);
 
     if (paymentSucceeded && !isPlayReviewSynthetic) {
       this.push.sendToUser(user, {
-        title: options.endedBy ? 'Trip ended early' : 'Trip completed',
+        title: endedByDriver
+          ? 'Trip ended by driver'
+          : options.endedBy
+          ? 'Trip ended early'
+          : 'Trip completed',
         body: options.endedBy
           ? 'Your final fare was calculated for where the trip ended'
           : 'Thanks for riding with Ritz',
@@ -1717,8 +1807,14 @@ export class RidesService implements OnModuleInit {
         },
       });
       this.push.sendToUser(driver, {
-        title: options.endedBy ? 'Trip ended by rider' : 'Trip completed',
-        body: options.endedBy
+        title: endedByDriver
+          ? 'Trip ended early'
+          : options.endedBy
+          ? 'Trip ended by rider'
+          : 'Trip completed',
+        body: endedByDriver
+          ? 'The final fare was calculated for where the trip ended'
+          : options.endedBy
           ? 'The rider ended this trip early'
           : 'Trip finished successfully',
         app: 'driver',

@@ -92,6 +92,9 @@ export class RidesController {
     const route = await GeolocationService.getDrivingRoute(
       [Number(payload.fromLat), Number(payload.fromLon)],
       [Number(payload.toLat), Number(payload.toLon)],
+      payload.stopLat !== undefined && payload.stopLon !== undefined
+        ? [[Number(payload.stopLat), Number(payload.stopLon)]]
+        : [],
     );
 
     return Response.json('driving route', route);
