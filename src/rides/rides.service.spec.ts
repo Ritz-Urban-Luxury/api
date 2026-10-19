@@ -498,8 +498,12 @@ describe('RidesService Play reviewer sandbox', () => {
       }),
       { new: true, upsert: false },
     );
-    expect(db.rides.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: rideId, 'specs.synthetic': true }),
+    expect(db.rides.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalStatus: RideApprovalStatus.Approved,
+        driver: ownerId,
+        'specs.synthetic': true,
+      }),
       { $set: { status: RideStatus.Online } },
     );
     expect(websocket.emitToUser).toHaveBeenCalledWith(
@@ -508,6 +512,27 @@ describe('RidesService Play reviewer sandbox', () => {
       expect.objectContaining({
         trackingId: expect.stringMatching(/^review-/),
       }),
+    );
+  });
+
+  it('repairs a stale busy review vehicle before generating a demo offer', async () => {
+    db.trips.findOne.mockResolvedValue(null);
+    db.rides.findOne.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Online,
+    });
+    db.users.findOne.mockResolvedValue(riderReviewer);
+
+    await expect(
+      service.createReviewDemoOffer(driverReviewer),
+    ).resolves.toMatchObject({ trackingId: expect.stringMatching(/^review-/) });
+
+    expect(db.rides.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        driver: ownerId,
+        'specs.synthetic': true,
+      }),
+      { $set: { status: RideStatus.Online } },
     );
   });
 

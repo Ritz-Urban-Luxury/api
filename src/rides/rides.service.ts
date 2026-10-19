@@ -265,10 +265,6 @@ export class RidesService implements OnModuleInit {
       deleted: { $ne: true },
     });
     if (activeTrip) {
-      const rideId =
-        typeof activeTrip.ride === 'string'
-          ? activeTrip.ride
-          : activeTrip.ride?.id;
       const cancelledTrip = await this.db.trips.findOneAndUpdate(
         {
           _id: activeTrip.id,
@@ -287,17 +283,6 @@ export class RidesService implements OnModuleInit {
         { new: true, upsert: false },
       );
 
-      if (rideId) {
-        await this.db.rides.updateOne(
-          {
-            _id: rideId,
-            driver: driver.id,
-            'specs.synthetic': true,
-          },
-          { $set: { status: RideStatus.Online } },
-        );
-      }
-
       if (cancelledTrip) {
         this.websocket.emitToUser(driver, 'TripCancelled', cancelledTrip);
         this.websocket.emitToUser(
@@ -307,6 +292,20 @@ export class RidesService implements OnModuleInit {
         );
       }
     }
+
+    // A previous reviewer session can leave its reusable vehicle Busy even
+    // when the synthetic trip is no longer queryable. Generating a demo is an
+    // explicit request to reset that isolated reviewer state.
+    await this.db.rides.updateMany(
+      {
+        approvalStatus: RideApprovalStatus.Approved,
+        deleted: { $ne: true },
+        driver: driver.id,
+        'specs.synthetic': true,
+        type: { $ne: RideType.Hire },
+      },
+      { $set: { status: RideStatus.Online } },
+    );
 
     const riderAccount = getPlayReviewAccounts().find(
       (candidate) => candidate.kind === 'rider',
