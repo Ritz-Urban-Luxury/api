@@ -259,6 +259,7 @@ describe('RidesService Play reviewer sandbox', () => {
       trips: {
         create: jest.fn(),
         findOne: jest.fn().mockResolvedValue(null),
+        findOneAndUpdate: jest.fn(),
       },
       userBlocks: {
         exists: jest.fn().mockResolvedValue(false),
@@ -444,28 +445,70 @@ describe('RidesService Play reviewer sandbox', () => {
     expect(websocket.emitToUser).not.toHaveBeenCalled();
   });
 
-  it('restores an unfinished synthetic trip for the review driver', async () => {
-    const syntheticTrip = {
-      id: 'review-trip-id',
-      meta: { playReviewSynthetic: true },
-      status: TripStatus.InProgress,
-    };
+  it('keeps unfinished synthetic trips hidden until the reviewer generates a demo', async () => {
     const query = { populate: jest.fn() };
     query.populate
       .mockReturnValueOnce(query)
       .mockReturnValueOnce(query)
-      .mockResolvedValueOnce(syntheticTrip);
+      .mockResolvedValueOnce(null);
     db.trips.findOne.mockReturnValue(query);
 
-    await expect(service.getOngoingTrip(driverReviewer)).resolves.toBe(
-      syntheticTrip,
-    );
+    await expect(service.getOngoingTrip(driverReviewer)).resolves.toBeNull();
 
     expect(db.trips.findOne).toHaveBeenCalledWith({
       $or: [{ user: ownerId }, { driver: ownerId }],
       deleted: { $ne: true },
+      'meta.playReviewSynthetic': { $ne: true },
       status: { $nin: expect.any(Array) },
     });
+  });
+
+  it('resets an unfinished synthetic trip before generating a new demo offer', async () => {
+    const unfinishedTrip = {
+      driver: ownerId,
+      id: 'unfinished-review-trip',
+      meta: { playReviewSynthetic: true },
+      ride: rideId,
+      status: TripStatus.InProgress,
+      user: riderId,
+    };
+    const cancelledTrip = {
+      ...unfinishedTrip,
+      status: TripStatus.Cancelled,
+    };
+    db.trips.findOne.mockResolvedValue(unfinishedTrip);
+    db.trips.findOneAndUpdate.mockResolvedValue(cancelledTrip);
+    db.rides.findOne.mockResolvedValue({
+      ...syntheticRide,
+      status: RideStatus.Online,
+    });
+    db.users.findOne.mockResolvedValue(riderReviewer);
+
+    await expect(
+      service.createReviewDemoOffer(driverReviewer),
+    ).resolves.toMatchObject({ trackingId: expect.stringMatching(/^review-/) });
+
+    expect(db.trips.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: unfinishedTrip.id,
+        'meta.playReviewSynthetic': true,
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: TripStatus.Cancelled }),
+      }),
+      { new: true, upsert: false },
+    );
+    expect(db.rides.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: rideId, 'specs.synthetic': true }),
+      { $set: { status: RideStatus.Online } },
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      driverReviewer,
+      'RideRequest',
+      expect.objectContaining({
+        trackingId: expect.stringMatching(/^review-/),
+      }),
+    );
   });
 
   it('accepts a generated offer as a zero-charge synthetic trip', async () => {

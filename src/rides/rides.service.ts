@@ -260,13 +260,52 @@ export class RidesService implements OnModuleInit {
 
     const activeTrip = await this.db.trips.findOne({
       driver: driver.id,
+      'meta.playReviewSynthetic': true,
       status: { $nin: InactiveTripStatuses },
       deleted: { $ne: true },
     });
     if (activeTrip) {
-      throw new BadRequestException(
-        'Complete or cancel the current demo trip before generating another',
+      const rideId =
+        typeof activeTrip.ride === 'string'
+          ? activeTrip.ride
+          : activeTrip.ride?.id;
+      const cancelledTrip = await this.db.trips.findOneAndUpdate(
+        {
+          _id: activeTrip.id,
+          driver: driver.id,
+          'meta.playReviewSynthetic': true,
+          status: { $nin: InactiveTripStatuses },
+        },
+        {
+          $set: {
+            cancellationReason: 'Reset before generating a new demo ride',
+            cancelledBy: driver.id,
+            endedAt: new Date(),
+            status: TripStatus.Cancelled,
+          },
+        },
+        { new: true, upsert: false },
       );
+
+      if (rideId) {
+        await this.db.rides.updateOne(
+          {
+            _id: rideId,
+            driver: driver.id,
+            'specs.synthetic': true,
+          },
+          { $set: { status: RideStatus.Online } },
+        );
+      }
+
+      if (cancelledTrip) {
+        this.websocket.emitToUser(driver, 'TripCancelled', cancelledTrip);
+        this.websocket.emitToUser(
+          activeTrip.user as UserDocument | string,
+          'TripCancelled',
+          cancelledTrip,
+        );
+      }
     }
 
     const riderAccount = getPlayReviewAccounts().find(
@@ -670,6 +709,9 @@ export class RidesService implements OnModuleInit {
       status: { $nin: InactiveTripStatuses },
       deleted: { $ne: true },
     };
+    if (getPlayReviewAccount(user.email)?.kind === 'driver') {
+      tripQuery['meta.playReviewSynthetic'] = { $ne: true };
+    }
 
     const trip = await this.db.trips
       .findOne(tripQuery)
