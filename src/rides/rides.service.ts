@@ -670,9 +670,6 @@ export class RidesService implements OnModuleInit {
       status: { $nin: InactiveTripStatuses },
       deleted: { $ne: true },
     };
-    if (getPlayReviewAccount(user.email)?.kind === 'driver') {
-      tripQuery['meta.playReviewSynthetic'] = { $ne: true };
-    }
 
     const trip = await this.db.trips
       .findOne(tripQuery)

@@ -207,6 +207,31 @@ describe('WebsocketGateway', () => {
       );
     });
 
+    it('keeps processing legacy in-progress trips without a destination', async () => {
+      const trip = {
+        id: 'legacy-trip-id',
+        ride: ride.id,
+        status: TripStatus.InProgress,
+        user: rider,
+      } as TripDocument;
+      const populate = jest.fn().mockResolvedValue(trip);
+      findOne.mockReturnValue({ populate });
+      jest.spyOn(gateway, 'emitToUser').mockResolvedValue(undefined);
+
+      await expect(
+        gateway.updateRideLocation(driver, {
+          lat: 9.067114,
+          lon: 7.397462,
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(findOneAndUpdate).toHaveBeenCalled();
+      expect(updateOne).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'ride status update skipped — trip legacy-trip-id has no valid next destination',
+      );
+    });
+
     it('drops stale location sequences', async () => {
       const trip = {
         id: 'trip-id',

@@ -198,7 +198,7 @@ export const TripSchema = SchemaFactory.createForClass(Trip);
 TripSchema.index({ deleted: 1, createdAt: 1, status: 1 });
 
 TripSchema.virtual('nextDestination').get(function getNextDestination() {
-  const res = this.tripStops.find(
+  const res = this.tripStops?.find(
     (stop) => stop.status !== TripStopStatus.Completed,
   ) || { to: this.to, toAddress: this.toAddress };
 

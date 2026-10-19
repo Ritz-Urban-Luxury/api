@@ -107,10 +107,19 @@ export class WebsocketGateway {
     coords: [number, number],
   ) {
     if (trip?.status === TripStatus.InProgress) {
-      const distance = Util.calculateDistance(
-        coords,
-        trip.nextDestination.to.coordinates,
-      );
+      const destinationCoordinates = trip.nextDestination?.to?.coordinates;
+      if (
+        !Array.isArray(destinationCoordinates) ||
+        destinationCoordinates.length < 2 ||
+        !destinationCoordinates.every(Number.isFinite)
+      ) {
+        this.logger.warn(
+          `ride status update skipped — trip ${trip.id} has no valid next destination`,
+        );
+        return;
+      }
+
+      const distance = Util.calculateDistance(coords, destinationCoordinates);
 
       const hasPendingStop = trip.tripStops?.some(
         (stop) => stop.status !== TripStopStatus.Completed,

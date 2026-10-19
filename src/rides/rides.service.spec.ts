@@ -444,6 +444,30 @@ describe('RidesService Play reviewer sandbox', () => {
     expect(websocket.emitToUser).not.toHaveBeenCalled();
   });
 
+  it('restores an unfinished synthetic trip for the review driver', async () => {
+    const syntheticTrip = {
+      id: 'review-trip-id',
+      meta: { playReviewSynthetic: true },
+      status: TripStatus.InProgress,
+    };
+    const query = { populate: jest.fn() };
+    query.populate
+      .mockReturnValueOnce(query)
+      .mockReturnValueOnce(query)
+      .mockResolvedValueOnce(syntheticTrip);
+    db.trips.findOne.mockReturnValue(query);
+
+    await expect(service.getOngoingTrip(driverReviewer)).resolves.toBe(
+      syntheticTrip,
+    );
+
+    expect(db.trips.findOne).toHaveBeenCalledWith({
+      $or: [{ user: ownerId }, { driver: ownerId }],
+      deleted: { $ne: true },
+      status: { $nin: expect.any(Array) },
+    });
+  });
+
   it('accepts a generated offer as a zero-charge synthetic trip', async () => {
     const trackingId = 'review-offer-id';
     cache.get.mockImplementation((key: string) =>
