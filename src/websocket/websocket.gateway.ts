@@ -30,7 +30,7 @@ import {
   WebsocketEventType,
 } from './types';
 
-@WebSocketGateway({ transports: ['websocket'] })
+@WebSocketGateway({ transports: ['polling', 'websocket'] })
 @UseFilters(WSValidationFilter)
 @UsePipes(ValidationPipe)
 export class WebsocketGateway {

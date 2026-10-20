@@ -1,3 +1,4 @@
+import { GATEWAY_OPTIONS } from '@nestjs/websockets/constants';
 import { AuthenticationService } from '../authentication';
 import { DatabaseService } from '../database/database.service';
 import { RideStatus, RidesDocument } from '../database/schemas/rides.schema';
@@ -33,6 +34,14 @@ describe('WebsocketGateway', () => {
     jest.clearAllMocks();
     findOneAndUpdate.mockResolvedValue(ride);
     gateway = new WebsocketGateway({} as AuthenticationService, logger, db);
+  });
+
+  it('supports polling when a websocket handshake cannot be established', () => {
+    expect(Reflect.getMetadata(GATEWAY_OPTIONS, WebsocketGateway)).toEqual(
+      expect.objectContaining({
+        transports: ['polling', 'websocket'],
+      }),
+    );
   });
 
   describe('updateRideLocation', () => {
