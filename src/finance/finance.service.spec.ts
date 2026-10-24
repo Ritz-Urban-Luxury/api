@@ -185,3 +185,105 @@ describe('FinanceService.prepareDriverAccountClosurePayout', () => {
     expect(db.bankAccounts.findOne).not.toHaveBeenCalled();
   });
 });
+
+describe('FinanceService.resolveAndSaveBankAccount', () => {
+  const driverId = '64a000000000000000000001';
+  const driver = {
+    firstName: 'Test',
+    id: driverId,
+    lastName: 'Driver',
+  } as never;
+  let service: FinanceService;
+  let db: any;
+
+  beforeEach(() => {
+    db = {
+      bankAccounts: {
+        findOneAndUpdate: jest.fn().mockImplementation((_filter, update) =>
+          Promise.resolve({
+            id: '64a000000000000000000002',
+            ...update.$set,
+          }),
+        ),
+        updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      },
+      users: {
+        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      },
+    };
+    service = Object.create(FinanceService.prototype);
+    Object.assign(service as any, {
+      db,
+      paystack: {
+        resolveBankAccount: jest.fn().mockResolvedValue({
+          account_name: 'TEST DRIVER',
+        }),
+      },
+    });
+  });
+
+  it('makes a matching verified account the current payout account', async () => {
+    const result = await service.resolveAndSaveBankAccount(driver, {
+      accountNumber: '0123456789',
+      bankCode: '058',
+      bankName: 'GTBank',
+    });
+
+    expect(db.bankAccounts.updateMany).toHaveBeenCalledWith(
+      {
+        _id: { $ne: '64a000000000000000000002' },
+        user: driverId,
+        deleted: { $ne: true },
+      },
+      { $set: { isDefault: false } },
+    );
+    expect(db.bankAccounts.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        user: driverId,
+        bankCode: '058',
+        accountNumber: '0123456789',
+      },
+      expect.objectContaining({
+        $set: expect.objectContaining({ isDefault: true }),
+      }),
+      { new: true, upsert: true },
+    );
+    expect(db.users.updateOne).toHaveBeenCalledWith(
+      { _id: driverId },
+      {
+        $set: {
+          accountNumber: '0123456789',
+          bank: 'GTBank',
+          bankHolderName: 'TEST DRIVER',
+        },
+      },
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        accountNumber: '******6789',
+        isDefault: true,
+      }),
+    );
+  });
+
+  it('does not replace the current payout account when the name needs review', async () => {
+    (service as any).paystack.resolveBankAccount.mockResolvedValue({
+      account_name: 'A DIFFERENT PERSON',
+    });
+
+    const result = await service.resolveAndSaveBankAccount(driver, {
+      accountNumber: '0123456789',
+      bankCode: '058',
+      bankName: 'GTBank',
+    });
+
+    expect(db.bankAccounts.updateMany).not.toHaveBeenCalled();
+    expect(db.users.updateOne).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        accountNumber: '******6789',
+        nameMatchStatus: BankNameMatchStatus.Review,
+      }),
+    );
+  });
+});

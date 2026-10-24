@@ -237,11 +237,35 @@ export class FinanceService {
           resolvedAccountName: resolved.account_name,
           nameMatchStatus,
           verifiedAt: new Date(),
+          ...(nameMatchStatus === BankNameMatchStatus.Matched
+            ? { isDefault: true }
+            : {}),
           deleted: false,
         },
       },
       { new: true, upsert: true },
     );
+
+    if (nameMatchStatus === BankNameMatchStatus.Matched) {
+      await this.db.bankAccounts.updateMany(
+        {
+          _id: { $ne: account.id },
+          user: user.id,
+          deleted: { $ne: true },
+        },
+        { $set: { isDefault: false } },
+      );
+      await this.db.users.updateOne(
+        { _id: user.id },
+        {
+          $set: {
+            accountNumber,
+            bank: payload.bankName,
+            bankHolderName: resolved.account_name,
+          },
+        },
+      );
+    }
 
     return this.publicBankAccount(account);
   }
