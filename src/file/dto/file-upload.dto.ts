@@ -1,5 +1,7 @@
 import {
+  IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsString,
   ValidationArguments,
   ValidationOptions,
@@ -7,22 +9,27 @@ import {
   registerDecorator,
 } from 'class-validator';
 
+export enum FileUploadPurpose {
+  DriverLicense = 'driver-license',
+}
+
 @ValidatorConstraint()
 class IsValidFileDataConstraint {
-  validate(value: string) {
+  validate(value: string, validationArguments: ValidationArguments) {
     if (!value || typeof value !== 'string') {
       return false;
     }
 
-    const [mime] = value.split('data:').pop().split(';');
+    const match = /^data:([^;,]+);base64,/.exec(value);
+    const mime = match?.[1]?.toLowerCase();
+    const payload = validationArguments.object as FileUploadDTO;
+    const allowedMimeTypes = ['image/png', 'image/jpeg'];
 
-    return [
-      'image/png',
-      'image/jpeg',
-      // 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      // 'application/pdf',
-      // 'text/csv',
-    ].includes(mime);
+    if (payload.purpose === FileUploadPurpose.DriverLicense) {
+      allowedMimeTypes.push('application/pdf');
+    }
+
+    return Boolean(mime && allowedMimeTypes.includes(mime));
   }
 
   defaultMessage(validationArguments?: ValidationArguments) {
@@ -50,4 +57,8 @@ export class FileUploadDTO {
   @IsValidFileData()
   @IsNotEmpty()
   data: string;
+
+  @IsEnum(FileUploadPurpose)
+  @IsOptional()
+  purpose?: FileUploadPurpose;
 }
