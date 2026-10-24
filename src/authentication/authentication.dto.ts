@@ -96,6 +96,10 @@ export class RequestEmailOTPDTO {
   @IsNotEmpty()
   email: string;
 
+  @IsIn(['rider', 'driver'])
+  @IsOptional()
+  app?: 'rider' | 'driver';
+
   @IsString()
   @IsOptional()
   name?: string;

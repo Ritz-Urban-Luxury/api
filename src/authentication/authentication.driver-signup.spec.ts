@@ -195,4 +195,47 @@ describe('AuthenticationService driver signup', () => {
       { phoneNumber: '2347000000001' },
     );
   });
+
+  it('creates the fixed OTP without sending email for the staging test email', async () => {
+    process.env.APP_ENV = 'staging';
+    process.env.DRIVER_REGISTRATION_TEST_OTP = '2468';
+    const notificationService = { sendEmail: jest.fn(), sendSMS: jest.fn() };
+    const logger = { error: jest.fn(), log: jest.fn(), warn: jest.fn() };
+    const db = {
+      authTokens: {
+        create: jest.fn().mockResolvedValue({}),
+        findOne: jest.fn().mockResolvedValue(null),
+      },
+    };
+    const service = new AuthenticationService(
+      notificationService as never,
+      logger as never,
+      {} as never,
+      {} as never,
+      db as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.requestEmailOtp({
+      app: 'driver',
+      email: 'TEST@ritzurbanluxury.com',
+    });
+
+    expect(notificationService.sendEmail).not.toHaveBeenCalled();
+    expect(db.authTokens.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: '2468',
+        meta: {
+          email: 'test@ritzurbanluxury.com',
+          type: 'email-otp',
+        },
+      }),
+    );
+    expect(logger.log).toHaveBeenCalledWith(
+      'Driver registration test email OTP requested',
+      { email: 'test@ritzurbanluxury.com' },
+    );
+  });
 });

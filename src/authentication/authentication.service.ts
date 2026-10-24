@@ -186,8 +186,48 @@ export class AuthenticationService {
   }
 
   async requestEmailOtp(payload: RequestEmailOTPDTO) {
-    const { email: _email, name } = payload;
+    const { app = 'rider', email: _email, name } = payload;
     const email = _email.toLowerCase().trim();
+    const registrationTestAccount = this.getDriverRegistrationTestAccount();
+    const isRegistrationTestEmail =
+      email === config().driverRegistrationTest.email;
+
+    if (
+      isRegistrationTestEmail &&
+      (!registrationTestAccount || app !== 'driver')
+    ) {
+      throw new ServiceUnavailableException(
+        'Driver registration test account is only available on staging',
+      );
+    }
+
+    if (registrationTestAccount && isRegistrationTestEmail) {
+      const existingTestToken = await this.db.authTokens.findOne({
+        'meta.email': email,
+        'meta.type': 'email-otp',
+        token: registrationTestAccount.otp,
+        deleted: { $ne: true },
+        isUsed: { $ne: true },
+        expiresAt: { $gte: new Date() },
+      });
+
+      if (!existingTestToken) {
+        await this.db.authTokens.create({
+          expiresAt: moment().add(10, 'minute').toDate(),
+          token: registrationTestAccount.otp,
+          meta: {
+            email,
+            type: 'email-otp',
+          },
+        });
+      }
+
+      this.logger.log('Driver registration test email OTP requested', {
+        email,
+      });
+      return;
+    }
+
     const reviewerAccount = this.getReviewerAccount(email);
     const tokenType = reviewerAccount
       ? 'play-review-email-otp-request'
