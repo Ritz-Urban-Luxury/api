@@ -12,6 +12,7 @@ describe('validateEnvironmentSafety', () => {
       PAYSTACK_SECRET_KEY: 'sk_test_example',
     };
     delete process.env.ALLOW_PRODUCTION_DATABASE_IN_NON_PRODUCTION;
+    delete process.env.DRIVER_REGISTRATION_TEST_OTP;
   });
 
   afterAll(() => {
@@ -60,6 +61,27 @@ describe('validateEnvironmentSafety', () => {
 
     expect(() => validateEnvironmentSafety()).toThrow(
       'PAYSTACK_MODE=live requires a live Paystack secret key',
+    );
+  });
+
+  it('accepts a four-digit driver registration test OTP only in staging', () => {
+    process.env.APP_ENV = 'staging';
+    process.env.DATABASE_URL = 'mongodb://localhost:27017/rul-staging';
+    process.env.DRIVER_REGISTRATION_TEST_OTP = '2468';
+
+    expect(() => validateEnvironmentSafety()).not.toThrow();
+
+    process.env.DRIVER_REGISTRATION_TEST_OTP = '12345';
+    expect(() => validateEnvironmentSafety()).toThrow(
+      'DRIVER_REGISTRATION_TEST_OTP must contain 4 digits',
+    );
+  });
+
+  it('rejects the driver registration test OTP outside staging', () => {
+    process.env.DRIVER_REGISTRATION_TEST_OTP = '2468';
+
+    expect(() => validateEnvironmentSafety()).toThrow(
+      'DRIVER_REGISTRATION_TEST_OTP can only be configured in staging',
     );
   });
 });

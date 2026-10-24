@@ -18,6 +18,7 @@ export function validateEnvironmentSafety(): void {
   const mode = runtime.paystack.mode as PaystackMode;
   const dbName = databaseName(runtime.database.url);
   const secret = runtime.paystack.secretKey?.trim() || '';
+  const driverRegistrationTestOtp = runtime.driverRegistrationTest.otp;
 
   if (!runtime.database.url) {
     throw new Error('DATABASE_URL is required');
@@ -50,5 +51,13 @@ export function validateEnvironmentSafety(): void {
     throw new Error(
       `Refusing to start production against non-production database "${dbName}"`,
     );
+  }
+  if (driverRegistrationTestOtp && environment !== 'staging') {
+    throw new Error(
+      'DRIVER_REGISTRATION_TEST_OTP can only be configured in staging',
+    );
+  }
+  if (driverRegistrationTestOtp && !/^\d{4}$/.test(driverRegistrationTestOtp)) {
+    throw new Error('DRIVER_REGISTRATION_TEST_OTP must contain 4 digits');
   }
 }

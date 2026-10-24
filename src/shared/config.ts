@@ -137,6 +137,11 @@ const config = () => {
     referralBonusAmount: Number.parseFloat(
       process.env.REFERRAL_BONUS_AMOUNT || '7500',
     ),
+    driverRegistrationTest: {
+      email: 'test@ritzurbanluxury.com',
+      phoneNumber: '07000000001',
+      otp: process.env.DRIVER_REGISTRATION_TEST_OTP?.trim(),
+    },
     playReview: {
       rider: {
         email: process.env.PLAY_RIDER_REVIEW_EMAIL,

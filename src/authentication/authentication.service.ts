@@ -93,6 +93,22 @@ export class AuthenticationService {
   async requestPhoneOtp(payload: RequestPhoneOTPDTO) {
     const { phoneNumber, app = 'rider' } = payload;
     const phone = Util.formatPhoneNumber(phoneNumber, 'NG');
+    const registrationTestAccount = this.getDriverRegistrationTestAccount();
+    const registrationTestPhone = Util.formatPhoneNumber(
+      config().driverRegistrationTest.phoneNumber,
+      'NG',
+    );
+    const isRegistrationTestPhone = phone === registrationTestPhone;
+
+    if (
+      isRegistrationTestPhone &&
+      (!registrationTestAccount || app !== 'driver')
+    ) {
+      throw new ServiceUnavailableException(
+        'Driver registration test account is only available on staging',
+      );
+    }
+
     const reviewerAccount = this.getReviewerAccountByPhone(phone, app);
     const tokenType = reviewerAccount
       ? 'play-review-phone-otp-request'
@@ -105,6 +121,21 @@ export class AuthenticationService {
       },
     });
     if (!previousAuthToken) {
+      if (registrationTestAccount && isRegistrationTestPhone) {
+        await this.db.authTokens.create({
+          expiresAt: moment().add(10, 'minute').toDate(),
+          token: registrationTestAccount.otp,
+          meta: {
+            phoneNumber: phone,
+            type: 'phone-otp',
+          },
+        });
+        this.logger.log('Driver registration test OTP requested', {
+          phoneNumber: phone,
+        });
+        return;
+      }
+
       if (reviewerAccount) {
         await this.db.authTokens.create({
           expiresAt: moment().add(1, 'day').toDate(),
@@ -222,6 +253,28 @@ export class AuthenticationService {
         (account) => account.email === normalizedEmail,
       ) || null
     );
+  }
+
+  private getDriverRegistrationTestAccount(): {
+    email: string;
+    otp: string;
+    phoneNumber: string;
+  } | null {
+    const runtime = config();
+    const otp = runtime.driverRegistrationTest.otp;
+
+    if (runtime.appEnvironment !== 'staging' || !otp || !/^\d{4}$/.test(otp)) {
+      return null;
+    }
+
+    return {
+      email: runtime.driverRegistrationTest.email,
+      otp,
+      phoneNumber: Util.formatPhoneNumber(
+        runtime.driverRegistrationTest.phoneNumber,
+        'NG',
+      ),
+    };
   }
 
   private getReviewerAccountByPhone(
@@ -601,7 +654,13 @@ export class AuthenticationService {
     return otp;
   }
 
-  async signUp(payload: SignupDTO, options: { isDriver?: boolean } = {}) {
+  async signUp(
+    payload: SignupDTO,
+    options: {
+      isDriver?: boolean;
+      testAccountPurpose?: TestAccountPurpose;
+    } = {},
+  ) {
     const isDriver = options.isDriver === true;
     const {
       oAuthIdentifier,
@@ -730,6 +789,12 @@ export class AuthenticationService {
       oAuthProvider,
       isDriver,
       ...(isDriver ? { isVerified: false } : {}),
+      ...(options.testAccountPurpose
+        ? {
+            isTestAccount: true,
+            testAccountPurpose: options.testAccountPurpose,
+          }
+        : {}),
     });
 
     await this.activityLedger.recordActivity({
@@ -747,6 +812,28 @@ export class AuthenticationService {
     const location = await this.locationsService.getActiveOrFail(
       payload.locationId,
     );
+    const registrationTestAccount = this.getDriverRegistrationTestAccount();
+    const normalizedEmail = payload.email.trim().toLowerCase();
+    const normalizedPhone = Util.formatPhoneNumber(payload.phoneNumber, 'NG');
+    const configuredTestEmail = config().driverRegistrationTest.email;
+    const configuredTestPhone = Util.formatPhoneNumber(
+      config().driverRegistrationTest.phoneNumber,
+      'NG',
+    );
+    const usesTestIdentity =
+      normalizedEmail === configuredTestEmail ||
+      normalizedPhone === configuredTestPhone;
+
+    if (
+      usesTestIdentity &&
+      (!registrationTestAccount ||
+        normalizedEmail !== registrationTestAccount.email ||
+        normalizedPhone !== registrationTestAccount.phoneNumber)
+    ) {
+      throw new BadRequestException(
+        'Use the configured staging registration test email and phone number together',
+      );
+    }
 
     return this.signUp(
       {
@@ -759,7 +846,12 @@ export class AuthenticationService {
         serviceLocation: String(location.id),
         vehiclesInFleet: payload.vehiclesInFleet,
       },
-      { isDriver: true },
+      {
+        isDriver: true,
+        ...(usesTestIdentity
+          ? { testAccountPurpose: TestAccountPurpose.QA }
+          : {}),
+      },
     );
   }
 
