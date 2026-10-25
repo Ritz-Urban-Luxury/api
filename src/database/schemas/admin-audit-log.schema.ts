@@ -8,6 +8,7 @@ import { UserDocument } from './user.schema';
 export type AdminAuditLogDocument = AdminAuditLog & Document;
 
 export enum AdminAuditAction {
+  AdminAccessRevoked = 'admin.access-revoked',
   TestAccountPurged = 'test-account.purged',
   UserPermanentlyDeleted = 'user.permanently-deleted',
   AppReviewDataReset = 'app-review-data.reset',
