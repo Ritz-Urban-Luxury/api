@@ -50,8 +50,28 @@ describe('FinanceService.listWalletTransactions', () => {
 
     expect(walletTransactions.find).toHaveBeenCalledWith({
       deleted: { $ne: true },
+      $nor: [
+        { providerMode: 'test' },
+        {
+          appEnvironment: {
+            $in: ['development', 'staging', 'test'],
+          },
+        },
+      ],
       type: WalletTransactionType.Debit,
     });
+    expect(walletTransactions.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $nor: [
+          { providerMode: 'test' },
+          {
+            appEnvironment: {
+              $in: ['development', 'staging', 'test'],
+            },
+          },
+        ],
+      }),
+    );
     expect(activities.find).not.toHaveBeenCalled();
     expect(result.docs).toEqual([
       expect.objectContaining({ id: 'wallet-1', source: 'wallet' }),

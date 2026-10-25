@@ -35,6 +35,7 @@ import {
 
 const toKobo = (amount: number) => Math.round(Number(amount || 0) * 100);
 const fromKobo = (amountKobo: number) => Math.round(amountKobo) / 100;
+const NON_PRODUCTION_APP_ENVIRONMENTS = ['development', 'staging', 'test'];
 
 @Injectable()
 export class FinanceService {
@@ -80,16 +81,31 @@ export class FinanceService {
     const productionUserFilter = testUserIds.length
       ? { user: { $nin: testUserIds } }
       : {};
+    // Keep test-provider top-ups and data written by non-production services
+    // out of the production admin finance view. Legacy rows without either
+    // marker remain visible because their environment cannot be established.
+    const productionWalletFilter = {
+      $nor: [
+        { providerMode: 'test' },
+        {
+          appEnvironment: {
+            $in: NON_PRODUCTION_APP_ENVIRONMENTS,
+          },
+        },
+      ],
+    };
+    const walletQuery = {
+      deleted: { $ne: true },
+      ...productionUserFilter,
+      ...productionWalletFilter,
+      ...(type ? { type } : {}),
+    };
 
     const [walletRows, paymentRows, walletCount, paymentCount] =
       await Promise.all([
         includeWallet
           ? this.db.walletTransactions
-              .find({
-                deleted: { $ne: true },
-                ...productionUserFilter,
-                ...(type ? { type } : {}),
-              })
+              .find(walletQuery)
               .populate(userPopulate)
               .sort({ createdAt: -1 })
               .limit(fetchLimit)
@@ -106,11 +122,7 @@ export class FinanceService {
               .limit(fetchLimit)
           : [],
         includeWallet
-          ? this.db.walletTransactions.countDocuments({
-              deleted: { $ne: true },
-              ...productionUserFilter,
-              ...(type ? { type } : {}),
-            })
+          ? this.db.walletTransactions.countDocuments(walletQuery)
           : 0,
         includePayments
           ? this.db.activities.countDocuments({
