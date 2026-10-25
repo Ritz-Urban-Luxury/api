@@ -21,6 +21,7 @@ import {
   UpdateUserDTO,
   UpsertPushTokenDTO,
 } from './dto/user.dto';
+import { ResubmitDriverApplicationDTO } from './dto/driver-review.dto';
 import { UserService } from './user.service';
 import { DriverOnboardingService } from './driver-onboarding.service';
 
@@ -60,6 +61,19 @@ export class UserController {
     await this.referralService.ensureInviteCode(user);
     const refreshed = await this.userService.getUserById(user.id);
     return Response.json('profile', refreshed || user);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('/me/driver-review/resubmit')
+  async resubmitDriverApplication(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: ResubmitDriverApplicationDTO,
+  ) {
+    const result = await this.userService.resubmitDriverApplication(
+      user,
+      payload,
+    );
+    return Response.json('driver application resubmitted', result);
   }
 
   @UseGuards(JwtGuard)

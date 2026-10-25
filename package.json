@@ -14,6 +14,7 @@
     "start:prod": "node dist/main",
     "backfill:driver-verification": "ts-node -r dotenv/config src/scripts/backfill-driver-verification.ts",
     "backfill:vehicle-categories": "ts-node -r dotenv/config src/scripts/backfill-vehicle-categories.ts",
+    "backfill:driver-review": "ts-node -r dotenv/config src/scripts/backfill-driver-review.ts",
     "audit:user-roles": "ts-node -r dotenv/config src/scripts/audit-user-roles.ts",
     "mark:test-account": "ts-node -r tsconfig-paths/register -r dotenv/config src/scripts/mark-test-account.ts",
     "start:provision-app-reviewers": "node dist/scripts/provision-play-reviewers.js --confirm && node dist/main.js",

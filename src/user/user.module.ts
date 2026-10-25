@@ -9,6 +9,7 @@ import { FinanceModule } from '../finance/finance.module';
 import { RidesModule } from '../rides/rides.module';
 import { DriverOnboardingService } from './driver-onboarding.service';
 import { TestAccountService } from './test-account.service';
+import { SuperAdminGuard } from '../authentication/guards/super-admin.guard';
 
 @Module({
   imports: [NotificationModule, FinanceModule, RidesModule],
@@ -18,6 +19,7 @@ import { TestAccountService } from './test-account.service';
     DashboardService,
     DriverOnboardingService,
     TestAccountService,
+    SuperAdminGuard,
   ],
   exports: [UserService],
 })

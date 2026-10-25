@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminJwtGuard } from 'src/authentication/guards/jwt.guard';
+import { SuperAdminGuard } from 'src/authentication/guards/super-admin.guard';
 import { Response } from 'src/shared/response';
 import {
   AdminGetDriversDTO,
@@ -17,6 +18,8 @@ import {
   PurgeTestAccountDTO,
   SetUserVerificationDTO,
 } from './dto/user.dto';
+import { ReviewDriverApplicationDTO } from './dto/driver-review.dto';
+import { PermanentlyDeleteUserDTO } from './dto/permanently-delete-user.dto';
 import { UserService } from './user.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UserDocument } from '../database/schemas/user.schema';
@@ -86,6 +89,28 @@ export class AdminUserController {
     );
   }
 
+  @Get('/:userId/permanent-delete-preview')
+  @UseGuards(SuperAdminGuard)
+  async previewPermanentDelete(@Param('userId') userId: string) {
+    return Response.json(
+      'permanent deletion preview',
+      await this.testAccounts.previewPermanent(userId),
+    );
+  }
+
+  @Post('/:userId/permanent-delete')
+  @UseGuards(SuperAdminGuard)
+  async permanentlyDeleteUser(
+    @CurrentUser() admin: UserDocument,
+    @Param('userId') userId: string,
+    @Body() payload: PermanentlyDeleteUserDTO,
+  ) {
+    return Response.json(
+      'user permanently deleted',
+      await this.testAccounts.purgePermanent(admin, userId, payload),
+    );
+  }
+
   @Put('/:userId/verification')
   async setVerification(
     @Param('userId') userId: string,
@@ -94,5 +119,19 @@ export class AdminUserController {
     const user = await this.userService.setVerification(userId, payload);
 
     return Response.json('user verification updated', user);
+  }
+
+  @Put('/drivers/:userId/review')
+  async reviewDriverApplication(
+    @CurrentUser() admin: UserDocument,
+    @Param('userId') userId: string,
+    @Body() payload: ReviewDriverApplicationDTO,
+  ) {
+    const detail = await this.userService.reviewDriverApplication(
+      admin,
+      userId,
+      payload,
+    );
+    return Response.json('driver application reviewed', detail);
   }
 }

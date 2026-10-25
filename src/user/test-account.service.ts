@@ -49,7 +49,7 @@ export class TestAccountService {
     };
   }
 
-  async preview(userId: string) {
+  async preview(userId: string, permanent = false) {
     const user = await this.getUserOrFail(userId);
     const relation = this.relationshipQueries(userId);
     const [trips, rentals, rides, balance, walletTransactions, activePayouts] =
@@ -208,7 +208,7 @@ export class TestAccountService {
     );
     const blockers: string[] = [];
     const warnings: string[] = [];
-    if (!user.isTestAccount)
+    if (!permanent && !user.isTestAccount)
       blockers.push('Account is not marked as a test account');
     if (user.isAppAdmin)
       blockers.push('Administrator accounts cannot be purged');
@@ -220,6 +220,17 @@ export class TestAccountService {
     }
     if (activePayouts > 0)
       blockers.push('Account has an active payout request');
+    if (
+      permanent &&
+      [
+        balance?.amount,
+        balance?.cashAmount,
+        balance?.rideCreditAmount,
+        balance?.reservedAmount,
+      ].some((value) => Number(value || 0) !== 0)
+    ) {
+      blockers.push('Account wallet balances must be settled before deletion');
+    }
     if (linkedNonTestUsers.length > 0) {
       blockers.push('Account has trips or rentals involving non-test users');
     }
@@ -271,9 +282,10 @@ export class TestAccountService {
     admin: UserDocument,
     userId: string,
     payload: { confirmation: string; reason: string },
+    permanent = false,
   ) {
-    const preview = await this.preview(userId);
-    const expected = `PURGE ${
+    const preview = await this.preview(userId, permanent);
+    const expected = `${permanent ? 'DELETE' : 'PURGE'} ${
       preview.user.email || preview.user.phoneNumber || preview.user.id
     }`;
     if (payload.confirmation !== expected) {
@@ -427,7 +439,9 @@ export class TestAccountService {
         await this.db.adminAuditLogs.create(
           [
             {
-              action: AdminAuditAction.TestAccountPurged,
+              action: permanent
+                ? AdminAuditAction.UserPermanentlyDeleted
+                : AdminAuditAction.TestAccountPurged,
               actor: admin.id,
               targetUserId: userId,
               targetIdentity:
@@ -454,6 +468,23 @@ export class TestAccountService {
       counts: preview.counts,
       failedAssetDeletes,
     };
+  }
+
+  previewPermanent(userId: string) {
+    return this.preview(userId, true);
+  }
+
+  purgePermanent(
+    admin: UserDocument,
+    userId: string,
+    payload: { confirmation: string; reason: string },
+  ) {
+    if (String(admin.id) === userId) {
+      throw new ConflictException(
+        'Super administrators cannot delete themselves',
+      );
+    }
+    return this.purge(admin, userId, payload, true);
   }
 
   async resetAppReviewData(admin: UserDocument) {

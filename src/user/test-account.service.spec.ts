@@ -68,4 +68,29 @@ describe('TestAccountService safety gates', () => {
       NotFoundException,
     );
   });
+
+  it('requires DELETE confirmation for permanent deletion', async () => {
+    const service = new TestAccountService({} as never, {} as never);
+    jest.spyOn(service, 'preview').mockResolvedValue({
+      ...purgeablePreview,
+      user: { ...purgeablePreview.user, isTestAccount: false },
+    } as never);
+
+    await expect(
+      service.purgePermanent(admin, 'user-1', {
+        confirmation: 'PURGE test@example.com',
+        reason: 'User requested permanent deletion',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('prevents a super administrator from deleting their own account', () => {
+    const service = new TestAccountService({} as never, {} as never);
+    expect(() =>
+      service.purgePermanent({ id: 'user-1' } as never, 'user-1', {
+        confirmation: 'DELETE test@example.com',
+        reason: 'Self deletion attempt',
+      }),
+    ).toThrow(ConflictException);
+  });
 });

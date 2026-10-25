@@ -27,6 +27,7 @@ export enum VehicleCategory {
 
 export enum RideApprovalStatus {
   Pending = 'Pending',
+  ChangesRequested = 'ChangesRequested',
   Approved = 'Approved',
   Rejected = 'Rejected',
 }

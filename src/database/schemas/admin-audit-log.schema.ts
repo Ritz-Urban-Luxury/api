@@ -9,7 +9,10 @@ export type AdminAuditLogDocument = AdminAuditLog & Document;
 
 export enum AdminAuditAction {
   TestAccountPurged = 'test-account.purged',
+  UserPermanentlyDeleted = 'user.permanently-deleted',
   AppReviewDataReset = 'app-review-data.reset',
+  DriverReviewed = 'driver.reviewed',
+  DriverResubmitted = 'driver.resubmitted',
   VehicleReviewed = 'vehicle.reviewed',
 }
 

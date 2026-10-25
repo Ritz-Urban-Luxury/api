@@ -21,6 +21,37 @@ export enum TestAccountPurpose {
 
 export const TestAccountPurposes = Object.values(TestAccountPurpose);
 
+export enum AdminRole {
+  Admin = 'Admin',
+  SuperAdmin = 'SuperAdmin',
+}
+
+export enum DriverReviewStatus {
+  Pending = 'Pending',
+  ChangesRequested = 'ChangesRequested',
+  Approved = 'Approved',
+  Rejected = 'Rejected',
+}
+
+export enum DriverReviewField {
+  ProfilePhoto = 'ProfilePhoto',
+  DriverLicense = 'DriverLicense',
+  LicenseNumber = 'LicenseNumber',
+  LicenseExpiry = 'LicenseExpiry',
+  VehicleDetails = 'VehicleDetails',
+  VehiclePhotos = 'VehiclePhotos',
+}
+
+export const AdminRoles = Object.values(AdminRole);
+export const DriverReviewStatuses = Object.values(DriverReviewStatus);
+export const DriverReviewFields = Object.values(DriverReviewField);
+
+export type DriverReviewIssue = {
+  field: DriverReviewField;
+  reason: string;
+  rideId?: string;
+};
+
 export type PushPlatform = 'ios' | 'android';
 export type PushApp = 'rider' | 'driver';
 
@@ -99,6 +130,35 @@ export class User extends BaseSchema {
   @Prop({ default: false })
   isVerified?: boolean;
 
+  @Prop({
+    type: String,
+    enum: DriverReviewStatuses,
+    default: DriverReviewStatus.Pending,
+  })
+  driverReviewStatus?: DriverReviewStatus;
+
+  @Prop({
+    type: [
+      {
+        _id: false,
+        field: { type: String, enum: DriverReviewFields, required: true },
+        reason: { type: String, required: true },
+        rideId: { type: String },
+      },
+    ],
+    default: [],
+  })
+  driverReviewIssues?: DriverReviewIssue[];
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  driverReviewedBy?: UserDocument | string;
+
+  @Prop()
+  driverReviewedAt?: Date;
+
+  @Prop()
+  driverResubmittedAt?: Date;
+
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.SERVICE_LOCATIONS })
   serviceLocation?: string;
 
@@ -142,6 +202,9 @@ export class User extends BaseSchema {
 
   @Prop()
   isAppAdmin?: boolean;
+
+  @Prop({ type: String, enum: AdminRoles, default: AdminRole.Admin })
+  adminRole?: AdminRole;
 
   /** Server-controlled marker for accounts whose data may be destructively purged. */
   @Prop({ default: false })

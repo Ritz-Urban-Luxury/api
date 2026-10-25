@@ -2620,27 +2620,32 @@ export class RidesService implements OnModuleInit {
     delete $set.driver;
     delete $set.vehicleCategory;
     $set.type = ride.type;
-    if (
+    const requiresTripVehicleReview =
       ride.type !== RideType.Hire &&
-      requestedClaim &&
-      requestedClaim !== ride.claimedCategory
-    ) {
+      [
+        payload.brand,
+        payload.model,
+        payload.color,
+        payload.registration,
+        payload.images,
+        payload.claimedCategory,
+      ].some((value) => value !== undefined);
+    if (requiresTripVehicleReview) {
       $set.approvalStatus = RideApprovalStatus.Pending;
       $set.status = RideStatus.Offline;
-      $set.type =
-        requestedClaim === VehicleCategory.Luxury
-          ? RideType.Luxury
-          : RideType.Classic;
+      if (requestedClaim) {
+        $set.type =
+          requestedClaim === VehicleCategory.Luxury
+            ? RideType.Luxury
+            : RideType.Classic;
+      }
       delete $set.vehicleCategory;
     }
 
     const update: Record<string, unknown> = { $set };
-    if (
-      ride.type !== RideType.Hire &&
-      requestedClaim &&
-      requestedClaim !== ride.claimedCategory
-    ) {
+    if (requiresTripVehicleReview) {
       update.$unset = {
+        approvalReason: 1,
         vehicleCategory: 1,
         categoryReviewedBy: 1,
         categoryReviewedAt: 1,
