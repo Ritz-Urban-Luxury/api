@@ -237,3 +237,54 @@ describe('UserService.deleteAccount', () => {
     delete process.env.PLAY_REVIEW_OTP;
   });
 });
+
+describe('UserService.listDrivers', () => {
+  let db: any;
+  let service: UserService;
+
+  beforeEach(() => {
+    db = {
+      rides: {
+        distinct: jest.fn().mockResolvedValue(['64a000000000000000000010']),
+      },
+      users: {
+        paginate: jest.fn().mockResolvedValue({ docs: [] }),
+      },
+    };
+    service = Object.create(UserService.prototype);
+    Object.assign(service as any, { db });
+  });
+
+  it('searches driver identity fields and sorts names alphabetically', async () => {
+    await service.listDrivers({
+      search: 'Ada.+',
+      sortBy: 'name',
+      sortOrder: 'asc',
+      verified: false,
+    });
+
+    const [query, options] = db.users.paginate.mock.calls[0];
+    expect(query.deleted).toEqual({ $ne: true });
+    expect(query.isVerified).toEqual({ $ne: true });
+    expect(query.$and[0].$or).toEqual([
+      { isDriver: true },
+      { _id: { $in: ['64a000000000000000000010'] } },
+    ]);
+    expect(query.$and[1].$or[0].firstName.source).toBe('Ada\\.\\+');
+    expect(query.$and[1].$or[0].firstName.flags).toContain('i');
+    expect(options.sort).toEqual({
+      createdAt: -1,
+      firstName: 1,
+      lastName: 1,
+    });
+  });
+
+  it('sorts by creation date descending by default', async () => {
+    await service.listDrivers({});
+
+    expect(db.users.paginate).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ sort: { createdAt: -1 } }),
+    );
+  });
+});

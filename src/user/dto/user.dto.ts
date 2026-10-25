@@ -139,6 +139,18 @@ export class SetUserVerificationDTO {
 }
 
 export class AdminGetDriversDTO extends PaginationRequestDTO {
+  @IsString()
+  @IsOptional()
+  search?: string;
+
+  @IsIn(['name', 'createdAt'])
+  @IsOptional()
+  sortBy?: 'name' | 'createdAt';
+
+  @IsIn(['asc', 'desc'])
+  @IsOptional()
+  sortOrder?: 'asc' | 'desc';
+
   /**
    * Query strings arrive as "true"/"false". Nest's enableImplicitConversion
    * turns Boolean("false") into true before field transforms — read the raw

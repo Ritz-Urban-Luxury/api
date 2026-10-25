@@ -340,7 +340,14 @@ export class UserService {
   }
 
   async listDrivers(query: AdminGetDriversDTO) {
-    const { page = 1, limit = 100, verified } = query;
+    const {
+      page = 1,
+      limit = 100,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      verified,
+    } = query;
     const rideDriverIds = await this.db.rides.distinct('driver', {
       deleted: { $ne: true },
     });
@@ -353,11 +360,39 @@ export class UserService {
       q.isVerified = verified ? true : { $ne: true };
     }
 
+    const term = search?.trim();
+    if (term) {
+      const regex = new RegExp(
+        term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      );
+      const driverFilter = q.$or;
+      delete q.$or;
+      q.$and = [
+        { $or: driverFilter },
+        {
+          $or: [
+            { firstName: regex },
+            { lastName: regex },
+            { email: regex },
+            { phoneNumber: regex },
+            { companyName: regex },
+          ],
+        },
+      ];
+    }
+
+    const direction = sortOrder === 'asc' ? 1 : -1;
+    const sort =
+      sortBy === 'name'
+        ? { firstName: direction, lastName: direction, createdAt: -1 }
+        : { createdAt: direction };
+
     return this.db.users.paginate(q, {
       page,
       limit,
       select: '-password -oAuthIdentifier -oAuthProvider',
-      sort: { createdAt: -1 },
+      sort,
     });
   }
 
