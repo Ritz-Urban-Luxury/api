@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { hash } from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { ClientSession, FilterQuery } from 'mongoose';
 import { getPlayReviewAccounts } from '../authentication/play-review-accounts';
 import { DatabaseService } from '../database/database.service';
@@ -231,8 +233,13 @@ export class TestAccountService {
     ) {
       blockers.push('Account wallet balances must be settled before deletion');
     }
-    if (linkedNonTestUsers.length > 0) {
+    if (linkedNonTestUsers.length > 0 && !permanent) {
       blockers.push('Account has trips or rentals involving non-test users');
+    }
+    if (linkedNonTestUsers.length > 0 && permanent) {
+      warnings.push(
+        'Shared trip and rental history will be retained with an anonymized account reference',
+      );
     }
     if (auditReferences > 0) {
       blockers.push('Account is referenced by administrative audit records');
@@ -295,6 +302,10 @@ export class TestAccountService {
     }
     if (!preview.canPurge) {
       throw new ConflictException(preview.blockers.join('; '));
+    }
+
+    if (permanent && preview.linkedNonTestUsers.length > 0) {
+      return this.anonymizePermanentAccount(admin, userId, payload, preview);
     }
 
     const relation = this.relationshipQueries(userId);
@@ -466,6 +477,179 @@ export class TestAccountService {
       reason: payload.reason,
       performedBy: String(admin.id),
       counts: preview.counts,
+      failedAssetDeletes,
+    };
+  }
+
+  /**
+   * Production trips and rentals belong to every participant. Removing them
+   * when one account is deleted would also remove another user's history.
+   * Retain those shared records and their financial/safety audit trail, while
+   * irreversibly removing the target's access, identity, documents and active
+   * driver data.
+   */
+  private async anonymizePermanentAccount(
+    admin: UserDocument,
+    userId: string,
+    payload: { confirmation: string; reason: string },
+    preview: Awaited<ReturnType<TestAccountService['preview']>>,
+  ) {
+    const now = new Date();
+    const anonymizedPassword = await hash(randomBytes(32).toString('hex'), 8);
+    const session = await this.db.users.db.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        const options = { session };
+
+        await Promise.all([
+          this.db.messages.deleteMany({ sender: userId }, options),
+          this.db.driverRideOffers.deleteMany(
+            { $or: [{ driver: userId }, { user: userId }] },
+            options,
+          ),
+          this.db.driverOnlineSessions.updateMany(
+            { driver: userId, endedAt: { $exists: false } },
+            { $set: { endedAt: now } },
+            options,
+          ),
+          this.db.userBlocks.deleteMany(
+            { $or: [{ blocker: userId }, { blocked: userId }] },
+            options,
+          ),
+          this.db.referrals.deleteMany(
+            { $or: [{ inviter: userId }, { invitee: userId }] },
+            options,
+          ),
+          this.db.cards.deleteMany({ user: userId }, options),
+          this.db.bankAccounts.deleteMany({ user: userId }, options),
+          this.db.balances.deleteMany({ user: userId }, options),
+          this.db.driverFinancialStates.deleteMany({ driver: userId }, options),
+          this.db.newsReads.deleteMany({ user: userId }, options),
+          this.db.authTokens.deleteMany(
+            {
+              $or: [
+                { 'meta.user': userId },
+                ...(preview.user.email
+                  ? [{ 'meta.email': preview.user.email }]
+                  : []),
+                ...(preview.user.phoneNumber
+                  ? [{ 'meta.phoneNumber': preview.user.phoneNumber }]
+                  : []),
+              ],
+            },
+            options,
+          ),
+          this.db.users.updateMany(
+            { referredBy: userId },
+            { $unset: { referredBy: 1 } },
+            options,
+          ),
+          this.db.rides.updateMany(
+            { driver: userId },
+            {
+              $set: { deleted: true, status: RideStatus.Offline },
+              $unset: {
+                location: 1,
+                images: 1,
+                registration: 1,
+                approvalReason: 1,
+              },
+            },
+            options,
+          ),
+        ]);
+
+        const deletedUser = await this.db.users.findOneAndUpdate(
+          { _id: userId, deleted: { $ne: true } },
+          {
+            $set: {
+              deleted: true,
+              deletionRequestedAt: now,
+              deletedAt: now,
+              firstName: 'Deleted',
+              lastName: 'User',
+              password: anonymizedPassword,
+              languages: [],
+              preferences: {},
+              pushDevices: [],
+              isVerified: false,
+              isDriver: false,
+              isAppAdmin: false,
+            },
+            $unset: {
+              phoneNumber: 1,
+              email: 1,
+              avatar: 1,
+              avatarSource: 1,
+              license: 1,
+              oAuthIdentifier: 1,
+              oAuthProvider: 1,
+              city: 1,
+              serviceLocation: 1,
+              vehiclesInFleet: 1,
+              licenseNumber: 1,
+              licenseExpiry: 1,
+              inviteCode: 1,
+              referredBy: 1,
+              billingType: 1,
+              companyName: 1,
+              address: 1,
+              registrationCode: 1,
+              vatNumber: 1,
+              bankHolderName: 1,
+              bank: 1,
+              accountNumber: 1,
+              adminRole: 1,
+              isTestAccount: 1,
+              testAccountPurpose: 1,
+              driverReviewStatus: 1,
+              driverReviewIssues: 1,
+              driverReviewedBy: 1,
+              driverReviewedAt: 1,
+              driverResubmittedAt: 1,
+            },
+          },
+          { new: true, upsert: false, session },
+        );
+
+        if (!deletedUser) {
+          throw new NotFoundException('user not found');
+        }
+
+        await this.db.adminAuditLogs.create(
+          [
+            {
+              action: AdminAuditAction.UserPermanentlyDeleted,
+              actor: admin.id,
+              targetUserId: userId,
+              targetIdentity:
+                preview.user.email ||
+                preview.user.phoneNumber ||
+                preview.user.id,
+              reason: payload.reason,
+              meta: {
+                counts: preview.counts,
+                deletionMode: 'anonymized-shared-history',
+                retainedSharedHistory: true,
+              },
+            },
+          ],
+          options,
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    const failedAssetDeletes = await this.files.deleteUrls(preview.assets);
+    return {
+      purged: true,
+      userId,
+      reason: payload.reason,
+      performedBy: String(admin.id),
+      counts: preview.counts,
+      retainedSharedHistory: true,
       failedAssetDeletes,
     };
   }

@@ -1178,7 +1178,10 @@ export class AuthenticationService {
       return null;
     }
 
-    const user = await this.db.users.findOne({ _id });
+    const user = await this.db.users.findOne({
+      _id,
+      deleted: { $ne: true },
+    });
     if (!user) {
       return null;
     }

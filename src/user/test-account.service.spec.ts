@@ -84,6 +84,32 @@ describe('TestAccountService safety gates', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('anonymizes a permanent deletion when shared history must be retained', async () => {
+    const service = new TestAccountService({} as never, {} as never);
+    jest.spyOn(service, 'preview').mockResolvedValue({
+      ...purgeablePreview,
+      user: { ...purgeablePreview.user, isTestAccount: false },
+      linkedNonTestUsers: [{ id: 'rider-1' }],
+    } as never);
+    const anonymize = jest
+      .spyOn(service as never, 'anonymizePermanentAccount' as never)
+      .mockResolvedValue({
+        purged: true,
+        retainedSharedHistory: true,
+      } as never);
+
+    await expect(
+      service.purgePermanent(admin, 'user-1', {
+        confirmation: 'DELETE test@example.com',
+        reason: 'User requested permanent deletion',
+      }),
+    ).resolves.toMatchObject({
+      purged: true,
+      retainedSharedHistory: true,
+    });
+    expect(anonymize).toHaveBeenCalledTimes(1);
+  });
+
   it('prevents a super administrator from deleting their own account', () => {
     const service = new TestAccountService({} as never, {} as never);
     expect(() =>
