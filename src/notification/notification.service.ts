@@ -57,7 +57,7 @@ export class NotificationService {
     this.client.setApiKey(sendGrid.apiKey);
   }
 
-  sendSMS(payload: SMSPayload) {
+  async sendSMS(payload: SMSPayload) {
     const { termii, turnOffSMS } = config();
     const {
       channel: requestedChannel,
@@ -72,12 +72,16 @@ export class NotificationService {
         : 'generic');
     const from =
       requestedFrom || (channel === 'dnd' ? termii.dndFrom : termii.from);
-    this.logger.log('new sms', { channel, from, to: payload.to });
     if (turnOffSMS) {
+      this.logger.warn('SMS delivery disabled by TURN_OFF_SMS', {
+        channel,
+        from,
+        to: payload.to,
+      });
       return null;
     }
 
-    return Http.request({
+    const response = await Http.request({
       method: 'POST',
       baseURL: termii.url,
       url: '/api/sms/send',
@@ -89,6 +93,14 @@ export class NotificationService {
         type: 'plain',
       },
     });
+
+    this.logger.log('SMS provider accepted request', {
+      channel,
+      from,
+      to: payload.to,
+    });
+
+    return response;
   }
 
   sendEmail(payload: EmailPayload) {
