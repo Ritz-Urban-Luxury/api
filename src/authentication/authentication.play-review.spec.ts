@@ -39,6 +39,7 @@ describe('AuthenticationService Play reviewer authentication', () => {
         deleteOne: jest.fn().mockResolvedValue({}),
         findOne: jest.fn().mockResolvedValue(null),
         updateOne: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({}),
       },
       users: {
         findOne: jest.fn().mockResolvedValue(reviewerUser),

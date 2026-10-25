@@ -18,6 +18,7 @@ import {
   RequestPhoneOTPDTO,
   ResetPasswordDTO,
   SignupDTO,
+  VerifyOtpDTO,
 } from './authentication.dto';
 import { AuthenticationService } from './authentication.service';
 import { AdminJwtGuard } from './guards/jwt.guard';
@@ -85,10 +86,14 @@ export class AuthenticationController {
     return Response.json('password updated', loggedInUser);
   }
 
-  @Get('check-otp/:otp')
-  async checkOtp(@Param('otp') otp: string) {
-    const res = await this.authenticationService.checkOtp(otp);
+  /**
+   * Validates a code only against the identifier it was issued for.  Do not
+   * restore the old public `check-otp/:otp` route: it acted as an OTP oracle.
+   */
+  @Post('verify-otp')
+  async verifyOtp(@Body() payload: VerifyOtpDTO) {
+    const res = await this.authenticationService.verifyOtp(payload);
 
-    return Response.json('otp check successfull', res);
+    return Response.json('otp verified', res);
   }
 }

@@ -12,6 +12,10 @@ export class AuthToken extends BaseSchema {
   @Prop()
   token: string;
 
+  /** HMAC of a one-time password. `token` remains for non-OTP tokens. */
+  @Prop({ index: true })
+  tokenHash?: string;
+
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   meta: Record<string, unknown>;
 

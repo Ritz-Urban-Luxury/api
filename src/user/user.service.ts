@@ -19,6 +19,8 @@ import {
 import { InactiveTripStatuses } from '../database/schemas/trips.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { Util } from '../shared/util';
+import config from '../shared/config';
+import { hashOtp } from '../authentication/otp';
 import { FinanceService } from '../finance/finance.service';
 import {
   AdminGetDriversDTO,
@@ -53,7 +55,10 @@ export class UserService {
       const otp = await this.db.authTokens.findOne({
         'meta.email': _email,
         'meta.type': 'email-otp',
-        token: emailOtp,
+        $or: [
+          { tokenHash: hashOtp(emailOtp, config().jwt.secret) },
+          { token: emailOtp },
+        ],
         deleted: { $ne: true },
         isUsed: { $ne: true },
         expiresAt: { $gte: new Date() },
@@ -61,6 +66,11 @@ export class UserService {
       if (!otp) {
         throw new BadRequestException('invalid email validation token');
       }
+
+      await this.db.authTokens.updateOne(
+        { _id: otp.id },
+        { $set: { isUsed: true } },
+      );
     }
 
     if (phoneNumber) {
@@ -68,7 +78,10 @@ export class UserService {
       const otp = await this.db.authTokens.findOne({
         'meta.phoneNumber': _phoneNumber,
         'meta.type': 'phone-otp',
-        token: phoneOtp,
+        $or: [
+          { tokenHash: hashOtp(phoneOtp, config().jwt.secret) },
+          { token: phoneOtp },
+        ],
         deleted: { $ne: true },
         isUsed: { $ne: true },
         expiresAt: { $gte: new Date() },

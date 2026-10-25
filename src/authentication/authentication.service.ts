@@ -45,6 +45,7 @@ import {
   ResetPasswordDTO,
   SignupDTO,
   DriverSignupDTO,
+  VerifyOtpDTO,
 } from './authentication.dto';
 import {
   getPlayReviewAccounts,
@@ -52,13 +53,16 @@ import {
   PlayReviewAccount,
   playReviewOtpMatches,
 } from './play-review-accounts';
-import { generateOtp } from './otp';
+import { generateOtp, hashOtp, OTP_PATTERN } from './otp';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const moment = require('moment');
 
 const PLAY_REVIEW_ATTEMPT_WINDOW_MINUTES = 15;
 const PLAY_REVIEW_MAX_FAILED_ATTEMPTS = 5;
+const OTP_VERIFY_ATTEMPT_WINDOW_MINUTES = 15;
+const OTP_VERIFY_MAX_FAILED_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const PLAY_REVIEW_SYNTHETIC_IMAGE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -113,75 +117,72 @@ export class AuthenticationService {
     const tokenType = reviewerAccount
       ? 'play-review-phone-otp-request'
       : 'phone-otp';
-    const previousAuthToken = await this.db.authTokens.findOne({
-      'meta.type': tokenType,
-      'meta.phoneNumber': phone,
-      createdAt: {
-        $gte: moment().subtract(100, 'seconds').toDate(),
-      },
-    });
-    if (!previousAuthToken) {
-      if (registrationTestAccount && isRegistrationTestPhone) {
-        await this.db.authTokens.create({
-          expiresAt: moment().add(10, 'minute').toDate(),
-          token: registrationTestAccount.otp,
-          meta: {
-            phoneNumber: phone,
-            type: 'phone-otp',
-          },
-        });
-        this.logger.log('Driver registration test OTP requested', {
-          phoneNumber: phone,
-        });
-        return;
-      }
-
-      if (reviewerAccount) {
-        await this.db.authTokens.create({
-          expiresAt: moment().add(1, 'day').toDate(),
-          token: Crypto.randomBytes(32).toString('hex'),
-          meta: {
-            phoneNumber: phone,
-            type: tokenType,
-          },
-        });
-        this.logger.log('Play reviewer OTP requested', {
-          phoneNumber: phone,
-          reviewerType: reviewerAccount.kind,
-        });
-        return;
-      }
-
-      const token = generateOtp();
-
+    if (!reviewerAccount) {
+      await this.ensureOtpCanBeResent('phoneNumber', phone, 'phone-otp');
+    }
+    if (registrationTestAccount && isRegistrationTestPhone) {
       await this.db.authTokens.create({
         expiresAt: moment().add(10, 'minute').toDate(),
-        token,
+        token: Crypto.randomBytes(32).toString('hex'),
+        tokenHash: this.otpHash(registrationTestAccount.otp),
         meta: {
           phoneNumber: phone,
           type: 'phone-otp',
         },
       });
+      this.logger.log('Driver registration test OTP requested', {
+        phoneNumber: phone,
+      });
+      return;
+    }
 
-      try {
-        await this.notificationService.sendSMS({
-          to: phone,
-          sms: `Your Ritz Urban Luxury verification code is ${token}. This code expires in 10 minutes. Do not share it with anyone.`,
-          channel: 'dnd',
-        });
-      } catch (error) {
-        await this.db.authTokens.deleteOne({
-          token,
-          'meta.phoneNumber': phone,
-          'meta.type': 'phone-otp',
-        });
-        this.logger.error(
-          `error sending phone otp sms - ${(error as Error).message}`,
-        );
-        throw new ServiceUnavailableException(
-          'Unable to send verification code. Please try again.',
-        );
-      }
+    if (reviewerAccount) {
+      await this.db.authTokens.create({
+        expiresAt: moment().add(1, 'day').toDate(),
+        token: Crypto.randomBytes(32).toString('hex'),
+        meta: {
+          phoneNumber: phone,
+          type: tokenType,
+        },
+      });
+      this.logger.log('Play reviewer OTP requested', {
+        phoneNumber: phone,
+        reviewerType: reviewerAccount.kind,
+      });
+      return;
+    }
+
+    const token = generateOtp();
+
+    await this.revokeOutstandingOtps('phoneNumber', phone, 'phone-otp');
+    await this.db.authTokens.create({
+      expiresAt: moment().add(10, 'minute').toDate(),
+      token: Crypto.randomBytes(32).toString('hex'),
+      tokenHash: this.otpHash(token),
+      meta: {
+        phoneNumber: phone,
+        type: 'phone-otp',
+      },
+    });
+
+    try {
+      await this.notificationService.sendSMS({
+        to: phone,
+        sms: `Your Ritz Urban Luxury verification code is ${token}. This code expires in 10 minutes. Do not share it with anyone.`,
+        channel: 'dnd',
+      });
+    } catch (error) {
+      await this.db.authTokens.deleteOne({
+        tokenHash: this.otpHash(token),
+        'meta.phoneNumber': phone,
+        'meta.type': 'phone-otp',
+      });
+      this.logger.error(
+        `error sending phone otp sms - ${(error as Error).message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Unable to send verification code. Please try again.',
+      );
     }
   }
 
@@ -205,7 +206,7 @@ export class AuthenticationService {
       const existingTestToken = await this.db.authTokens.findOne({
         'meta.email': email,
         'meta.type': 'email-otp',
-        token: registrationTestAccount.otp,
+        tokenHash: this.otpHash(registrationTestAccount.otp),
         deleted: { $ne: true },
         isUsed: { $ne: true },
         expiresAt: { $gte: new Date() },
@@ -214,7 +215,8 @@ export class AuthenticationService {
       if (!existingTestToken) {
         await this.db.authTokens.create({
           expiresAt: moment().add(10, 'minute').toDate(),
-          token: registrationTestAccount.otp,
+          token: Crypto.randomBytes(32).toString('hex'),
+          tokenHash: this.otpHash(registrationTestAccount.otp),
           meta: {
             email,
             type: 'email-otp',
@@ -232,57 +234,61 @@ export class AuthenticationService {
     const tokenType = reviewerAccount
       ? 'play-review-email-otp-request'
       : 'email-otp';
-    const previousAuthToken = await this.db.authTokens.findOne({
-      'meta.type': tokenType,
-      'meta.email': email,
-      createdAt: {
-        $gte: moment().subtract(100, 'seconds').toDate(),
-      },
-    });
-    if (!previousAuthToken) {
-      if (reviewerAccount) {
-        await this.db.authTokens.create({
-          expiresAt: moment().add(1, 'day').toDate(),
-          token: Crypto.randomBytes(32).toString('hex'),
-          meta: {
-            email,
-            type: tokenType,
-          },
-        });
-        this.logger.log('Play reviewer OTP requested', {
-          email,
-          reviewerType: reviewerAccount.kind,
-        });
-        return;
-      }
-
-      const token = generateOtp();
-
+    if (!reviewerAccount) {
+      await this.ensureOtpCanBeResent('email', email, 'email-otp');
+    }
+    if (reviewerAccount) {
       await this.db.authTokens.create({
-        expiresAt: moment().add(10, 'minute').toDate(),
-        token,
+        expiresAt: moment().add(1, 'day').toDate(),
+        token: Crypto.randomBytes(32).toString('hex'),
         meta: {
           email,
-          type: 'email-otp',
+          type: tokenType,
         },
       });
+      this.logger.log('Play reviewer OTP requested', {
+        email,
+        reviewerType: reviewerAccount.kind,
+      });
+      return;
+    }
 
-      this.notificationService
-        .sendEmail({
-          recipient: { email, name },
-          context: {
-            otp: token,
-            name,
-            currentYear: new Date().getFullYear(),
-          },
-          subject: 'Your Ritz verification code',
-          template: 'email-otp.template.njk',
-        })
-        .catch((error) => {
-          this.logger.error(
-            `error sending email otp message - ${error.message}`,
-          );
-        });
+    const token = generateOtp();
+
+    await this.revokeOutstandingOtps('email', email, 'email-otp');
+    await this.db.authTokens.create({
+      expiresAt: moment().add(10, 'minute').toDate(),
+      token: Crypto.randomBytes(32).toString('hex'),
+      tokenHash: this.otpHash(token),
+      meta: {
+        email,
+        type: 'email-otp',
+      },
+    });
+
+    try {
+      await this.notificationService.sendEmail({
+        recipient: { email, name },
+        context: {
+          otp: token,
+          name,
+          currentYear: new Date().getFullYear(),
+        },
+        subject: 'Your Ritz verification code',
+        template: 'email-otp.template.njk',
+      });
+    } catch (error) {
+      await this.db.authTokens.deleteOne({
+        tokenHash: this.otpHash(token),
+        'meta.email': email,
+        'meta.type': 'email-otp',
+      });
+      this.logger.error(
+        `error sending email otp message - ${(error as Error).message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Unable to send verification code. Please try again.',
+      );
     }
   }
 
@@ -293,6 +299,121 @@ export class AuthenticationService {
         (account) => account.email === normalizedEmail,
       ) || null
     );
+  }
+
+  private otpHash(otp: string): string {
+    return hashOtp(otp, config().jwt.secret);
+  }
+
+  private async ensureOtpCanBeResent(
+    identifierKey: 'email' | 'phoneNumber',
+    identifier: string,
+    type: 'email-otp' | 'phone-otp',
+  ): Promise<void> {
+    const previousAuthToken = await this.db.authTokens.findOne({
+      [`meta.${identifierKey}`]: identifier,
+      'meta.type': type,
+      createdAt: {
+        $gte: moment()
+          .subtract(OTP_RESEND_COOLDOWN_SECONDS, 'seconds')
+          .toDate(),
+      },
+      deleted: { $ne: true },
+      isRevoked: { $ne: true },
+      isUsed: { $ne: true },
+    });
+
+    if (previousAuthToken) {
+      throw new HttpException(
+        'Please wait a minute before requesting another verification code.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private async revokeOutstandingOtps(
+    identifierKey: 'email' | 'phoneNumber',
+    identifier: string,
+    type: 'email-otp' | 'phone-otp',
+  ): Promise<void> {
+    await this.db.authTokens.updateMany(
+      {
+        [`meta.${identifierKey}`]: identifier,
+        'meta.type': type,
+        deleted: { $ne: true },
+        isRevoked: { $ne: true },
+        isUsed: { $ne: true },
+      },
+      { $set: { isRevoked: true } },
+    );
+  }
+
+  private async recordFailedOtpAttempt(
+    identifierKey: 'email' | 'phoneNumber',
+    identifier: string,
+    type: 'email-otp' | 'phone-otp',
+  ): Promise<void> {
+    const attemptedSince = moment()
+      .subtract(OTP_VERIFY_ATTEMPT_WINDOW_MINUTES, 'minutes')
+      .toDate();
+    const failedAttempts = await this.db.authTokens.countDocuments({
+      [`meta.${identifierKey}`]: identifier,
+      'meta.otpType': type,
+      'meta.type': 'otp-verification-attempt',
+      'meta.success': false,
+      createdAt: { $gte: attemptedSince },
+    });
+
+    if (failedAttempts >= OTP_VERIFY_MAX_FAILED_ATTEMPTS) {
+      throw new HttpException(
+        'Too many OTP attempts. Please request a new code or try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    await this.db.authTokens.create({
+      expiresAt: moment()
+        .add(OTP_VERIFY_ATTEMPT_WINDOW_MINUTES, 'minutes')
+        .toDate(),
+      token: Crypto.randomBytes(32).toString('hex'),
+      meta: {
+        [identifierKey]: identifier,
+        otpType: type,
+        success: false,
+        type: 'otp-verification-attempt',
+      },
+    });
+  }
+
+  private async findActiveOtp(
+    identifierKey: 'email' | 'phoneNumber',
+    identifier: string,
+    otp: string,
+    type: 'email-otp' | 'phone-otp',
+  ) {
+    if (!OTP_PATTERN.test(otp)) {
+      await this.recordFailedOtpAttempt(identifierKey, identifier, type);
+      throw new BadRequestException('invalid verification code');
+    }
+
+    const token = await this.db.authTokens.findOne({
+      [`meta.${identifierKey}`]: identifier,
+      'meta.type': type,
+      // Keep the short-lived legacy fallback for OTPs created before this
+      // deployment. New records use only tokenHash.
+      $or: [{ tokenHash: this.otpHash(otp) }, { token: otp }],
+      deleted: { $ne: true },
+      isRevoked: { $ne: true },
+      isUsed: { $ne: true },
+      expiresAt: { $gte: new Date() },
+    });
+
+    if (!token) {
+      await this.recordFailedOtpAttempt(identifierKey, identifier, type);
+      throw new BadRequestException('invalid verification code');
+    }
+
+    return token;
   }
 
   private getDriverRegistrationTestAccount(): {
@@ -506,16 +627,21 @@ export class AuthenticationService {
     return success;
   }
 
-  async checkOtp(otp: string) {
-    const token = await this.db.authTokens.findOne({
-      $or: [{ 'meta.type': 'email-otp' }, { 'meta.type': 'phone-otp' }],
-      token: otp,
-      deleted: { $ne: true },
-      isUsed: { $ne: true },
-      expiresAt: { $gte: new Date() },
-    });
+  async verifyOtp(payload: VerifyOtpDTO): Promise<boolean> {
+    const hasPhone = Boolean(payload.phoneNumber);
+    const hasEmail = Boolean(payload.email);
+    if (hasPhone === hasEmail) {
+      throw new BadRequestException(
+        'provide exactly one email address or phone number',
+      );
+    }
 
-    return !!token;
+    if (payload.phoneNumber) {
+      await this.getPhoneOtpOrFail(payload.phoneNumber, payload.otp);
+    } else if (payload.email) {
+      await this.getEmailOtpOrFail(payload.email, payload.otp);
+    }
+    return true;
   }
 
   async validateGoogleIdToken(idToken: string) {
@@ -658,40 +784,18 @@ export class AuthenticationService {
 
   async getPhoneOtpOrFail(phoneNumber: string, phoneOtp: string) {
     const _phoneNumber = Util.formatPhoneNumber(phoneNumber, 'NG');
-
-    const otp = await this.db.authTokens.findOne({
-      'meta.phoneNumber': _phoneNumber,
-      'meta.type': 'phone-otp',
-      token: phoneOtp,
-      deleted: { $ne: true },
-      isUsed: { $ne: true },
-      expiresAt: { $gte: new Date() },
-    });
-
-    if (!otp) {
-      throw new BadRequestException('invalid phone validation token');
-    }
-
-    return otp;
+    return this.findActiveOtp(
+      'phoneNumber',
+      _phoneNumber,
+      phoneOtp,
+      'phone-otp',
+    );
   }
 
   async getEmailOtpOrFail(email: string, emailOtp: string) {
     const normalizedEmail = email.toLowerCase().trim();
 
-    const otp = await this.db.authTokens.findOne({
-      'meta.email': normalizedEmail,
-      'meta.type': 'email-otp',
-      token: emailOtp,
-      deleted: { $ne: true },
-      isUsed: { $ne: true },
-      expiresAt: { $gte: new Date() },
-    });
-
-    if (!otp) {
-      throw new BadRequestException('invalid email validation token');
-    }
-
-    return otp;
+    return this.findActiveOtp('email', normalizedEmail, emailOtp, 'email-otp');
   }
 
   async signUp(
@@ -801,17 +905,7 @@ export class AuthenticationService {
       }
 
       if (emailOtp) {
-        const otp = await this.db.authTokens.findOne({
-          'meta.email': _email,
-          'meta.type': 'email-otp',
-          token: emailOtp,
-          deleted: { $ne: true },
-          isUsed: { $ne: true },
-          expiresAt: { $gte: new Date() },
-        });
-        if (!otp) {
-          throw new BadRequestException('invalid email validation token');
-        }
+        const otp = await this.getEmailOtpOrFail(_email, emailOtp);
 
         await this.db.authTokens.updateOne(
           { _id: otp.id },

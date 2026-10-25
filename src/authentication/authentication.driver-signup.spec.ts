@@ -183,7 +183,8 @@ describe('AuthenticationService driver signup', () => {
     expect(notificationService.sendSMS).not.toHaveBeenCalled();
     expect(db.authTokens.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        token: '2468',
+        token: expect.stringMatching(/^[a-f\d]{64}$/),
+        tokenHash: expect.any(String),
         meta: {
           phoneNumber: '2347000000001',
           type: 'phone-otp',
@@ -226,7 +227,8 @@ describe('AuthenticationService driver signup', () => {
     expect(notificationService.sendEmail).not.toHaveBeenCalled();
     expect(db.authTokens.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        token: '2468',
+        token: expect.stringMatching(/^[a-f\d]{64}$/),
+        tokenHash: expect.any(String),
         meta: {
           email: 'test@ritzurbanluxury.com',
           type: 'email-otp',

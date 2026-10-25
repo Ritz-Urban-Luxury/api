@@ -5,8 +5,10 @@ import {
   IsNotEmpty,
   IsOptional,
   IsPhoneNumber,
+  Matches,
   IsString,
 } from 'class-validator';
+import { OTP_PATTERN } from './otp';
 import { OAuthProvider, OAuthProviders } from '../database/schemas/user.schema';
 
 export class SignupDTO {
@@ -110,7 +112,7 @@ export class LoginDTO {
   @IsOptional()
   phoneNumber?: string;
 
-  @IsString()
+  @Matches(OTP_PATTERN)
   @IsOptional()
   otp?: string;
 
@@ -125,6 +127,19 @@ export class LoginDTO {
   @IsIn(['rider', 'driver'])
   @IsOptional()
   app?: 'rider' | 'driver';
+}
+
+export class VerifyOtpDTO {
+  @IsPhoneNumber('NG')
+  @IsOptional()
+  phoneNumber?: string;
+
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+
+  @Matches(OTP_PATTERN)
+  otp: string;
 }
 
 export class ResetPasswordDTO {
