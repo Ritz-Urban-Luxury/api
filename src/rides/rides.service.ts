@@ -62,6 +62,7 @@ import {
   AdminCarBrandLogoDTO,
   AdminGetUserReportsDTO,
   CreateRideDTO,
+  EndTripLocationDTO,
   GetRideQuoteDTO,
   GetRidesDTO,
   GetTripHistoryDTO,
@@ -1266,7 +1267,12 @@ export class RidesService implements OnModuleInit {
     );
   }
 
-  async cancelTrip(user: UserDocument, tripId: string, reason: string) {
+  async cancelTrip(
+    user: UserDocument,
+    tripId: string,
+    reason: string,
+    currentLocation?: EndTripLocationDTO,
+  ) {
     const existing = await this.db.trips
       .findOne({
         _id: tripId,
@@ -1283,7 +1289,7 @@ export class RidesService implements OnModuleInit {
     }
 
     if (existing.status === TripStatus.InProgress) {
-      return this.endTripEarly(user, existing, reason);
+      return this.endTripEarly(user, existing, reason, currentLocation);
     }
 
     if (
@@ -1607,6 +1613,7 @@ export class RidesService implements OnModuleInit {
     endedBy: UserDocument,
     trip: TripDocument,
     reason: string,
+    submittedLocation?: EndTripLocationDTO,
   ) {
     const driver = trip.driver as UserDocument;
     const ride = trip.ride as RidesDocument;
@@ -1625,10 +1632,21 @@ export class RidesService implements OnModuleInit {
 
     const live = this.websocket.getLastRideLocation(trip.id);
     const persisted = ride.location;
-    const latitude = live?.lat ?? persisted?.coordinates?.[0];
-    const longitude = live?.lon ?? persisted?.coordinates?.[1];
+    const locationSubmittedByDriver =
+      String(endedBy.id) === String(driver.id) ? submittedLocation : undefined;
+    const latitude =
+      locationSubmittedByDriver?.lat ??
+      live?.lat ??
+      persisted?.coordinates?.[0];
+    const longitude =
+      locationSubmittedByDriver?.lon ??
+      live?.lon ??
+      persisted?.coordinates?.[1];
     const recordedAtValue =
-      live?.recordedAt ?? live?.updatedAt ?? persisted?.recordedAt;
+      (locationSubmittedByDriver ? endedAt : undefined) ??
+      live?.recordedAt ??
+      live?.updatedAt ??
+      persisted?.recordedAt;
     const recordedAt = recordedAtValue ? new Date(recordedAtValue) : null;
 
     if (
@@ -1668,8 +1686,14 @@ export class RidesService implements OnModuleInit {
       endLocation: {
         type: 'Point',
         coordinates: [latitude, longitude],
-        accuracy: live?.accuracy ?? persisted?.accuracy,
-        heading: live?.heading ?? persisted?.heading,
+        accuracy:
+          locationSubmittedByDriver?.accuracy ??
+          live?.accuracy ??
+          persisted?.accuracy,
+        heading:
+          locationSubmittedByDriver?.heading ??
+          live?.heading ??
+          persisted?.heading,
         recordedAt,
       },
       endReason: reason,

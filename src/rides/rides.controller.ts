@@ -21,6 +21,7 @@ import {
   AdminGetRentalsDTO,
   CancelRentalDTO,
   CreateRideDTO,
+  EndTripDTO,
   GetDrivingRouteDTO,
   GetMyRidesDTO,
   GetRideQuoteDTO,
@@ -335,8 +336,14 @@ export class RidesController {
     @CurrentUser() user: UserDocument,
     @Param('trip') trip: string,
     @Query('reason') reason: string,
+    @Body() payload: EndTripDTO,
   ) {
-    const _trip = await this.ridesService.cancelTrip(user, trip, reason);
+    const _trip = await this.ridesService.cancelTrip(
+      user,
+      trip,
+      reason,
+      payload?.location,
+    );
 
     return Response.json(
       _trip.status === TripStatus.Cancelled ? 'Trip cancelled' : 'Trip ended',

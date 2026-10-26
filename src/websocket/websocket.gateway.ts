@@ -172,7 +172,11 @@ export class WebsocketGateway {
       this.lastLocationSequence.set(user.id, location.sequence);
     }
 
-    const rideId = typeof trip.ride === 'string' ? trip.ride : trip.ride?.id;
+    const rideId = String(
+      typeof trip.ride === 'string'
+        ? trip.ride
+        : (trip.ride as { _id?: unknown })?._id ?? trip.ride ?? '',
+    );
     if (!rideId) {
       return;
     }

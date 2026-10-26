@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
+  IsDateString,
   IsIn,
   IsLatitude,
   IsLongitude,
@@ -291,6 +292,42 @@ export class LocationDTO {
   @IsCoordinates()
   @IsNotEmpty()
   coordinates: [number, number];
+}
+
+export class EndTripLocationDTO {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  accuracy?: number;
+
+  @Type(() => Number)
+  @IsLatitude()
+  @IsNotEmpty()
+  lat: number;
+
+  @Type(() => Number)
+  @IsLongitude()
+  @IsNotEmpty()
+  lon: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Max(360)
+  @Min(0)
+  @IsOptional()
+  heading?: number;
+
+  @IsDateString()
+  @IsOptional()
+  recordedAt?: string;
+}
+
+export class EndTripDTO {
+  @ValidateNested()
+  @Type(() => EndTripLocationDTO)
+  @IsOptional()
+  location?: EndTripLocationDTO;
 }
 
 export class HireRideDTO {

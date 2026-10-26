@@ -1118,6 +1118,60 @@ describe('RidesService early rider trip completion', () => {
     );
   });
 
+  it('uses a fresh location submitted atomically by the driver when socket data is stale', async () => {
+    const existing = {
+      ...makeTrip(),
+      ride: {
+        ...ride,
+        location: {
+          coordinates: [9.1, 7.4],
+          recordedAt: new Date('2026-10-17T11:00:00.000Z'),
+          type: 'Point',
+        },
+      },
+    };
+    const completed = {
+      ...existing,
+      endedEarly: true,
+      status: TripStatus.Completed,
+    };
+    db.trips.findOne.mockReturnValue(populatedQuery(existing));
+    db.trips.findOneAndUpdate.mockResolvedValue(completed);
+    websocket.getLastRideLocation.mockReturnValue(null);
+    jest.spyOn(GeolocationService, 'getRouteSummary').mockResolvedValue({
+      distance: 4500,
+      duration: 480,
+    });
+
+    await expect(
+      service.cancelTrip(driver, tripId, 'Safety concern', {
+        accuracy: 6,
+        heading: 120,
+        lat: 9.08,
+        lon: 7.39,
+        recordedAt: '2026-10-17T12:09:59.000Z',
+      }),
+    ).resolves.toBe(completed);
+
+    expect(GeolocationService.getRouteSummary).toHaveBeenCalledWith(
+      [9.0, 7.3],
+      [9.08, 7.39],
+    );
+    expect(db.trips.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: tripId, status: TripStatus.InProgress },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          endLocation: expect.objectContaining({
+            accuracy: 6,
+            coordinates: [9.08, 7.39],
+            heading: 120,
+          }),
+        }),
+      }),
+      { new: true, upsert: false },
+    );
+  });
+
   it('ends a trip without a stop through the normal completion flow', async () => {
     const existing = makeTrip();
     db.findOrFail = jest.fn().mockResolvedValue(existing);

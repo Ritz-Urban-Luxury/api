@@ -1,4 +1,5 @@
 import { GATEWAY_OPTIONS } from '@nestjs/websockets/constants';
+import { Types } from 'mongoose';
 import { AuthenticationService } from '../authentication';
 import { DatabaseService } from '../database/database.service';
 import { RideStatus, RidesDocument } from '../database/schemas/rides.schema';
@@ -150,6 +151,32 @@ describe('WebsocketGateway', () => {
           speed: 12,
           updatedAt: expect.any(String),
         },
+      );
+    });
+
+    it('serializes a mongoose ObjectId ride reference as its hex string', async () => {
+      const rideObjectId = new Types.ObjectId('64a000000000000000000004');
+      const trip = {
+        id: 'trip-id',
+        ride: rideObjectId,
+        status: TripStatus.Started,
+        user: rider,
+      } as unknown as TripDocument;
+      const populate = jest.fn().mockResolvedValue(trip);
+      findOne.mockReturnValue({ populate });
+      const emitToUser = jest
+        .spyOn(gateway, 'emitToUser')
+        .mockResolvedValue(undefined);
+
+      await gateway.updateRideLocation(driver, {
+        lat: 9.067114,
+        lon: 7.397462,
+      });
+
+      expect(emitToUser).toHaveBeenCalledWith(
+        rider.id,
+        WebsocketEvent.RideLocation,
+        expect.objectContaining({ rideId: rideObjectId.toHexString() }),
       );
     });
 
