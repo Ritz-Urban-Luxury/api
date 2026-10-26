@@ -1020,8 +1020,10 @@ export class RidesService implements OnModuleInit {
     if (!offer) {
       throw new BadRequestException('invalid tracking id');
     }
-    const offeredRideId =
-      typeof offer.ride === 'string' ? offer.ride : String(offer.ride?.id);
+    const offeredRideId = Util.resolveDocumentId(offer.ride);
+    if (!offeredRideId) {
+      throw new BadRequestException('invalid tracking id');
+    }
     const eligibleRide = await this.db.rides.findOne({
       _id: offeredRideId,
       driver: driver.id,
@@ -1049,6 +1051,29 @@ export class RidesService implements OnModuleInit {
 
     await this.cache.set(payload.trackingId, true, this.WAIT_TIME * 2);
     return undefined;
+  }
+
+  private async waitForRideOfferDecision(
+    trackingId: string,
+    connectionId: string,
+  ) {
+    const deadline = Date.now() + this.WAIT_TIME;
+    const pollInterval = 250;
+
+    while (true) {
+      const [accepted, waiting] = await Promise.all([
+        this.cache.get<boolean>(trackingId),
+        this.cache.get<boolean>(connectionId),
+      ]);
+
+      if (accepted === true || !waiting || Date.now() >= deadline) {
+        return { accepted, waiting };
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, Math.min(pollInterval, deadline - Date.now()));
+      });
+    }
   }
 
   async connectToDriver(
@@ -1117,14 +1142,10 @@ export class RidesService implements OnModuleInit {
         },
       });
 
-      await new Promise((resolve) => {
-        setTimeout(resolve, this.WAIT_TIME);
-      });
-
-      const [accepted, waiting] = await Promise.all([
-        this.cache.get<boolean>(trackingId),
-        this.cache.get<boolean>(connectionId),
-      ]);
+      const { accepted, waiting } = await this.waitForRideOfferDecision(
+        trackingId,
+        connectionId,
+      );
       if (!waiting) {
         await this.resolveRideOffer(
           trackingId,

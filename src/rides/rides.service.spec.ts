@@ -19,6 +19,7 @@ import {
   RentalBillingType,
   RentalStatus,
 } from '../database/schemas/rentals.schema';
+import { Types } from 'mongoose';
 import { GeolocationService } from './geolocation.service';
 import { RidesService } from './rides.service';
 
@@ -58,6 +59,74 @@ describe('GeolocationService waypoint routes', () => {
       [9.1, 7.4],
       [9.2, 7.5],
     );
+  });
+});
+
+describe('RidesService.acceptRide', () => {
+  let service: RidesService;
+  let cache: {
+    get: jest.Mock;
+    set: jest.Mock;
+  };
+  let db: {
+    driverRideOffers: { findOne: jest.Mock };
+    rides: { findOne: jest.Mock };
+  };
+
+  beforeEach(() => {
+    cache = {
+      get: jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(false),
+      set: jest.fn(),
+    };
+    db = {
+      driverRideOffers: { findOne: jest.fn() },
+      rides: { findOne: jest.fn() },
+    };
+    service = Object.create(RidesService.prototype);
+    Object.assign(service as any, {
+      WAIT_TIME: 20_000,
+      cache,
+      db,
+      finance: { canDriverReceiveRides: jest.fn().mockResolvedValue(true) },
+    });
+  });
+
+  it('accepts a real offer whose ride reference is a mongoose ObjectId', async () => {
+    const rideObjectId = new Types.ObjectId(rideId);
+    db.driverRideOffers.findOne.mockResolvedValue({
+      requestedCategory: VehicleCategory.Classic,
+      ride: rideObjectId,
+    });
+    db.rides.findOne.mockResolvedValue({ id: rideId });
+
+    await expect(
+      service.acceptRide({ id: ownerId } as never, {
+        trackingId: 'real-offer-id',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(db.rides.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: rideObjectId.toHexString() }),
+    );
+    expect(cache.set).toHaveBeenCalledWith('real-offer-id', true, 40_000);
+  });
+
+  it('rejects a malformed ride reference without issuing a mongoose query', async () => {
+    db.driverRideOffers.findOne.mockResolvedValue({
+      requestedCategory: VehicleCategory.Classic,
+      ride: { id: Buffer.from('invalid-ref') },
+    });
+
+    await expect(
+      service.acceptRide({ id: ownerId } as never, {
+        trackingId: 'invalid-offer-id',
+      }),
+    ).rejects.toThrow('invalid tracking id');
+
+    expect(db.rides.findOne).not.toHaveBeenCalled();
   });
 });
 
