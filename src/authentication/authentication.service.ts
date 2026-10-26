@@ -393,7 +393,7 @@ export class AuthenticationService {
   ) {
     if (!OTP_PATTERN.test(otp)) {
       await this.recordFailedOtpAttempt(identifierKey, identifier, type);
-      throw new BadRequestException('invalid verification code');
+      throw new BadRequestException('Invalid or expired verification code');
     }
 
     const token = await this.db.authTokens.findOne({
@@ -410,7 +410,7 @@ export class AuthenticationService {
 
     if (!token) {
       await this.recordFailedOtpAttempt(identifierKey, identifier, type);
-      throw new BadRequestException('invalid verification code');
+      throw new BadRequestException('Invalid or expired verification code');
     }
 
     return token;
@@ -1017,20 +1017,27 @@ export class AuthenticationService {
       }
 
       const [user, otpDoc] = await Promise.all([
-        this.db.users.findOne({ phoneNumber: _phoneNumber }),
+        this.db.users.findOne({
+          phoneNumber: _phoneNumber,
+          deleted: { $ne: true },
+        }),
         this.getPhoneOtpOrFail(phoneNumber, otp),
       ]);
-      if (user) {
-        const [authUser] = await Promise.all([
-          this.authorizeUser(user),
-          this.db.authTokens.updateOne(
-            { _id: otpDoc.id },
-            { $set: { isUsed: true } },
-          ),
-        ]);
 
-        return authUser;
+      await this.db.authTokens.updateOne(
+        { _id: otpDoc.id },
+        { $set: { isUsed: true } },
+      );
+
+      if (user) {
+        return this.authorizeUser(user);
       }
+
+      throw new NotFoundException(
+        app === 'driver'
+          ? 'No driver account exists for this phone number. Register to continue.'
+          : 'No account exists for this phone number. Register to continue.',
+      );
     }
 
     if (identifier && otp && !password) {
@@ -1073,17 +1080,21 @@ export class AuthenticationService {
         }),
         this.getEmailOtpOrFail(email, otp),
       ]);
-      if (user) {
-        const [authUser] = await Promise.all([
-          this.authorizeUser(user),
-          this.db.authTokens.updateOne(
-            { _id: otpDoc.id },
-            { $set: { isUsed: true } },
-          ),
-        ]);
 
-        return authUser;
+      await this.db.authTokens.updateOne(
+        { _id: otpDoc.id },
+        { $set: { isUsed: true } },
+      );
+
+      if (user) {
+        return this.authorizeUser(user);
       }
+
+      throw new NotFoundException(
+        app === 'driver'
+          ? 'No driver account exists for this email address. Register to continue.'
+          : 'No account exists for this email address. Register to continue.',
+      );
     }
 
     if (identifier && password) {
@@ -1159,6 +1170,7 @@ export class AuthenticationService {
 
     const user = await this.db.users.findOne({
       $or: [{ email: key.toLowerCase() }, { phoneNumber }],
+      deleted: { $ne: true },
     });
     if (!user) {
       throw new NotFoundException('user not found');

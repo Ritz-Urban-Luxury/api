@@ -1,4 +1,5 @@
 import {
+  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -344,16 +345,39 @@ describe('AuthenticationService Play reviewer authentication', () => {
   it('does not intercept an ordinary phone number', async () => {
     const { db, service } = createService();
     db.users.findOne.mockResolvedValueOnce(null);
+    db.authTokens.findOne.mockResolvedValueOnce({ id: 'ordinary-otp-id' });
 
     await expect(
       service.login({
+        app: 'driver',
         phoneNumber: '08011112222',
         otp: '1847',
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      message:
+        'No driver account exists for this phone number. Register to continue.',
+    });
 
     // Falls through to the real phone-OTP lookup instead of the reviewer
     // bypass, which never touches authTokens.findOne.
     expect(db.authTokens.findOne).toHaveBeenCalled();
+    expect(db.authTokens.updateOne).toHaveBeenCalledWith(
+      { _id: 'ordinary-otp-id' },
+      { $set: { isUsed: true } },
+    );
+  });
+
+  it('does not treat a soft-deleted account as an existing registration', async () => {
+    const { db, service } = createService();
+    db.users.findOne.mockResolvedValueOnce(null);
+
+    await expect(service.getUser('08011112222')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(db.users.findOne).toHaveBeenCalledWith({
+      $or: [{ email: '08011112222' }, { phoneNumber: '2348011112222' }],
+      deleted: { $ne: true },
+    });
   });
 });
