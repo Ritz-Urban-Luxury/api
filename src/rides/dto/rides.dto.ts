@@ -7,6 +7,7 @@ import {
   IsDate,
   IsDateString,
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   MaxLength,
@@ -321,6 +322,18 @@ export class EndTripLocationDTO {
   @IsDateString()
   @IsOptional()
   recordedAt?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  sequence?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  speed?: number;
 }
 
 export class EndTripDTO {
