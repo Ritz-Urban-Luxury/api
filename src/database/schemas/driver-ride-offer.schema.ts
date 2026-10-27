@@ -42,6 +42,13 @@ export class DriverRideOffer extends BaseSchema {
   @Prop({ required: true, default: () => new Date() })
   offeredAt: Date;
 
+  /** Snapshot used to restore a short-lived offer when socket delivery is missed. */
+  @Prop({ type: SchemaTypes.Mixed })
+  payload?: Record<string, unknown>;
+
+  @Prop()
+  expiresAt?: Date;
+
   @Prop({
     type: String,
     enum: RideOfferOutcomes,
@@ -61,3 +68,4 @@ export const DriverRideOfferSchema =
 
 DriverRideOfferSchema.index({ driver: 1, offeredAt: -1 });
 DriverRideOfferSchema.index({ driver: 1, outcome: 1, offeredAt: -1 });
+DriverRideOfferSchema.index({ driver: 1, outcome: 1, expiresAt: -1 });

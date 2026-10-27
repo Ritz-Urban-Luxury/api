@@ -130,6 +130,88 @@ describe('RidesService.acceptRide', () => {
   });
 });
 
+describe('RidesService.getCurrentRideOffer', () => {
+  let service: RidesService;
+  let cache: { get: jest.Mock };
+  let db: {
+    driverRideOffers: { findOne: jest.Mock };
+    rides: { findOne: jest.Mock };
+    users: { findOne: jest.Mock };
+  };
+
+  beforeEach(() => {
+    cache = { get: jest.fn().mockResolvedValue(false) };
+    db = {
+      driverRideOffers: { findOne: jest.fn() },
+      rides: { findOne: jest.fn() },
+      users: { findOne: jest.fn() },
+    };
+    service = Object.create(RidesService.prototype);
+    Object.assign(service as any, { cache, db });
+  });
+
+  it('restores a pending unexpired offer for the selected driver', async () => {
+    const expiresAt = new Date(Date.now() + 20_000);
+    const payload = {
+      amount: 5000,
+      distance: 3200,
+      fromAddress: 'Fidelis Apartment, Zuba Garki Road',
+      fromLat: 9.1,
+      fromLon: 7.1,
+      paymentMethod: PaymentMethod.Cash,
+      toAddress: 'Destination',
+      toLat: 9.2,
+      toLon: 7.2,
+      type: VehicleCategory.Classic,
+    };
+    const rider = { firstName: 'Rita', id: riderId };
+    db.driverRideOffers.findOne.mockResolvedValue({
+      expiresAt,
+      payload,
+      requestedCategory: VehicleCategory.Classic,
+      ride: rideId,
+      trackingId: 'tracking-1',
+      user: riderId,
+    });
+    db.rides.findOne.mockResolvedValue({ id: rideId });
+    db.users.findOne.mockResolvedValue(rider);
+
+    await expect(
+      service.getCurrentRideOffer({ id: ownerId } as never),
+    ).resolves.toEqual({
+      expiresAt: expiresAt.toISOString(),
+      payload,
+      trackingId: 'tracking-1',
+      user: rider,
+    });
+
+    expect(db.driverRideOffers.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        driver: ownerId,
+        outcome: 'Pending',
+        expiresAt: { $gt: expect.any(Date) },
+      }),
+      undefined,
+      { sort: { offeredAt: -1 } },
+    );
+  });
+
+  it('does not restore an offer that is no longer waiting for a decision', async () => {
+    cache.get.mockResolvedValue(true);
+    db.driverRideOffers.findOne.mockResolvedValue({
+      expiresAt: new Date(Date.now() + 20_000),
+      payload: { type: VehicleCategory.Classic },
+      trackingId: 'tracking-1',
+    });
+
+    await expect(
+      service.getCurrentRideOffer({ id: ownerId } as never),
+    ).resolves.toBeUndefined();
+    expect(db.rides.findOne).not.toHaveBeenCalled();
+    expect(db.users.findOne).not.toHaveBeenCalled();
+  });
+});
+
 describe('RidesService.cancelRiderRental', () => {
   const user = { id: riderId } as never;
   let service: RidesService;
@@ -480,11 +562,7 @@ describe('RidesService Play reviewer sandbox', () => {
         approvalStatus: RideApprovalStatus.Approved,
         driver: ownerId,
         status: {
-          $in: [
-            RideStatus.Online,
-            RideStatus.Busy,
-            RideStatus.FinishingTrip,
-          ],
+          $in: [RideStatus.Online, RideStatus.Busy, RideStatus.FinishingTrip],
         },
         type: { $ne: RideType.Hire },
       }),

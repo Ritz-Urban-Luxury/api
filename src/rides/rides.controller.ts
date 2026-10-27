@@ -303,6 +303,14 @@ export class RidesController {
     return Response.json('ongoing trip location', location);
   }
 
+  @UseVerifiedDriver()
+  @Get('trips/offers/current')
+  async getCurrentRideOffer(@CurrentUser() user: UserDocument) {
+    const offer = await this.ridesService.getCurrentRideOffer(user);
+
+    return Response.json('current ride offer', offer || null);
+  }
+
   @UseGuards(JwtGuard)
   @Post('trips/:trip/report')
   async reportTripUser(

@@ -105,6 +105,12 @@ type ReviewRideOffer = {
   };
 };
 
+type RideOfferPayload = RequestRideDTO & {
+  amount: number;
+  distance: number;
+  fare?: TripFare;
+};
+
 const EARLY_END_LOCATION_MAX_AGE_MS = 2 * 60 * 1000;
 
 type TripCompletionOptions = {
@@ -357,8 +363,9 @@ export class RidesService implements OnModuleInit {
       payload,
     };
     const expiresInSeconds = (this.WAIT_TIME * 2) / 1000;
+    const expiresAt = new Date(Date.now() + this.WAIT_TIME * 2);
     const rideRequest = {
-      expiresAt: new Date(Date.now() + this.WAIT_TIME * 2).toISOString(),
+      expiresAt: expiresAt.toISOString(),
       expiresInSeconds,
       trackingId,
       user: rider,
@@ -374,6 +381,8 @@ export class RidesService implements OnModuleInit {
         requestedCategory: reviewCategory,
         userId: String(rider.id),
         trackingId,
+        expiresAt,
+        payload,
       }),
     ]);
 
@@ -1055,6 +1064,69 @@ export class RidesService implements OnModuleInit {
     return undefined;
   }
 
+  /**
+   * Returns the driver's still-actionable offer so the app can recover after
+   * Android/iOS suspends a socket or the app reconnects after the event.
+   */
+  async getCurrentRideOffer(driver: UserDocument) {
+    const now = new Date();
+    const offer = await this.db.driverRideOffers.findOne(
+      {
+        driver: driver.id,
+        outcome: RideOfferOutcome.Pending,
+        expiresAt: { $gt: now },
+      },
+      undefined,
+      { sort: { offeredAt: -1 } },
+    );
+    if (!offer?.trackingId || !offer.payload || !offer.expiresAt) {
+      return undefined;
+    }
+
+    const waiting = await this.cache.get<boolean>(offer.trackingId);
+    if (waiting !== false) {
+      return undefined;
+    }
+
+    const rideId = Util.resolveDocumentId(offer.ride);
+    const riderId = Util.resolveDocumentId(offer.user);
+    if (!rideId || !riderId) {
+      return undefined;
+    }
+
+    const [ride, rider] = await Promise.all([
+      this.db.rides.findOne({
+        _id: rideId,
+        driver: driver.id,
+        approvalStatus: RideApprovalStatus.Approved,
+        deleted: { $ne: true },
+        status: RideStatus.Online,
+        type: offer.requestedCategory,
+        $or: [
+          { vehicleCategory: offer.requestedCategory },
+          {
+            vehicleCategory: { $exists: false },
+            type: offer.requestedCategory,
+          },
+        ],
+      }),
+      this.db.users.findOne(
+        { _id: riderId, deleted: { $ne: true } },
+        'avatar firstName lastName phoneNumber',
+      ),
+    ]);
+    if (!ride || !rider) {
+      return undefined;
+    }
+
+    return {
+      expiresAt: offer.expiresAt.toISOString(),
+      payload: offer.payload as unknown as RideOfferPayload,
+      trackingId: offer.trackingId,
+      user: rider,
+    };
+  }
+
   private async waitForRideOfferDecision(
     trackingId: string,
     connectionId: string,
@@ -1136,6 +1208,8 @@ export class RidesService implements OnModuleInit {
         requestedCategory: payload.type,
         userId: user.id,
         trackingId,
+        expiresAt: new Date(expiresAt),
+        payload,
       });
       await this.cache.set(trackingId, false, offerTtl);
 
@@ -2984,6 +3058,8 @@ export class RidesService implements OnModuleInit {
 
   private async recordRideOffer(payload: {
     driverId: string;
+    expiresAt: Date;
+    payload: RideOfferPayload;
     rideId: string;
     requestedCategory: VehicleCategory;
     userId: string;
@@ -2999,6 +3075,8 @@ export class RidesService implements OnModuleInit {
           user: payload.userId,
           trackingId: payload.trackingId,
           offeredAt: new Date(),
+          expiresAt: payload.expiresAt,
+          payload: payload.payload,
           outcome: RideOfferOutcome.Pending,
         },
       },
