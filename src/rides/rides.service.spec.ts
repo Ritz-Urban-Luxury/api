@@ -463,6 +463,34 @@ describe('RidesService Play reviewer sandbox', () => {
     );
   });
 
+  it('returns the active trip vehicle as the authoritative availability state', async () => {
+    const activeRide = {
+      ...syntheticRide,
+      status: RideStatus.Online,
+    };
+    const sort = jest.fn().mockResolvedValue(activeRide);
+    db.rides.findOne.mockReturnValue({ sort });
+
+    await expect(
+      service.getDriverAvailability(driverReviewer),
+    ).resolves.toEqual(activeRide);
+
+    expect(db.rides.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalStatus: RideApprovalStatus.Approved,
+        driver: ownerId,
+        status: {
+          $in: [
+            RideStatus.Online,
+            RideStatus.Busy,
+            RideStatus.FinishingTrip,
+          ],
+        },
+        type: { $ne: RideType.Hire },
+      }),
+    );
+  });
+
   it('rejects automatic availability changes without an approved trip vehicle', async () => {
     db.rides.findOne.mockResolvedValue(null);
 
@@ -682,6 +710,7 @@ describe('RidesService Play reviewer sandbox', () => {
     expect(db.rides.find).toHaveBeenCalledWith(
       expect.objectContaining({
         approvalStatus: RideApprovalStatus.Approved,
+        status: RideStatus.Online,
         type: { $in: [RideType.Luxury] },
         $or: expect.arrayContaining([
           { vehicleCategory: { $in: [RideType.Luxury] } },
@@ -1484,6 +1513,7 @@ describe('RidesService notification sounds', () => {
       type: RideType.Classic,
       vehicleCategory: VehicleCategory.Classic,
     } as never;
+    db.rides.findOne.mockResolvedValue(ride);
     cache.get.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const internals = service as unknown as {
       recordRideOffer: () => Promise<void>;
@@ -1543,6 +1573,44 @@ describe('RidesService notification sounds', () => {
     );
     expect(offerReadyCall).toBeLessThan(rideRequestCall);
     expect(expiredCall).toBeLessThan(driversBusyCall);
+  });
+
+  it('does not notify a driver whose vehicle went offline before the offer', async () => {
+    const ride = {
+      approvalStatus: RideApprovalStatus.Approved,
+      driver,
+      id: rideId,
+      status: RideStatus.Online,
+      type: RideType.Classic,
+      vehicleCategory: VehicleCategory.Classic,
+    } as never;
+    db.rides.findOne.mockResolvedValue(null);
+
+    await service.connectToDriver(rider, [ride], 'connection-id', {
+      amount: 5000,
+      distance: 3,
+      fromAddress: 'Pickup',
+      fromLat: 9.1,
+      fromLon: 7.1,
+      paymentMethod: PaymentMethod.Cash,
+      stops: [],
+      toAddress: 'Destination',
+      toLat: 9.2,
+      toLon: 7.2,
+      type: VehicleCategory.Classic,
+    });
+
+    expect(push.sendToUser).not.toHaveBeenCalled();
+    expect(websocket.emitToUser).not.toHaveBeenCalledWith(
+      driver,
+      'RideRequest',
+      expect.anything(),
+    );
+    expect(websocket.emitToUser).toHaveBeenCalledWith(
+      rider,
+      'DriversBusy',
+      'All drivers are busy at this time',
+    );
   });
 
   it('uses the chat sound only for the message recipient', async () => {

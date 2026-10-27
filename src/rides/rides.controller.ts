@@ -115,6 +115,13 @@ export class RidesController {
   }
 
   @UseVerifiedDriver()
+  @Get('me/availability')
+  async getDriverAvailability(@CurrentUser() user: UserDocument) {
+    const ride = await this.ridesService.getDriverAvailability(user);
+    return Response.json('driver availability', ride);
+  }
+
+  @UseVerifiedDriver()
   @Get('me/rentals')
   async getOwnerRentals(
     @CurrentUser() user: UserDocument,

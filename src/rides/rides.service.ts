@@ -652,7 +652,7 @@ export class RidesService implements OnModuleInit {
     const query: FilterQuery<RidesDocument> = {
       deleted: { $ne: true },
       'specs.synthetic': isHireOnly && isRiderReviewer ? true : { $ne: true },
-      status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+      status: RideStatus.Online,
     };
     const blockedUserIds = await this.getBlockedPairUserIds(String(user.id));
     if (blockedUserIds.length > 0) {
@@ -811,7 +811,7 @@ export class RidesService implements OnModuleInit {
           approvalStatus: RideApprovalStatus.Approved,
           deleted: { $ne: true },
           'specs.synthetic': { $ne: true },
-          status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+          status: RideStatus.Online,
           type,
           $or: [
             { vehicleCategory: type },
@@ -875,9 +875,10 @@ export class RidesService implements OnModuleInit {
         return eligible;
       }),
     );
-    const available = _available
-      .filter((_ride, index) => eligibility[index])
-      .sort((a) => (a.status === RideStatus.Online ? -1 : 1));
+    // MongoDB's $near query already returns nearest-first. Preserve that order
+    // after removing ineligible drivers so the closest online driver is offered
+    // the request first.
+    const available = _available.filter((_ride, index) => eligibility[index]);
     if (!available.length) {
       throw new BadRequestException('All drivers are busy at this time');
     }
@@ -1030,7 +1031,7 @@ export class RidesService implements OnModuleInit {
       driver: driver.id,
       approvalStatus: RideApprovalStatus.Approved,
       deleted: { $ne: true },
-      status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+      status: RideStatus.Online,
       type: offer.requestedCategory,
       $or: [
         { vehicleCategory: offer.requestedCategory },
@@ -1110,6 +1111,22 @@ export class RidesService implements OnModuleInit {
         continue;
       }
 
+      const eligibleRide = await this.db.rides.findOne({
+        _id: ride.id,
+        driver: driver.id,
+        approvalStatus: RideApprovalStatus.Approved,
+        deleted: { $ne: true },
+        status: RideStatus.Online,
+        type: payload.type,
+        $or: [
+          { vehicleCategory: payload.type },
+          { vehicleCategory: { $exists: false }, type: payload.type },
+        ],
+      });
+      if (!eligibleRide) {
+        continue;
+      }
+
       trackingId = Math.random().toString(32).substring(2);
       const expiresAt = new Date(Date.now() + this.WAIT_TIME).toISOString();
 
@@ -1176,19 +1193,19 @@ export class RidesService implements OnModuleInit {
       }
 
       if (accepted === true) {
-        const eligibleRide = await this.db.rides.findOne({
+        const acceptedRide = await this.db.rides.findOne({
           _id: ride.id,
           driver: driver.id,
           approvalStatus: RideApprovalStatus.Approved,
           deleted: { $ne: true },
-          status: { $in: [RideStatus.Online, RideStatus.FinishingTrip] },
+          status: RideStatus.Online,
           type: payload.type,
           $or: [
             { vehicleCategory: payload.type },
             { vehicleCategory: { $exists: false }, type: payload.type },
           ],
         });
-        if (!eligibleRide) {
+        if (!acceptedRide) {
           await this.resolveRideOffer(trackingId, RideOfferOutcome.TimedOut);
           this.websocket.emitToUser(driver, 'RideRequestExpired', {
             reason: 'vehicle_ineligible',
@@ -1208,7 +1225,7 @@ export class RidesService implements OnModuleInit {
               coordinates: [payload.fromLat, payload.fromLon],
             },
             user,
-            ride: eligibleRide,
+            ride: acceptedRide,
             driver,
             rideCategory: payload.type,
             meta: {
@@ -2630,6 +2647,38 @@ export class RidesService implements OnModuleInit {
     }
 
     return this.db.rides.find(query).sort({ createdAt: -1 });
+  }
+
+  async getDriverAvailability(user: UserDocument) {
+    const activeRide = await this.db.rides
+      .findOne({
+        approvalStatus: RideApprovalStatus.Approved,
+        deleted: { $ne: true },
+        driver: user.id,
+        status: {
+          $in: [
+            RideStatus.Online,
+            RideStatus.Busy,
+            RideStatus.FinishingTrip,
+          ],
+        },
+        type: { $ne: RideType.Hire },
+      })
+      .sort({ updatedAt: -1 });
+
+    if (activeRide) {
+      return activeRide;
+    }
+
+    return this.db.rides
+      .findOne({
+        approvalStatus: RideApprovalStatus.Approved,
+        deleted: { $ne: true },
+        driver: user.id,
+        status: RideStatus.Offline,
+        type: { $ne: RideType.Hire },
+      })
+      .sort({ updatedAt: -1 });
   }
 
   async getMyRide(user: UserDocument, rideId: string) {
