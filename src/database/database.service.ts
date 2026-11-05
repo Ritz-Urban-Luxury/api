@@ -45,6 +45,9 @@ import { PricingZoneDocument } from './schemas/pricing-zone.schema';
 import { VehicleSettingsDocument } from './schemas/vehicle-settings.schema';
 import { ServiceLocationDocument } from './schemas/service-location.schema';
 import { AdminAuditLogDocument } from './schemas/admin-audit-log.schema';
+import { DriverHireBookingDocument } from './schemas/driver-hire-booking.schema';
+import { DriverHireSettingsDocument } from './schemas/driver-hire-settings.schema';
+import { DriverHireTermsAcceptanceDocument } from './schemas/driver-hire-terms-acceptance.schema';
 
 @Injectable()
 export class DatabaseService {
@@ -115,6 +118,12 @@ export class DatabaseService {
     public readonly serviceLocations: Model<ServiceLocationDocument>,
     @InjectModel(DB_TABLES.ADMIN_AUDIT_LOGS)
     public readonly adminAuditLogs: Model<AdminAuditLogDocument>,
+    @InjectModel(DB_TABLES.DRIVER_HIRE_BOOKINGS)
+    public readonly driverHireBookings: Model<DriverHireBookingDocument>,
+    @InjectModel(DB_TABLES.DRIVER_HIRE_SETTINGS)
+    public readonly driverHireSettings: Model<DriverHireSettingsDocument>,
+    @InjectModel(DB_TABLES.DRIVER_HIRE_TERMS_ACCEPTANCES)
+    public readonly driverHireTermsAcceptances: Model<DriverHireTermsAcceptanceDocument>,
   ) {}
 
   async findOrFail<

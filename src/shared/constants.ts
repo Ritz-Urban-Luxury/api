@@ -32,4 +32,7 @@ export const DB_TABLES = {
   VEHICLE_SETTINGS: 'vehicle_settings',
   SERVICE_LOCATIONS: 'service_locations',
   ADMIN_AUDIT_LOGS: 'admin_audit_logs',
+  DRIVER_HIRE_BOOKINGS: 'driver_hire_bookings',
+  DRIVER_HIRE_SETTINGS: 'driver_hire_settings',
+  DRIVER_HIRE_TERMS_ACCEPTANCES: 'driver_hire_terms_acceptances',
 };

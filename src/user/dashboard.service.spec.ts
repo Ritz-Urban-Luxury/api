@@ -59,6 +59,7 @@ describe('DashboardService.getAttention', () => {
       },
       userReports: { countDocuments: count(5) },
       payoutRequests: { countDocuments: count(6) },
+      driverHireBookings: { countDocuments: count(7) },
     };
     const service = new DashboardService(db as never);
 
@@ -68,6 +69,7 @@ describe('DashboardService.getAttention', () => {
       pendingTripVehicles: 4,
       openReports: 5,
       pendingPayouts: 6,
+      pendingDriverHire: 7,
     });
     expect(db.users.countDocuments).toHaveBeenCalledWith({
       deleted: { $ne: true },
@@ -81,6 +83,11 @@ describe('DashboardService.getAttention', () => {
       driver: { $nin: [] },
       type: { $in: ['Classic', 'Luxury'] },
       approvalStatus: 'Pending',
+    });
+    expect(db.driverHireBookings.countDocuments).toHaveBeenCalledWith({
+      deleted: { $ne: true },
+      user: { $nin: [] },
+      status: 'PendingReview',
     });
   });
 });

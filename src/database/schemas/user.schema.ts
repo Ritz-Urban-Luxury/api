@@ -169,6 +169,10 @@ export class User extends BaseSchema {
   @Prop({ default: false })
   isDriver?: boolean;
 
+  /** Admin-controlled eligibility for managed Hire a Driver assignments. */
+  @Prop({ default: false })
+  isInHouseDriver?: boolean;
+
   /** Unique driver invite / referral code (not company registration). */
   @Prop({ sparse: true, unique: true, uppercase: true, trim: true })
   inviteCode?: string;

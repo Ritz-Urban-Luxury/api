@@ -9,6 +9,7 @@ import { RideApprovalStatus, RideType } from '../database/schemas/rides.schema';
 import { UserReportStatus } from '../database/schemas/user-report.schema';
 import { TripDocument, TripStatus } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
+import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
 
 const RUNNING_STATUSES = [
   TripStatus.Started,
@@ -41,6 +42,7 @@ export type DashboardAttention = {
   pendingTripVehicles: number;
   openReports: number;
   pendingPayouts: number;
+  pendingDriverHire: number;
 };
 
 export type DashboardTrendPoint = {
@@ -113,6 +115,7 @@ export class DashboardService {
       pendingTripVehicles,
       openReports,
       pendingPayouts,
+      pendingDriverHire,
     ] = await Promise.all([
       this.db.users.countDocuments({
         ...notDeleted,
@@ -145,6 +148,11 @@ export class DashboardService {
         user: { $nin: testUserIds },
         status: PayoutRequestStatus.Requested,
       }),
+      this.db.driverHireBookings.countDocuments({
+        ...notDeleted,
+        user: { $nin: testUserIds },
+        status: DriverHireBookingStatus.PendingReview,
+      }),
     ]);
 
     return {
@@ -153,6 +161,7 @@ export class DashboardService {
       pendingTripVehicles,
       openReports,
       pendingPayouts,
+      pendingDriverHire,
     };
   }
 

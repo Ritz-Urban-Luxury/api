@@ -22,6 +22,7 @@ import { PricingModule } from './pricing/pricing.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { FinanceModule } from './finance/finance.module';
 import { LocationsModule } from './locations/locations.module';
+import { DriverHireModule } from './driver-hire/driver-hire.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { LocationsModule } from './locations/locations.module';
     UserModule,
     FinanceModule,
     LocationsModule,
+    DriverHireModule,
   ],
   controllers: [AppController],
   providers: [AppService],

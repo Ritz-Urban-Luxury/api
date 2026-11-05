@@ -39,6 +39,9 @@ import { VehicleSettingsSchema } from './schemas/vehicle-settings.schema';
 import { ServiceLocationSchema } from './schemas/service-location.schema';
 import { PricingService } from './pricing.service';
 import { AdminAuditLogSchema } from './schemas/admin-audit-log.schema';
+import { DriverHireBookingSchema } from './schemas/driver-hire-booking.schema';
+import { DriverHireSettingsSchema } from './schemas/driver-hire-settings.schema';
+import { DriverHireTermsAcceptanceSchema } from './schemas/driver-hire-terms-acceptance.schema';
 
 @Global()
 @Module({
@@ -87,6 +90,18 @@ import { AdminAuditLogSchema } from './schemas/admin-audit-log.schema';
       { name: DB_TABLES.VEHICLE_SETTINGS, schema: VehicleSettingsSchema },
       { name: DB_TABLES.SERVICE_LOCATIONS, schema: ServiceLocationSchema },
       { name: DB_TABLES.ADMIN_AUDIT_LOGS, schema: AdminAuditLogSchema },
+      {
+        name: DB_TABLES.DRIVER_HIRE_BOOKINGS,
+        schema: DriverHireBookingSchema,
+      },
+      {
+        name: DB_TABLES.DRIVER_HIRE_SETTINGS,
+        schema: DriverHireSettingsSchema,
+      },
+      {
+        name: DB_TABLES.DRIVER_HIRE_TERMS_ACCEPTANCES,
+        schema: DriverHireTermsAcceptanceSchema,
+      },
     ]),
   ],
   providers: [

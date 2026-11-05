@@ -24,6 +24,7 @@ describe('UserService.deleteAccount', () => {
       cards: { deleteMany: resolved },
       driverOnlineSessions: { updateMany: resolved },
       driverRideOffers: { deleteMany: resolved },
+      driverHireBookings: { findOne: jest.fn().mockResolvedValue(null) },
       messages: { deleteMany: resolved },
       newsReads: { deleteMany: resolved },
       rentals: { findOne: jest.fn().mockResolvedValue(null) },
@@ -68,6 +69,17 @@ describe('UserService.deleteAccount', () => {
     await expect(
       service.deleteAccount(user, { confirm: true }),
     ).rejects.toThrow('Complete or cancel your active car rental');
+    expect(db.users.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('blocks deletion while a driver hire booking is active', async () => {
+    db.driverHireBookings.findOne.mockResolvedValue({
+      id: 'active-driver-hire',
+    });
+
+    await expect(
+      service.deleteAccount(user, { confirm: true }),
+    ).rejects.toThrow('Complete or cancel your active driver booking');
     expect(db.users.findOneAndUpdate).not.toHaveBeenCalled();
   });
 

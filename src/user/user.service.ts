@@ -23,6 +23,7 @@ import {
 } from '../database/schemas/rides.schema';
 import { AdminAuditAction } from '../database/schemas/admin-audit-log.schema';
 import { InactiveTripStatuses } from '../database/schemas/trips.schema';
+import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { Util } from '../shared/util';
 import config from '../shared/config';
@@ -185,7 +186,7 @@ export class UserService {
     }
 
     const userId = user.id;
-    const [activeTrip, activeRental] = await Promise.all([
+    const [activeTrip, activeRental, activeDriverHire] = await Promise.all([
       this.db.trips.findOne({
         $or: [{ user: userId }, { driver: userId }],
         status: { $nin: InactiveTripStatuses },
@@ -202,6 +203,19 @@ export class UserService {
         },
         deleted: { $ne: true },
       }),
+      this.db.driverHireBookings.findOne({
+        $or: [{ user: userId }, { assignedDriver: userId }],
+        status: {
+          $in: [
+            DriverHireBookingStatus.PendingReview,
+            DriverHireBookingStatus.Assigned,
+            DriverHireBookingStatus.DriverEnRoute,
+            DriverHireBookingStatus.DriverArrived,
+            DriverHireBookingStatus.InProgress,
+          ],
+        },
+        deleted: { $ne: true },
+      }),
     ]);
 
     if (activeTrip) {
@@ -212,6 +226,11 @@ export class UserService {
     if (activeRental) {
       throw new ConflictException(
         'Complete or cancel your active car rental before deleting your account',
+      );
+    }
+    if (activeDriverHire) {
+      throw new ConflictException(
+        'Complete or cancel your active driver booking before deleting your account',
       );
     }
     const isDriver = Boolean(
@@ -288,6 +307,7 @@ export class UserService {
           pushDevices: [],
           isVerified: false,
           isDriver: false,
+          isInHouseDriver: false,
           isAppAdmin: false,
         },
         $unset: {
