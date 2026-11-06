@@ -206,6 +206,12 @@ export class UpdateDriverHireStatusDTO {
   status: DriverHireBookingStatus;
 }
 
+export class VerifyDriverHireHandoverDTO {
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'code must contain exactly 6 digits' })
+  code: string;
+}
+
 export class UpdateDriverHireSettingsDTO {
   @IsBoolean()
   active: boolean;

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { UserDocument } from '../database/schemas/user.schema';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { UseVerifiedDriver } from '../shared/decorators/use-verified-driver.decorator';
@@ -50,6 +58,17 @@ export class DriverAssignmentController {
         bookingId,
         payload.status,
       ),
+    );
+  }
+
+  @Post('assignments/:bookingId/handover-code')
+  async generateHandoverCode(
+    @CurrentUser() driver: UserDocument,
+    @Param('bookingId') bookingId: string,
+  ) {
+    return Response.json(
+      'Handover verification code generated',
+      await this.driverHire.generateHandoverCode(driver, bookingId),
     );
   }
 }

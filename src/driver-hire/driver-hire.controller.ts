@@ -16,6 +16,7 @@ import {
   CancelDriverHireBookingDTO,
   CreateDriverHireBookingDTO,
   ListDriverHireBookingsDTO,
+  VerifyDriverHireHandoverDTO,
 } from './dto/driver-hire.dto';
 import { DriverHireService } from './driver-hire.service';
 
@@ -94,6 +95,18 @@ export class DriverHireController {
     return Response.json(
       'Driver booking cancelled',
       await this.driverHire.cancelBooking(user, bookingId, payload.reason),
+    );
+  }
+
+  @Post('bookings/:bookingId/handover/verify')
+  async verifyHandover(
+    @CurrentUser() user: UserDocument,
+    @Param('bookingId') bookingId: string,
+    @Body() payload: VerifyDriverHireHandoverDTO,
+  ) {
+    return Response.json(
+      'Driver identity confirmed',
+      await this.driverHire.verifyHandoverCode(user, bookingId, payload.code),
     );
   }
 }

@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { compare, hash } from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import {
   DriverHireBookingDocument,
@@ -50,6 +52,9 @@ const DRIVER_TRANSITIONS: Partial<
   [DriverHireBookingStatus.DriverArrived]: [DriverHireBookingStatus.InProgress],
   [DriverHireBookingStatus.InProgress]: [DriverHireBookingStatus.Completed],
 };
+
+const HANDOVER_CODE_TTL_MS = 10 * 60 * 1000;
+const HANDOVER_CODE_MAX_ATTEMPTS = 5;
 
 @Injectable()
 export class DriverHireService {
@@ -536,6 +541,146 @@ export class DriverHireService {
     return booking;
   }
 
+  async generateHandoverCode(driver: UserDocument, bookingId: string) {
+    const existing = await this.getDriverAssignment(driver, bookingId);
+    if (existing.status !== DriverHireBookingStatus.DriverArrived) {
+      throw new ConflictException(
+        'The verification code is available only after you have arrived',
+      );
+    }
+    if (existing.handoverVerifiedAt) {
+      throw new ConflictException('Vehicle handover is already verified');
+    }
+
+    const code = randomInt(100_000, 1_000_000).toString();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + HANDOVER_CODE_TTL_MS);
+    const codeHash = await hash(code, 10);
+    const booking = await this.db.driverHireBookings.findOneAndUpdate(
+      {
+        _id: bookingId,
+        assignedDriver: driver.id,
+        status: DriverHireBookingStatus.DriverArrived,
+        handoverVerifiedAt: { $exists: false },
+        deleted: { $ne: true },
+      },
+      {
+        $set: {
+          handoverCodeHash: codeHash,
+          handoverCodeExpiresAt: expiresAt,
+          handoverCodeAttempts: 0,
+          handoverCodeGeneratedAt: now,
+        },
+      },
+      { new: true },
+    );
+    if (!booking) {
+      throw new ConflictException('The assignment can no longer be verified');
+    }
+
+    return { code, expiresAt };
+  }
+
+  async verifyHandoverCode(
+    user: UserDocument,
+    bookingId: string,
+    code: string,
+  ) {
+    const booking = await this.db.driverHireBookings
+      .findOne({
+        _id: bookingId,
+        user: user.id,
+        status: DriverHireBookingStatus.DriverArrived,
+        deleted: { $ne: true },
+      })
+      .select('+handoverCodeHash +handoverCodeExpiresAt +handoverCodeAttempts');
+    if (!booking) {
+      throw new ConflictException(
+        'Driver verification is not available for this booking',
+      );
+    }
+    if (booking.handoverVerifiedAt) {
+      return this.getMyBooking(user, bookingId);
+    }
+    if (!booking.handoverCodeHash || !booking.handoverCodeExpiresAt) {
+      throw new BadRequestException(
+        'Ask the driver to generate a new verification code',
+      );
+    }
+    if (booking.handoverCodeAttempts >= HANDOVER_CODE_MAX_ATTEMPTS) {
+      throw new BadRequestException(
+        'Too many incorrect attempts. Ask the driver for a new code',
+      );
+    }
+    if (new Date(booking.handoverCodeExpiresAt).getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'This verification code has expired. Ask the driver for a new code',
+      );
+    }
+
+    const matches = await compare(code, booking.handoverCodeHash);
+    if (!matches) {
+      const updated = await this.db.driverHireBookings.findOneAndUpdate(
+        {
+          _id: booking.id,
+          handoverCodeHash: booking.handoverCodeHash,
+          handoverCodeAttempts: { $lt: HANDOVER_CODE_MAX_ATTEMPTS },
+          handoverVerifiedAt: { $exists: false },
+        },
+        { $inc: { handoverCodeAttempts: 1 } },
+        { new: true },
+      );
+      const attempts =
+        updated?.handoverCodeAttempts || booking.handoverCodeAttempts + 1;
+      const remaining = Math.max(0, HANDOVER_CODE_MAX_ATTEMPTS - attempts);
+      throw new BadRequestException(
+        remaining > 0
+          ? `Incorrect verification code. ${remaining} attempt${
+              remaining === 1 ? '' : 's'
+            } remaining`
+          : 'Too many incorrect attempts. Ask the driver for a new code',
+      );
+    }
+
+    const verifiedAt = new Date();
+    const verified = await this.db.driverHireBookings
+      .findOneAndUpdate(
+        {
+          _id: booking.id,
+          handoverCodeHash: booking.handoverCodeHash,
+          handoverCodeAttempts: { $lt: HANDOVER_CODE_MAX_ATTEMPTS },
+          handoverCodeExpiresAt: { $gt: verifiedAt },
+          handoverVerifiedAt: { $exists: false },
+        },
+        {
+          $set: { handoverVerifiedAt: verifiedAt, handoverVerifiedBy: user.id },
+          $unset: {
+            handoverCodeHash: 1,
+            handoverCodeExpiresAt: 1,
+            handoverCodeAttempts: 1,
+          },
+        },
+        { new: true },
+      )
+      .populate('assignedDriver', 'firstName lastName phoneNumber avatar');
+    if (!verified) {
+      throw new ConflictException(
+        'The verification code changed. Ask the driver for the latest code',
+      );
+    }
+
+    this.push.sendToUser(booking.assignedDriver as string, {
+      title: 'Vehicle handover verified',
+      body: 'The customer confirmed your identity. You can now start the service.',
+      app: 'driver',
+      data: {
+        type: 'DriverHireHandoverVerified',
+        bookingId: String(booking.id),
+      },
+    });
+    return verified;
+  }
+
   async updateDriverStatus(
     driver: UserDocument,
     bookingId: string,
@@ -546,6 +691,14 @@ export class DriverHireService {
     if (!allowed.includes(nextStatus)) {
       throw new ConflictException(
         `Cannot move an assignment from ${existing.status} to ${nextStatus}`,
+      );
+    }
+    if (
+      nextStatus === DriverHireBookingStatus.InProgress &&
+      !existing.handoverVerifiedAt
+    ) {
+      throw new ConflictException(
+        'The customer must verify the handover code before service can start',
       );
     }
 

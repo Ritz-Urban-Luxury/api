@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
 import { DriverHireService } from './driver-hire.service';
 
@@ -92,5 +92,84 @@ describe('DriverHireService', () => {
     await expect(
       service.createBooking({ id: 'user-1' } as never, {} as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('generates a six-digit, short-lived handover code only after arrival', async () => {
+    const findOneAndUpdate = jest.fn().mockResolvedValue({ id: 'booking-1' });
+    const service = new DriverHireService(
+      { driverHireBookings: { findOneAndUpdate } } as never,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service, 'getDriverAssignment').mockResolvedValue({
+      id: 'booking-1',
+      status: DriverHireBookingStatus.DriverArrived,
+    } as never);
+
+    const result = await service.generateHandoverCode(
+      { id: 'driver-1' } as never,
+      'booking-1',
+    );
+
+    expect(result.code).toMatch(/^\d{6}$/);
+    expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignedDriver: 'driver-1',
+        status: DriverHireBookingStatus.DriverArrived,
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          handoverCodeHash: expect.any(String),
+          handoverCodeAttempts: 0,
+        }),
+      }),
+      { new: true },
+    );
+    expect(findOneAndUpdate.mock.calls[0][1].$set.handoverCodeHash).not.toBe(
+      result.code,
+    );
+  });
+
+  it('does not allow service to start before customer verification', async () => {
+    const service = new DriverHireService(
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service, 'getDriverAssignment').mockResolvedValue({
+      id: 'booking-1',
+      status: DriverHireBookingStatus.DriverArrived,
+    } as never);
+
+    await expect(
+      service.updateDriverStatus(
+        { id: 'driver-1' } as never,
+        'booking-1',
+        DriverHireBookingStatus.InProgress,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects an expired handover code', async () => {
+    const select = jest.fn().mockResolvedValue({
+      id: 'booking-1',
+      handoverCodeHash: 'hash',
+      handoverCodeExpiresAt: new Date(Date.now() - 1_000),
+      handoverCodeAttempts: 0,
+    });
+    const service = new DriverHireService(
+      { driverHireBookings: { findOne: jest.fn(() => ({ select })) } } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.verifyHandoverCode(
+        { id: 'user-1' } as never,
+        'booking-1',
+        '123456',
+      ),
+    ).rejects.toThrow('expired');
   });
 });

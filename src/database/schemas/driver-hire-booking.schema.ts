@@ -186,6 +186,24 @@ export class DriverHireBooking extends BaseSchema {
   @Prop()
   startedAt?: Date;
 
+  @Prop({ select: false })
+  handoverCodeHash?: string;
+
+  @Prop({ select: false })
+  handoverCodeExpiresAt?: Date;
+
+  @Prop({ select: false, default: 0 })
+  handoverCodeAttempts?: number;
+
+  @Prop()
+  handoverCodeGeneratedAt?: Date;
+
+  @Prop()
+  handoverVerifiedAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  handoverVerifiedBy?: UserDocument | string;
+
   @Prop()
   endedAt?: Date;
 
