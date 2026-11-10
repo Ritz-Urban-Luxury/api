@@ -13,6 +13,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Matches,
@@ -80,6 +81,11 @@ export class DriverHireVehicleDTO {
   @MaxLength(500)
   @IsOptional()
   notes?: string;
+
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  @IsOptional()
+  photoUrl?: string;
 }
 
 export class AcceptDriverHireTermsDTO {

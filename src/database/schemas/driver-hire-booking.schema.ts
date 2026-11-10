@@ -58,6 +58,9 @@ export class CustomerVehicle {
 
   @Prop()
   notes?: string;
+
+  @Prop()
+  photoUrl?: string;
 }
 
 export const CustomerVehicleSchema =
