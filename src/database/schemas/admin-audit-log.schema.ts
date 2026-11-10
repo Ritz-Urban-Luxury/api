@@ -14,6 +14,7 @@ export enum AdminAuditAction {
   AppReviewDataReset = 'app-review-data.reset',
   DriverReviewed = 'driver.reviewed',
   DriverResubmitted = 'driver.resubmitted',
+  DriverAccessChanged = 'driver.access-changed',
   VehicleReviewed = 'vehicle.reviewed',
 }
 

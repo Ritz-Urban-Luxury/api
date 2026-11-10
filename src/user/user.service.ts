@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -10,10 +11,12 @@ import { FilterQuery } from 'mongoose';
 import { getPlayReviewAccount } from '../authentication/play-review-accounts';
 import { DatabaseService } from '../database/database.service';
 import {
+  DriverAccessStatus,
   DriverReviewField,
   DriverReviewStatus,
   UserDocument,
 } from '../database/schemas/user.schema';
+import { RideOfferOutcome } from '../database/schemas/driver-ride-offer.schema';
 import { RentalStatus } from '../database/schemas/rentals.schema';
 import {
   RideApprovalStatus,
@@ -29,6 +32,8 @@ import { Util } from '../shared/util';
 import config from '../shared/config';
 import { hashOtp } from '../authentication/otp';
 import { FinanceService } from '../finance/finance.service';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { WebsocketEvent } from '../websocket/types';
 import {
   AdminGetDriversDTO,
   AdminCreateDriverDTO,
@@ -40,6 +45,7 @@ import {
 import {
   ResubmitDriverApplicationDTO,
   ReviewDriverApplicationDTO,
+  SetDriverAccessDTO,
 } from './dto/driver-review.dto';
 
 @Injectable()
@@ -48,6 +54,7 @@ export class UserService {
     private readonly db: DatabaseService,
     private readonly push: PushNotificationService,
     private readonly finance: FinanceService,
+    @Optional() private readonly websocket?: WebsocketGateway,
   ) {}
 
   async updateUser(user: UserDocument, update: UpdateUserDTO) {
@@ -637,6 +644,9 @@ export class UserService {
               driverReviewStatus: payload.status,
               isDriver: true,
               isVerified: payload.status === DriverReviewStatus.Approved,
+              ...(payload.status === DriverReviewStatus.Approved
+                ? { driverAccessStatus: DriverAccessStatus.Enabled }
+                : {}),
             },
           },
           options,
@@ -694,6 +704,179 @@ export class UserService {
       data: {
         type: notification.type,
         url: '/(main)/settings/driver-portal',
+        userId: String(current.id),
+      },
+    });
+    await this.websocket?.emitToUser(
+      current,
+      WebsocketEvent.DriverAccessChanged,
+      { status: payload.status },
+    );
+
+    return this.getDriverDetail(userId);
+  }
+
+  async setDriverAccess(
+    admin: UserDocument,
+    userId: string,
+    payload: SetDriverAccessDTO,
+  ) {
+    const current = await this.db.users.findOne({
+      _id: userId,
+      deleted: { $ne: true },
+      isDriver: true,
+    });
+    if (!current) throw new NotFoundException('driver not found');
+
+    const currentStatus =
+      current.driverAccessStatus || DriverAccessStatus.Enabled;
+    if (currentStatus === payload.status) {
+      return this.getDriverDetail(userId);
+    }
+
+    if (current.driverReviewStatus !== DriverReviewStatus.Approved) {
+      throw new ConflictException(
+        'only an approved driver can be enabled or disabled',
+      );
+    }
+
+    const enabling = payload.status === DriverAccessStatus.Enabled;
+    if (enabling) {
+      const approvedVehicle = await this.db.rides.exists({
+        driver: current.id,
+        deleted: { $ne: true },
+        type: { $in: [RideType.Classic, RideType.Luxury] },
+        approvalStatus: RideApprovalStatus.Approved,
+        vehicleCategory: { $in: [RideType.Classic, RideType.Luxury] },
+      });
+      if (!approvedVehicle) {
+        throw new ConflictException(
+          'the driver needs an approved trip vehicle before access can be enabled',
+        );
+      }
+    } else {
+      const [activeTrip, activeDriverHire] = await Promise.all([
+        this.db.trips.findOne({
+          driver: current.id,
+          status: { $nin: InactiveTripStatuses },
+          deleted: { $ne: true },
+        }),
+        this.db.driverHireBookings.findOne({
+          assignedDriver: current.id,
+          status: {
+            $in: [
+              DriverHireBookingStatus.Assigned,
+              DriverHireBookingStatus.DriverEnRoute,
+              DriverHireBookingStatus.DriverArrived,
+              DriverHireBookingStatus.InProgress,
+            ],
+          },
+          deleted: { $ne: true },
+        }),
+      ]);
+      if (activeTrip || activeDriverHire) {
+        throw new ConflictException(
+          'complete or cancel the active trip before disabling this driver',
+        );
+      }
+    }
+
+    const now = new Date();
+    const reason =
+      payload.reason?.trim() ||
+      (enabling
+        ? 'Driver access enabled by administrator'
+        : 'Driver access disabled by administrator');
+    const session = await this.db.users.db.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const options = { session };
+        await this.db.users.updateOne(
+          { _id: current.id },
+          enabling
+            ? {
+                $set: {
+                  driverAccessStatus: DriverAccessStatus.Enabled,
+                  isVerified: true,
+                },
+                $unset: {
+                  driverDisabledAt: 1,
+                  driverDisabledBy: 1,
+                  driverDisabledReason: 1,
+                },
+              }
+            : {
+                $set: {
+                  driverAccessStatus: DriverAccessStatus.Disabled,
+                  driverDisabledAt: now,
+                  driverDisabledBy: admin.id,
+                  driverDisabledReason: reason,
+                  isVerified: false,
+                },
+              },
+          options,
+        );
+
+        if (!enabling) {
+          await Promise.all([
+            this.db.rides.updateMany(
+              {
+                driver: current.id,
+                deleted: { $ne: true },
+                type: { $in: [RideType.Classic, RideType.Luxury] },
+              },
+              {
+                $set: { status: RideStatus.Offline },
+                $unset: { location: 1 },
+              },
+              options,
+            ),
+            this.db.driverOnlineSessions.updateMany(
+              { driver: current.id, endedAt: { $exists: false } },
+              { $set: { endedAt: now } },
+              options,
+            ),
+            this.db.driverRideOffers.updateMany(
+              { driver: current.id, outcome: RideOfferOutcome.Pending },
+              {
+                $set: {
+                  outcome: RideOfferOutcome.TimedOut,
+                  resolvedAt: now,
+                },
+              },
+              options,
+            ),
+          ]);
+        }
+
+        await this.db.adminAuditLogs.create(
+          [
+            {
+              action: AdminAuditAction.DriverAccessChanged,
+              actor: admin.id,
+              reason,
+              targetUserId: String(current.id),
+              meta: {
+                from: currentStatus,
+                to: payload.status,
+              },
+            },
+          ],
+          options,
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    this.push.sendToUser(current, {
+      title: enabling ? 'Driver access restored' : 'Driver access disabled',
+      body: enabling
+        ? 'Your driver access has been restored. You can go online when ready.'
+        : 'Your driver access has been disabled. Contact support if you need help.',
+      app: 'driver',
+      data: {
+        type: enabling ? 'DriverEnabled' : 'DriverDisabled',
         userId: String(current.id),
       },
     });

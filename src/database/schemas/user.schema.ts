@@ -33,6 +33,11 @@ export enum DriverReviewStatus {
   Rejected = 'Rejected',
 }
 
+export enum DriverAccessStatus {
+  Enabled = 'Enabled',
+  Disabled = 'Disabled',
+}
+
 export enum DriverReviewField {
   ProfilePhoto = 'ProfilePhoto',
   DriverLicense = 'DriverLicense',
@@ -45,6 +50,7 @@ export enum DriverReviewField {
 export const AdminRoles = Object.values(AdminRole);
 export const DriverReviewStatuses = Object.values(DriverReviewStatus);
 export const DriverReviewFields = Object.values(DriverReviewField);
+export const DriverAccessStatuses = Object.values(DriverAccessStatus);
 
 export type DriverReviewIssue = {
   field: DriverReviewField;
@@ -136,6 +142,22 @@ export class User extends BaseSchema {
     default: DriverReviewStatus.Pending,
   })
   driverReviewStatus?: DriverReviewStatus;
+
+  @Prop({
+    type: String,
+    enum: DriverAccessStatuses,
+    default: DriverAccessStatus.Enabled,
+  })
+  driverAccessStatus?: DriverAccessStatus;
+
+  @Prop()
+  driverDisabledReason?: string;
+
+  @Prop()
+  driverDisabledAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  driverDisabledBy?: UserDocument | string;
 
   @Prop({
     type: [

@@ -774,8 +774,9 @@ describe('RidesService Play reviewer sandbox', () => {
   });
 
   it('lists only approved vehicles in the requested category', async () => {
+    const populate = jest.fn().mockReturnThis();
     db.rides.find.mockReturnValue({
-      populate: jest.fn().mockReturnThis(),
+      populate,
       sort: jest.fn().mockResolvedValue([]),
     });
 
@@ -793,6 +794,14 @@ describe('RidesService Play reviewer sandbox', () => {
         $or: expect.arrayContaining([
           { vehicleCategory: { $in: [RideType.Luxury] } },
         ]),
+      }),
+    );
+    expect(populate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        match: expect.objectContaining({
+          isVerified: true,
+          driverAccessStatus: { $ne: 'Disabled' },
+        }),
       }),
     );
   });

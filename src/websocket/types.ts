@@ -15,6 +15,7 @@ export enum WebsocketEvent {
   TripEnded = 'TripEnded',
   PaymentFailed = 'PaymentFailed',
   RentalStatusUpdated = 'RentalStatusUpdated',
+  DriverAccessChanged = 'DriverAccessChanged',
 }
 
 export type WebsocketEventType = WebsocketEvent | keyof typeof WebsocketEvent;

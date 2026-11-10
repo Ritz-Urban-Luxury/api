@@ -42,7 +42,10 @@ import {
   TripStatus,
   TripStopStatus,
 } from '../database/schemas/trips.schema';
-import { UserDocument } from '../database/schemas/user.schema';
+import {
+  DriverAccessStatus,
+  UserDocument,
+} from '../database/schemas/user.schema';
 import {
   UserReportDocument,
   UserReportStatus,
@@ -692,10 +695,18 @@ export class RidesService implements OnModuleInit {
       };
     }
 
-    return this.db.rides
+    const rides = await this.db.rides
       .find(query)
-      .populate({ path: 'driver', select: 'avatar firstName lastName' })
+      .populate({
+        path: 'driver',
+        match: {
+          isVerified: true,
+          driverAccessStatus: { $ne: DriverAccessStatus.Disabled },
+        },
+        select: 'avatar firstName lastName',
+      })
       .sort(isHireOnly ? { createdAt: -1 } : undefined);
+    return rides.filter((ride) => Boolean(ride.driver));
   }
 
   /** Prices for each ride type, from the rates admins set on the Pricing page. */
@@ -871,7 +882,18 @@ export class RidesService implements OnModuleInit {
     const eligibility = await Promise.all(
       _available.map(async (ride) => {
         const candidate = ride.driver as UserDocument | undefined;
-        if (!candidate?.id || getPlayReviewAccount(candidate.email)) {
+        if (
+          !candidate?.id ||
+          candidate.isVerified !== true ||
+          candidate.driverAccessStatus === DriverAccessStatus.Disabled ||
+          getPlayReviewAccount(candidate.email)
+        ) {
+          if (candidate?.id) {
+            await this.db.rides.updateOne(
+              { _id: ride.id, status: RideStatus.Online },
+              { $set: { status: RideStatus.Offline } },
+            );
+          }
           return false;
         }
         const eligible = await this.finance.canDriverReceiveRides(candidate.id);

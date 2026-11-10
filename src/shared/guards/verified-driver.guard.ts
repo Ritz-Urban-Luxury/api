@@ -1,6 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserDocument } from 'src/database/schemas/user.schema';
+import {
+  DriverAccessStatus,
+  UserDocument,
+} from 'src/database/schemas/user.schema';
 
 @Injectable()
 export class VerifiedDriverGuard implements CanActivate {
@@ -10,6 +13,9 @@ export class VerifiedDriverGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user as UserDocument;
 
-    return !!user.isVerified;
+    return (
+      !!user.isVerified &&
+      user.driverAccessStatus !== DriverAccessStatus.Disabled
+    );
   }
 }

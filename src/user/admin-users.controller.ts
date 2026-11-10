@@ -18,7 +18,10 @@ import {
   PurgeTestAccountDTO,
   SetUserVerificationDTO,
 } from './dto/user.dto';
-import { ReviewDriverApplicationDTO } from './dto/driver-review.dto';
+import {
+  ReviewDriverApplicationDTO,
+  SetDriverAccessDTO,
+} from './dto/driver-review.dto';
 import { PermanentlyDeleteUserDTO } from './dto/permanently-delete-user.dto';
 import { UserService } from './user.service';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
@@ -133,5 +136,19 @@ export class AdminUserController {
       payload,
     );
     return Response.json('driver application reviewed', detail);
+  }
+
+  @Put('/drivers/:userId/access')
+  async setDriverAccess(
+    @CurrentUser() admin: UserDocument,
+    @Param('userId') userId: string,
+    @Body() payload: SetDriverAccessDTO,
+  ) {
+    const detail = await this.userService.setDriverAccess(
+      admin,
+      userId,
+      payload,
+    );
+    return Response.json('driver access updated', detail);
   }
 }

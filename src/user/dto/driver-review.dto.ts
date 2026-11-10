@@ -11,6 +11,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  DriverAccessStatus,
+  DriverAccessStatuses,
   DriverReviewField,
   DriverReviewFields,
   DriverReviewStatus,
@@ -58,6 +60,16 @@ export class ReviewDriverApplicationDTO {
   @IsIn(VehicleCategories)
   @IsOptional()
   vehicleCategory?: VehicleCategory;
+
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  reason?: string;
+}
+
+export class SetDriverAccessDTO {
+  @IsIn(DriverAccessStatuses)
+  status: DriverAccessStatus;
 
   @IsString()
   @MaxLength(500)
