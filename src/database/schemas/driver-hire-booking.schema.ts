@@ -170,6 +170,9 @@ export type DriverHireBookingDocument = DriverHireBooking & Document;
 
 @Schema()
 export class DriverHireBooking extends BaseSchema {
+  @Prop({ trim: true })
+  clientRequestId?: string;
+
   @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS, required: true })
   user: UserDocument | string;
 
@@ -339,5 +342,12 @@ export const DriverHireBookingSchema =
   SchemaFactory.createForClass(DriverHireBooking);
 
 DriverHireBookingSchema.index({ user: 1, scheduledAt: -1 });
+DriverHireBookingSchema.index(
+  { user: 1, clientRequestId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientRequestId: { $type: 'string' } },
+  },
+);
 DriverHireBookingSchema.index({ assignedDriver: 1, scheduledAt: 1, status: 1 });
 DriverHireBookingSchema.index({ status: 1, scheduledAt: 1 });

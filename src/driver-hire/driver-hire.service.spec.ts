@@ -62,6 +62,31 @@ describe('DriverHireService', () => {
     expect(DriverHireService.discountedRate(100_000, 10)).toBe(90_000);
   });
 
+  it('returns the original booking when a submission is safely retried', async () => {
+    const existing = {
+      id: 'booking-1',
+      clientRequestId: 'driver-hire-request-000001',
+    };
+    const service = new DriverHireService(
+      {
+        driverHireBookings: {
+          findOne: jest.fn(async () => existing),
+          create: jest.fn(),
+        },
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.createBooking(
+        { id: 'user-1' } as never,
+        {} as never,
+        existing.clientRequestId,
+      ),
+    ).resolves.toBe(existing);
+  });
+
   it('creates a pending request with an immutable pricing snapshot', async () => {
     const create = jest.fn(async (payload) => ({
       id: 'booking-1',
@@ -74,7 +99,7 @@ describe('DriverHireService', () => {
       driverHireTermsAcceptances: {
         findOne: jest.fn(async () => ({ acceptedAt: new Date('2026-11-05') })),
       },
-      driverHireBookings: { create },
+      driverHireBookings: { create, findOne: jest.fn(async () => null) },
     };
     const service = new DriverHireService(
       db as never,
@@ -83,29 +108,37 @@ describe('DriverHireService', () => {
     );
     const scheduledAt = new Date(Date.now() + 4 * 60 * 60 * 1000);
 
-    await service.createBooking({ id: 'user-1' } as never, {
-      scheduledAt: scheduledAt.toISOString(),
-      estimatedHours: 2.1,
-      pickup: { address: 'Maitama, Abuja', latitude: 9.1, longitude: 7.4 },
-      completion: { address: 'Wuse 2, Abuja', latitude: 9.07, longitude: 7.48 },
-      servicePurpose: 'Business meetings',
-      vehicle: {
-        make: 'Toyota',
-        model: 'Camry',
-        year: 2022,
-        color: 'Black',
-        registration: 'ABC-123XY',
-        vehicleType: 'Sedan',
-        transmission: 'Automatic' as never,
+    await service.createBooking(
+      { id: 'user-1' } as never,
+      {
+        scheduledAt: scheduledAt.toISOString(),
+        estimatedHours: 2.1,
+        pickup: { address: 'Maitama, Abuja', latitude: 9.1, longitude: 7.4 },
+        completion: {
+          address: 'Wuse 2, Abuja',
+          latitude: 9.07,
+          longitude: 7.48,
+        },
+        servicePurpose: 'Business meetings',
+        vehicle: {
+          make: 'Toyota',
+          model: 'Camry',
+          year: 2022,
+          color: 'Black',
+          registration: 'ABC-123XY',
+          vehicleType: 'Sedan',
+          transmission: 'Automatic' as never,
+        },
+        handoverContactName: 'Ada Customer',
+        handoverContactPhone: '+2348012345678',
+        passengerCount: 1,
+        paymentMethod: 'RULBalance',
+        vehicleRoadworthyConfirmed: true,
+        vehicleInsuredConfirmed: true,
+        vehicleAuthorizationConfirmed: true,
       },
-      handoverContactName: 'Ada Customer',
-      handoverContactPhone: '+2348012345678',
-      passengerCount: 1,
-      paymentMethod: 'RULBalance',
-      vehicleRoadworthyConfirmed: true,
-      vehicleInsuredConfirmed: true,
-      vehicleAuthorizationConfirmed: true,
-    });
+      'driver-hire-request-000001',
+    );
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -128,7 +161,7 @@ describe('DriverHireService', () => {
       driverHireTermsAcceptances: {
         findOne: jest.fn(async () => ({ acceptedAt: new Date('2026-11-11') })),
       },
-      driverHireBookings: { create },
+      driverHireBookings: { create, findOne: jest.fn(async () => null) },
     };
     const service = new DriverHireService(
       db as never,
@@ -137,30 +170,38 @@ describe('DriverHireService', () => {
     );
     const scheduledAt = new Date(Date.now() + 4 * 60 * 60 * 1000);
 
-    await service.createBooking({ id: 'user-1' } as never, {
-      planType: DriverHirePlanType.Weekly,
-      scheduledAt: scheduledAt.toISOString(),
-      estimatedHours: 8,
-      pickup: { address: 'Maitama, Abuja', latitude: 9.1, longitude: 7.4 },
-      completion: { address: 'Wuse 2, Abuja', latitude: 9.07, longitude: 7.48 },
-      servicePurpose: 'General driving',
-      vehicle: {
-        make: 'Toyota',
-        model: 'Camry',
-        year: 2022,
-        color: 'Black',
-        registration: 'ABC-123XY',
-        vehicleType: 'Sedan',
-        transmission: 'Automatic' as never,
+    await service.createBooking(
+      { id: 'user-1' } as never,
+      {
+        planType: DriverHirePlanType.Weekly,
+        scheduledAt: scheduledAt.toISOString(),
+        estimatedHours: 8,
+        pickup: { address: 'Maitama, Abuja', latitude: 9.1, longitude: 7.4 },
+        completion: {
+          address: 'Wuse 2, Abuja',
+          latitude: 9.07,
+          longitude: 7.48,
+        },
+        servicePurpose: 'General driving',
+        vehicle: {
+          make: 'Toyota',
+          model: 'Camry',
+          year: 2022,
+          color: 'Black',
+          registration: 'ABC-123XY',
+          vehicleType: 'Sedan',
+          transmission: 'Automatic' as never,
+        },
+        handoverContactName: 'Ada Customer',
+        handoverContactPhone: '+2348012345678',
+        passengerCount: 1,
+        paymentMethod: 'RULBalance',
+        vehicleRoadworthyConfirmed: true,
+        vehicleInsuredConfirmed: true,
+        vehicleAuthorizationConfirmed: true,
       },
-      handoverContactName: 'Ada Customer',
-      handoverContactPhone: '+2348012345678',
-      passengerCount: 1,
-      paymentMethod: 'RULBalance',
-      vehicleRoadworthyConfirmed: true,
-      vehicleInsuredConfirmed: true,
-      vehicleAuthorizationConfirmed: true,
-    });
+      'driver-hire-request-000002',
+    );
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({

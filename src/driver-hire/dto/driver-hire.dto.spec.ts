@@ -1,6 +1,9 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { DriverHireVehicleDTO } from './driver-hire.dto';
+import {
+  DriverHireVehicleDTO,
+  ListDriverHireBookingsDTO,
+} from './driver-hire.dto';
 
 const vehicle = {
   make: 'Toyota',
@@ -40,5 +43,14 @@ describe('DriverHireVehicleDTO', () => {
     });
 
     expect(errors.map((error) => error.property)).toEqual(['photoUrl']);
+  });
+});
+
+describe('ListDriverHireBookingsDTO', () => {
+  it('treats the empty All filter as no status filter', async () => {
+    const query = plainToInstance(ListDriverHireBookingsDTO, { status: '' });
+
+    await expect(validate(query)).resolves.toEqual([]);
+    expect(query.status).toBeUndefined();
   });
 });

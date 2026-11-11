@@ -202,6 +202,7 @@ export class CreateDriverHireBookingDTO {
 }
 
 export class ListDriverHireBookingsDTO extends PaginationRequestDTO {
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsEnum(DriverHireBookingStatus)
   @IsOptional()
   status?: DriverHireBookingStatus;

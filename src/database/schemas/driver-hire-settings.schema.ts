@@ -72,6 +72,9 @@ export class DriverHireSettings extends BaseSchema {
   @Prop({ required: true, default: 24 })
   rescheduleNoticeHours: number;
 
+  @Prop({ default: true })
+  supportsBookingRequestIdempotency?: boolean;
+
   @Prop({ type: DriverHirePlanSchema })
   hourlyPlan?: DriverHirePlan;
 

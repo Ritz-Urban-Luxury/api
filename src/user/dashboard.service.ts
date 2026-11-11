@@ -55,6 +55,14 @@ export type DashboardTrendPoint = {
   revenue: number;
 };
 
+export const buildDashboardPeopleFilters = (rideDriverIds: unknown[]) => ({
+  users: { deleted: { $ne: true } },
+  drivers: {
+    deleted: { $ne: true },
+    $or: [{ isDriver: true }, { _id: { $in: rideDriverIds } }],
+  },
+});
+
 export const buildDashboardTrendPoints = (
   startDate: Date,
   userRows: UserTrendRow[],
@@ -167,9 +175,11 @@ export class DashboardService {
 
   async getDashboard() {
     const notDeleted: FilterQuery<unknown> = { deleted: { $ne: true } };
-    const testUserIds = await this.db.users.distinct('_id', {
-      isTestAccount: true,
-    });
+    const [testUserIds, rideDriverIds] = await Promise.all([
+      this.db.users.distinct('_id', { isTestAccount: true }),
+      this.db.rides.distinct('driver', notDeleted),
+    ]);
+    const peopleFilters = buildDashboardPeopleFilters(rideDriverIds);
     const realTrip = {
       'meta.playReviewSynthetic': { $ne: true },
       user: { $nin: testUserIds },
@@ -188,6 +198,7 @@ export class DashboardService {
       .toDate();
 
     const [
+      totalUsers,
       totalRiders,
       totalDrivers,
       vehicleTypes,
@@ -206,17 +217,14 @@ export class DashboardService {
       tripTrendRows,
       attention,
     ] = await Promise.all([
+      this.db.users.countDocuments(peopleFilters.users),
       this.db.users.countDocuments({
         ...notDeleted,
         isTestAccount: { $ne: true },
         isDriver: { $ne: true },
         isAppAdmin: { $ne: true },
       }),
-      this.db.users.countDocuments({
-        ...notDeleted,
-        isDriver: true,
-        isTestAccount: { $ne: true },
-      }),
+      this.db.users.countDocuments(peopleFilters.drivers),
       this.db.carBrands.countDocuments(notDeleted),
       this.db.trips.countDocuments({ ...notDeleted, ...realTrip }),
       this.db.trips.countDocuments({
@@ -434,6 +442,7 @@ export class DashboardService {
 
     return {
       site: {
+        totalUsers,
         totalRiders,
         totalDrivers,
         vehicleTypes,

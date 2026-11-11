@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
@@ -61,10 +62,11 @@ export class DriverHireController {
   async createBooking(
     @CurrentUser() user: UserDocument,
     @Body() payload: CreateDriverHireBookingDTO,
+    @Headers('idempotency-key') clientRequestId?: string,
   ) {
     return Response.json(
       'Driver request submitted',
-      await this.driverHire.createBooking(user, payload),
+      await this.driverHire.createBooking(user, payload, clientRequestId),
     );
   }
 

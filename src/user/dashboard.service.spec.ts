@@ -1,7 +1,20 @@
 import {
+  buildDashboardPeopleFilters,
   buildDashboardTrendPoints,
   DashboardService,
 } from './dashboard.service';
+
+describe('buildDashboardPeopleFilters', () => {
+  it('matches the active Users and Drivers management lists', () => {
+    expect(buildDashboardPeopleFilters(['legacy-driver'])).toEqual({
+      users: { deleted: { $ne: true } },
+      drivers: {
+        deleted: { $ne: true },
+        $or: [{ isDriver: true }, { _id: { $in: ['legacy-driver'] } }],
+      },
+    });
+  });
+});
 
 describe('buildDashboardTrendPoints', () => {
   it('fills missing days and merges user, ride, and revenue metrics', () => {

@@ -170,6 +170,7 @@ export class DriverHireService {
           logisticsFee: 0,
           minimumAdvanceHours: 2,
           rescheduleNoticeHours: 24,
+          supportsBookingRequestIdempotency: true,
           hourlyPlan: DEFAULT_PLANS.Hourly,
           weeklyPlan: DEFAULT_PLANS.Weekly,
           monthlyPlan: DEFAULT_PLANS.Monthly,
@@ -196,6 +197,11 @@ export class DriverHireService {
     );
     if (!settings.rescheduleNoticeHours) {
       Object.assign(missingPlans, { rescheduleNoticeHours: 24 });
+    }
+    if (settings.supportsBookingRequestIdempotency !== true) {
+      Object.assign(missingPlans, {
+        supportsBookingRequestIdempotency: true,
+      });
     }
     if (settings.termsVersion !== DRIVER_HIRE_TERMS_VERSION) {
       Object.assign(missingPlans, {
@@ -241,7 +247,26 @@ export class DriverHireService {
     );
   }
 
-  async createBooking(user: UserDocument, payload: CreateDriverHireBookingDTO) {
+  async createBooking(
+    user: UserDocument,
+    payload: CreateDriverHireBookingDTO,
+    clientRequestId?: string,
+  ) {
+    if (
+      clientRequestId &&
+      !/^driver-hire-[a-z0-9-]{12,80}$/.test(clientRequestId)
+    ) {
+      throw new BadRequestException('Invalid booking request identifier');
+    }
+    if (clientRequestId) {
+      const existingRequest = await this.db.driverHireBookings.findOne({
+        user: user.id,
+        clientRequestId,
+        deleted: { $ne: true },
+      });
+      if (existingRequest) return existingRequest;
+    }
+
     const settings = await this.getSettings();
     const planType = payload.planType || DriverHirePlanType.Hourly;
     const plan = settings[planKey(planType)] || DEFAULT_PLANS[planType];
@@ -316,46 +341,60 @@ export class DriverHireService {
         ? [1, 2, 3, 4, 5, 6]
         : [1, 2, 3, 4, 5];
 
-    return this.db.driverHireBookings.create({
-      ...payload,
-      planType,
-      user: user.id,
-      status: DriverHireBookingStatus.PendingReview,
-      paymentStatus: DriverHirePaymentStatus.Pending,
-      scheduledAt,
-      expectedEndAt,
-      pickup: {
-        type: 'Point',
-        address: payload.pickup.address,
-        coordinates: [payload.pickup.latitude, payload.pickup.longitude],
-      },
-      completion: {
-        type: 'Point',
-        address: payload.completion.address,
-        coordinates: [
-          payload.completion.latitude,
-          payload.completion.longitude,
-        ],
-      },
-      additionalStops: payload.additionalStops || [],
-      pricing,
-      estimatedHours: isHourly ? payload.estimatedHours : plan.hoursPerDay,
-      estimatedAmount,
-      ...(isHourly
-        ? {}
-        : {
-            packageSchedule: {
-              startDate: scheduledAt,
-              endDate: expectedEndAt,
-              workingDays: payload.workingDays || defaultWorkingDays,
-              dailyStartTime:
-                payload.dailyStartTime ||
-                scheduledAt.toISOString().slice(11, 16),
-            },
-          }),
-      termsVersion: settings.termsVersion,
-      termsAcceptedAt: acceptance.acceptedAt,
-    });
+    try {
+      return await this.db.driverHireBookings.create({
+        ...payload,
+        ...(clientRequestId ? { clientRequestId } : {}),
+        planType,
+        user: user.id,
+        status: DriverHireBookingStatus.PendingReview,
+        paymentStatus: DriverHirePaymentStatus.Pending,
+        scheduledAt,
+        expectedEndAt,
+        pickup: {
+          type: 'Point',
+          address: payload.pickup.address,
+          coordinates: [payload.pickup.latitude, payload.pickup.longitude],
+        },
+        completion: {
+          type: 'Point',
+          address: payload.completion.address,
+          coordinates: [
+            payload.completion.latitude,
+            payload.completion.longitude,
+          ],
+        },
+        additionalStops: payload.additionalStops || [],
+        pricing,
+        estimatedHours: isHourly ? payload.estimatedHours : plan.hoursPerDay,
+        estimatedAmount,
+        ...(isHourly
+          ? {}
+          : {
+              packageSchedule: {
+                startDate: scheduledAt,
+                endDate: expectedEndAt,
+                workingDays: payload.workingDays || defaultWorkingDays,
+                dailyStartTime:
+                  payload.dailyStartTime ||
+                  scheduledAt.toISOString().slice(11, 16),
+              },
+            }),
+        termsVersion: settings.termsVersion,
+        termsAcceptedAt: acceptance.acceptedAt,
+      });
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000 || !clientRequestId) {
+        throw error;
+      }
+      const concurrentRequest = await this.db.driverHireBookings.findOne({
+        user: user.id,
+        clientRequestId,
+        deleted: { $ne: true },
+      });
+      if (concurrentRequest) return concurrentRequest;
+      throw error;
+    }
   }
 
   async getMyBookings(user: UserDocument, query: ListDriverHireBookingsDTO) {
