@@ -5,6 +5,7 @@ import { DB_TABLES } from '../../shared/constants';
 import { Document } from '../../shared/types';
 import { Location, LocationSchema } from './rides.schema';
 import { UserDocument } from './user.schema';
+import { DriverHirePlanType } from './driver-hire-settings.schema';
 
 export enum DriverHireBookingStatus {
   PendingReview = 'PendingReview',
@@ -79,11 +80,91 @@ export class DriverHirePricingSnapshot {
 
   @Prop({ required: true })
   logisticsFee: number;
+
+  @Prop({
+    type: String,
+    enum: Object.values(DriverHirePlanType),
+    default: DriverHirePlanType.Hourly,
+  })
+  planType?: DriverHirePlanType;
+
+  @Prop({ default: 0 })
+  baseRate?: number;
+
+  @Prop({ default: 0 })
+  discountPercent?: number;
+
+  @Prop({ default: 1 })
+  includedDays?: number;
+
+  @Prop({ default: 0 })
+  hoursPerDay?: number;
+
+  @Prop({ default: 1 })
+  validityDays?: number;
+
+  @Prop({ default: 0 })
+  overtimeHourlyRate?: number;
+
+  @Prop({ default: 30 })
+  overtimeBillingIncrementMinutes?: number;
 }
 
 export const DriverHirePricingSnapshotSchema = SchemaFactory.createForClass(
   DriverHirePricingSnapshot,
 );
+
+@EmbeddedSchema()
+export class DriverHirePackageSchedule {
+  @Prop({ required: true })
+  startDate: Date;
+
+  @Prop({ required: true })
+  endDate: Date;
+
+  @Prop([{ type: Number }])
+  workingDays: number[];
+
+  @Prop({ required: true })
+  dailyStartTime: string;
+}
+
+export const DriverHirePackageScheduleSchema = SchemaFactory.createForClass(
+  DriverHirePackageSchedule,
+);
+
+export enum DriverChangeRequestStatus {
+  Pending = 'Pending',
+  Approved = 'Approved',
+  Rejected = 'Rejected',
+}
+
+@EmbeddedSchema()
+export class DriverChangeRequest {
+  @Prop({ required: true })
+  reason: string;
+
+  @Prop()
+  note?: string;
+
+  @Prop({ required: true, enum: Object.values(DriverChangeRequestStatus) })
+  status: DriverChangeRequestStatus;
+
+  @Prop({ required: true })
+  requestedAt: Date;
+
+  @Prop()
+  resolvedAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: DB_TABLES.USERS })
+  resolvedBy?: UserDocument | string;
+
+  @Prop()
+  resolutionNote?: string;
+}
+
+export const DriverChangeRequestSchema =
+  SchemaFactory.createForClass(DriverChangeRequest);
 
 export type DriverHireBookingDocument = DriverHireBooking & Document;
 
@@ -109,6 +190,16 @@ export class DriverHireBooking extends BaseSchema {
 
   @Prop({ required: true })
   estimatedHours: number;
+
+  @Prop({
+    type: String,
+    enum: Object.values(DriverHirePlanType),
+    default: DriverHirePlanType.Hourly,
+  })
+  planType: DriverHirePlanType;
+
+  @Prop({ type: DriverHirePackageScheduleSchema })
+  packageSchedule?: DriverHirePackageSchedule;
 
   @Prop({ type: LocationSchema, required: true })
   pickup: Location;
@@ -176,6 +267,18 @@ export class DriverHireBooking extends BaseSchema {
 
   @Prop({ required: true })
   vehicleAuthorizationConfirmed: boolean;
+
+  @Prop({ type: DriverChangeRequestSchema })
+  driverChangeRequest?: DriverChangeRequest;
+
+  @Prop({ default: 0 })
+  overtimeMinutes?: number;
+
+  @Prop({ default: 0 })
+  overtimeAmount?: number;
+
+  @Prop()
+  rescheduledAt?: Date;
 
   @Prop()
   assignedAt?: Date;

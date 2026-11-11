@@ -1,5 +1,5 @@
-export const DRIVER_HIRE_TERMS_VERSION = '2026-11-05';
-export const DRIVER_HIRE_TERMS_EFFECTIVE_DATE = '5 November 2026';
+export const DRIVER_HIRE_TERMS_VERSION = '2026-11-11';
+export const DRIVER_HIRE_TERMS_EFFECTIVE_DATE = '11 November 2026';
 
 export const DRIVER_HIRE_TERMS = `RITZ URBAN
 
@@ -60,17 +60,20 @@ By accepting these Terms and submitting a booking request, the customer confirms
 
 7. Booking Duration, Overtime and Charges
 
-7.1. The booking confirmation will specify the hourly rate, minimum duration, estimated duration, billing increment, logistics fee and estimated charge.
+7.1. The booking confirmation will specify the selected hourly, weekly, monthly or premium monthly plan, its included working days and daily hours, applicable discount, billing increment and estimated charge.
 7.2. Billing begins when vehicle handover is completed, or at the scheduled time where the driver is present and delay is caused by the customer.
-7.3. Additional time is charged using the billing increment disclosed before the request is submitted.
+7.3. Time beyond the selected plan's included daily hours is charged at the overtime rate and billing increment disclosed before the request is submitted.
 7.4. Extensions are subject to driver availability and confirmation of applicable charges.
 7.5. The final charge may differ from the estimate where actual service time, approved expenses or extensions differ from the original request.
+7.6. Ritz Urban is responsible for the assigned driver's logistics to and from the service. The customer remains responsible for the vehicle expenses described in clause 6.4.
 
 8. Cancellations and No-Shows
 
 8.1. Cancellation deadlines and applicable fees will be displayed before booking confirmation.
 8.2. If a driver cannot attend, Ritz Urban will make reasonable efforts to notify the customer and arrange a replacement where available, or process any applicable refund.
 8.3. Customers should report delays, driver misconduct or booking problems promptly through the designated support channel.
+8.4. A customer may request a schedule change at least 24 hours before the scheduled service time. A requested change remains subject to driver availability and Ritz Urban's confirmation.
+8.5. Ritz Urban may replace an assigned driver when operationally necessary. A customer may request a driver change, but any replacement is subject to availability and approval and does not automatically cancel the booking.
 
 9. Location, Privacy and Safety Monitoring
 

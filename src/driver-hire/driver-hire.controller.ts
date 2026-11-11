@@ -16,6 +16,8 @@ import {
   CancelDriverHireBookingDTO,
   CreateDriverHireBookingDTO,
   ListDriverHireBookingsDTO,
+  RequestDriverChangeDTO,
+  RescheduleDriverHireDTO,
   VerifyDriverHireHandoverDTO,
 } from './dto/driver-hire.dto';
 import { DriverHireService } from './driver-hire.service';
@@ -95,6 +97,30 @@ export class DriverHireController {
     return Response.json(
       'Driver booking cancelled',
       await this.driverHire.cancelBooking(user, bookingId, payload.reason),
+    );
+  }
+
+  @Post('bookings/:bookingId/reschedule')
+  async rescheduleBooking(
+    @CurrentUser() user: UserDocument,
+    @Param('bookingId') bookingId: string,
+    @Body() payload: RescheduleDriverHireDTO,
+  ) {
+    return Response.json(
+      'Driver service rescheduled',
+      await this.driverHire.rescheduleBooking(user, bookingId, payload),
+    );
+  }
+
+  @Post('bookings/:bookingId/driver-change-requests')
+  async requestDriverChange(
+    @CurrentUser() user: UserDocument,
+    @Param('bookingId') bookingId: string,
+    @Body() payload: RequestDriverChangeDTO,
+  ) {
+    return Response.json(
+      'Driver change requested',
+      await this.driverHire.requestDriverChange(user, bookingId, payload),
     );
   }
 

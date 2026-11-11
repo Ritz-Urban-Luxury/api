@@ -1,6 +1,8 @@
 import { Type, Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -25,6 +27,7 @@ import {
   DriverHireBookingStatus,
   DriverHireTransmission,
 } from '../../database/schemas/driver-hire-booking.schema';
+import { DriverHirePlanType } from '../../database/schemas/driver-hire-settings.schema';
 import { PaginationRequestDTO } from '../../shared/pagination.dto';
 
 export class DriverHireLocationDTO {
@@ -105,6 +108,27 @@ export class CreateDriverHireBookingDTO {
   @Min(1)
   @Max(24)
   estimatedHours: number;
+
+  @IsEnum(DriverHirePlanType)
+  @IsOptional()
+  planType?: DriverHirePlanType;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  @IsOptional()
+  workingDays?: number[];
+
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'dailyStartTime must use HH:mm format',
+  })
+  @IsOptional()
+  dailyStartTime?: string;
 
   @ValidateNested()
   @Type(() => DriverHireLocationDTO)
@@ -218,6 +242,46 @@ export class VerifyDriverHireHandoverDTO {
   code: string;
 }
 
+export class DriverHirePlanDTO {
+  @IsBoolean()
+  enabled: boolean;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(10_000_000)
+  baseRate: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  discountPercent: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  includedDays: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(24)
+  hoursPerDay: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(366)
+  validityDays: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1_000_000)
+  overtimeHourlyRate: number;
+
+  @IsInt()
+  @Min(5)
+  @Max(60)
+  overtimeBillingIncrementMinutes: number;
+}
+
 export class UpdateDriverHireSettingsDTO {
   @IsBoolean()
   active: boolean;
@@ -246,6 +310,65 @@ export class UpdateDriverHireSettingsDTO {
   @Min(0)
   @Max(168)
   minimumAdvanceHours: number;
+
+  @IsInt()
+  @Min(24)
+  @Max(168)
+  rescheduleNoticeHours: number;
+
+  @ValidateNested()
+  @Type(() => DriverHirePlanDTO)
+  hourlyPlan: DriverHirePlanDTO;
+
+  @ValidateNested()
+  @Type(() => DriverHirePlanDTO)
+  weeklyPlan: DriverHirePlanDTO;
+
+  @ValidateNested()
+  @Type(() => DriverHirePlanDTO)
+  monthlyPlan: DriverHirePlanDTO;
+
+  @ValidateNested()
+  @Type(() => DriverHirePlanDTO)
+  premiumMonthlyPlan: DriverHirePlanDTO;
+}
+
+export class RescheduleDriverHireDTO {
+  @IsDateString()
+  scheduledAt: string;
+}
+
+export class RequestDriverChangeDTO {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(100)
+  reason: string;
+
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  note?: string;
+}
+
+export class ResolveDriverChangeDTO {
+  @IsBoolean()
+  approved: boolean;
+
+  @IsMongoId()
+  @IsOptional()
+  driverId?: string;
+
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  note?: string;
+}
+
+export class UpdateDriverHireOvertimeDTO {
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  overtimeMinutes: number;
 }
 
 export class UpdateInHouseDriverDTO {

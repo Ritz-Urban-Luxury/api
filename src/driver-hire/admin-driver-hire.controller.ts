@@ -17,6 +17,8 @@ import {
   AssignDriverHireBookingDTO,
   ListDriverHireBookingsDTO,
   RejectDriverHireBookingDTO,
+  ResolveDriverChangeDTO,
+  UpdateDriverHireOvertimeDTO,
   UpdateDriverHireSettingsDTO,
   UpdateInHouseDriverDTO,
 } from './dto/driver-hire.dto';
@@ -62,6 +64,34 @@ export class AdminDriverHireController {
     return Response.json(
       'Driver request rejected',
       await this.driverHire.rejectBooking(admin, bookingId, payload.reason),
+    );
+  }
+
+  @Post('bookings/:bookingId/driver-change-request/resolve')
+  async resolveDriverChange(
+    @CurrentUser() admin: UserDocument,
+    @Param('bookingId') bookingId: string,
+    @Body() payload: ResolveDriverChangeDTO,
+  ) {
+    return Response.json(
+      'Driver change request resolved',
+      await this.driverHire.resolveDriverChange(admin, bookingId, payload),
+    );
+  }
+
+  @Patch('bookings/:bookingId/overtime')
+  async updateOvertime(
+    @CurrentUser() admin: UserDocument,
+    @Param('bookingId') bookingId: string,
+    @Body() payload: UpdateDriverHireOvertimeDTO,
+  ) {
+    return Response.json(
+      'Booking overtime updated',
+      await this.driverHire.updateOvertime(
+        admin,
+        bookingId,
+        payload.overtimeMinutes,
+      ),
     );
   }
 

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
+import { DriverHirePlanType } from '../database/schemas/driver-hire-settings.schema';
 import { DriverHireService } from './driver-hire.service';
 
 describe('DriverHireService', () => {
@@ -8,15 +9,57 @@ describe('DriverHireService', () => {
     hourlyRate: 8_000,
     minimumHours: 2,
     billingIncrementMinutes: 30,
-    logisticsFee: 2_000,
+    logisticsFee: 0,
     minimumAdvanceHours: 2,
-    termsVersion: '2026-11-05',
+    rescheduleNoticeHours: 24,
+    termsVersion: '2026-11-11',
+    hourlyPlan: {
+      enabled: true,
+      baseRate: 8_000,
+      discountPercent: 0,
+      includedDays: 1,
+      hoursPerDay: 8,
+      validityDays: 1,
+      overtimeHourlyRate: 8_000,
+      overtimeBillingIncrementMinutes: 30,
+    },
+    weeklyPlan: {
+      enabled: true,
+      baseRate: 100_000,
+      discountPercent: 10,
+      includedDays: 5,
+      hoursPerDay: 8,
+      validityDays: 7,
+      overtimeHourlyRate: 8_000,
+      overtimeBillingIncrementMinutes: 30,
+    },
+    monthlyPlan: {
+      enabled: true,
+      baseRate: 350_000,
+      discountPercent: 0,
+      includedDays: 22,
+      hoursPerDay: 8,
+      validityDays: 30,
+      overtimeHourlyRate: 8_000,
+      overtimeBillingIncrementMinutes: 30,
+    },
+    premiumMonthlyPlan: {
+      enabled: true,
+      baseRate: 450_000,
+      discountPercent: 0,
+      includedDays: 26,
+      hoursPerDay: 10,
+      validityDays: 30,
+      overtimeHourlyRate: 8_000,
+      overtimeBillingIncrementMinutes: 30,
+    },
   };
 
   it('applies the minimum duration and billing increment', () => {
     expect(DriverHireService.billableHours(1, 2, 30)).toBe(2);
     expect(DriverHireService.billableHours(2.1, 2, 30)).toBe(2.5);
-    expect(DriverHireService.calculateAmount(2.1, settings)).toBe(22_000);
+    expect(DriverHireService.calculateAmount(2.1, settings)).toBe(20_000);
+    expect(DriverHireService.discountedRate(100_000, 10)).toBe(90_000);
   });
 
   it('creates a pending request with an immutable pricing snapshot', async () => {
@@ -68,11 +111,114 @@ describe('DriverHireService', () => {
       expect.objectContaining({
         user: 'user-1',
         status: DriverHireBookingStatus.PendingReview,
-        estimatedAmount: 22_000,
+        estimatedAmount: 20_000,
         pricing: expect.objectContaining({ hourlyRate: 8_000 }),
         pickup: expect.objectContaining({ coordinates: [9.1, 7.4] }),
         completion: expect.objectContaining({ coordinates: [9.07, 7.48] }),
       }),
+    );
+  });
+
+  it('uses the configured package price and creates a schedule snapshot', async () => {
+    const create = jest.fn(async (payload) => payload);
+    const db = {
+      driverHireSettings: {
+        findOneAndUpdate: jest.fn(async () => settings),
+      },
+      driverHireTermsAcceptances: {
+        findOne: jest.fn(async () => ({ acceptedAt: new Date('2026-11-11') })),
+      },
+      driverHireBookings: { create },
+    };
+    const service = new DriverHireService(
+      db as never,
+      {} as never,
+      {} as never,
+    );
+    const scheduledAt = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
+    await service.createBooking({ id: 'user-1' } as never, {
+      planType: DriverHirePlanType.Weekly,
+      scheduledAt: scheduledAt.toISOString(),
+      estimatedHours: 8,
+      pickup: { address: 'Maitama, Abuja', latitude: 9.1, longitude: 7.4 },
+      completion: { address: 'Wuse 2, Abuja', latitude: 9.07, longitude: 7.48 },
+      servicePurpose: 'General driving',
+      vehicle: {
+        make: 'Toyota',
+        model: 'Camry',
+        year: 2022,
+        color: 'Black',
+        registration: 'ABC-123XY',
+        vehicleType: 'Sedan',
+        transmission: 'Automatic' as never,
+      },
+      handoverContactName: 'Ada Customer',
+      handoverContactPhone: '+2348012345678',
+      passengerCount: 1,
+      paymentMethod: 'RULBalance',
+      vehicleRoadworthyConfirmed: true,
+      vehicleInsuredConfirmed: true,
+      vehicleAuthorizationConfirmed: true,
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planType: DriverHirePlanType.Weekly,
+        estimatedAmount: 90_000,
+        packageSchedule: expect.objectContaining({
+          workingDays: expect.any(Array),
+        }),
+        pricing: expect.objectContaining({
+          baseRate: 100_000,
+          discountPercent: 10,
+        }),
+      }),
+    );
+  });
+
+  it('rounds package overtime using the booking pricing snapshot', async () => {
+    const findOneAndUpdate = jest.fn(async (_filter, update) => update.$set);
+    const db = {
+      driverHireBookings: {
+        findOne: jest.fn(async () => ({
+          id: 'booking-1',
+          planType: DriverHirePlanType.Weekly,
+          status: DriverHireBookingStatus.InProgress,
+          pricing: {
+            hourlyRate: 8_000,
+            overtimeHourlyRate: 8_000,
+            overtimeBillingIncrementMinutes: 30,
+          },
+        })),
+        findOneAndUpdate,
+      },
+    };
+    const service = new DriverHireService(
+      db as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await service.updateOvertime(
+      { id: 'admin-1' } as never,
+      'booking-1',
+      65,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({ overtimeMinutes: 65, overtimeAmount: 12_000 }),
+    );
+    expect(findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: 'booking-1' },
+      {
+        $set: expect.objectContaining({
+          overtimeMinutes: 65,
+          overtimeAmount: 12_000,
+          updatedBy: 'admin-1',
+        }),
+      },
+      { new: true },
     );
   });
 

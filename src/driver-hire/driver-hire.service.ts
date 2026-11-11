@@ -11,8 +11,13 @@ import {
   DriverHireBookingDocument,
   DriverHireBookingStatus,
   DriverHirePaymentStatus,
+  DriverChangeRequestStatus,
 } from '../database/schemas/driver-hire-booking.schema';
-import { DriverHireSettingsDocument } from '../database/schemas/driver-hire-settings.schema';
+import {
+  DriverHirePlan,
+  DriverHirePlanType,
+  DriverHireSettingsDocument,
+} from '../database/schemas/driver-hire-settings.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
 import { PaymentService } from '../payments/payment.service';
@@ -20,6 +25,9 @@ import {
   AssignDriverHireBookingDTO,
   CreateDriverHireBookingDTO,
   ListDriverHireBookingsDTO,
+  RequestDriverChangeDTO,
+  RescheduleDriverHireDTO,
+  ResolveDriverChangeDTO,
   UpdateDriverHireSettingsDTO,
 } from './dto/driver-hire.dto';
 import {
@@ -55,6 +63,56 @@ const DRIVER_TRANSITIONS: Partial<
 
 const HANDOVER_CODE_TTL_MS = 10 * 60 * 1000;
 const HANDOVER_CODE_MAX_ATTEMPTS = 5;
+
+const DEFAULT_PLANS: Record<DriverHirePlanType, DriverHirePlan> = {
+  [DriverHirePlanType.Hourly]: {
+    enabled: true,
+    baseRate: 8_000,
+    discountPercent: 0,
+    includedDays: 1,
+    hoursPerDay: 8,
+    validityDays: 1,
+    overtimeHourlyRate: 8_000,
+    overtimeBillingIncrementMinutes: 30,
+  },
+  [DriverHirePlanType.Weekly]: {
+    enabled: true,
+    baseRate: 100_000,
+    discountPercent: 0,
+    includedDays: 5,
+    hoursPerDay: 8,
+    validityDays: 7,
+    overtimeHourlyRate: 8_000,
+    overtimeBillingIncrementMinutes: 30,
+  },
+  [DriverHirePlanType.Monthly]: {
+    enabled: true,
+    baseRate: 350_000,
+    discountPercent: 0,
+    includedDays: 22,
+    hoursPerDay: 8,
+    validityDays: 30,
+    overtimeHourlyRate: 8_000,
+    overtimeBillingIncrementMinutes: 30,
+  },
+  [DriverHirePlanType.PremiumMonthly]: {
+    enabled: true,
+    baseRate: 450_000,
+    discountPercent: 0,
+    includedDays: 26,
+    hoursPerDay: 10,
+    validityDays: 30,
+    overtimeHourlyRate: 8_000,
+    overtimeBillingIncrementMinutes: 30,
+  },
+};
+
+const planKey = (type: DriverHirePlanType) =>
+  `${type.charAt(0).toLowerCase()}${type.slice(1)}Plan` as
+    | 'hourlyPlan'
+    | 'weeklyPlan'
+    | 'monthlyPlan'
+    | 'premiumMonthlyPlan';
 
 @Injectable()
 export class DriverHireService {
@@ -95,8 +153,12 @@ export class DriverHireService {
     );
   }
 
+  static discountedRate(baseRate: number, discountPercent: number) {
+    return Math.round(baseRate * (1 - discountPercent / 100) * 100) / 100;
+  }
+
   async getSettings(): Promise<DriverHireSettingsDocument> {
-    return this.db.driverHireSettings.findOneAndUpdate(
+    const settings = await this.db.driverHireSettings.findOneAndUpdate(
       { key: 'default' },
       {
         $setOnInsert: {
@@ -107,10 +169,44 @@ export class DriverHireService {
           billingIncrementMinutes: 30,
           logisticsFee: 0,
           minimumAdvanceHours: 2,
+          rescheduleNoticeHours: 24,
+          hourlyPlan: DEFAULT_PLANS.Hourly,
+          weeklyPlan: DEFAULT_PLANS.Weekly,
+          monthlyPlan: DEFAULT_PLANS.Monthly,
+          premiumMonthlyPlan: DEFAULT_PLANS.PremiumMonthly,
           termsVersion: DRIVER_HIRE_TERMS_VERSION,
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+    const missingPlans = Object.values(DriverHirePlanType).reduce(
+      (updates, type) => {
+        const key = planKey(type);
+        if (!settings[key]) {
+          const fallback = { ...DEFAULT_PLANS[type] };
+          if (type === DriverHirePlanType.Hourly && settings.hourlyRate > 0) {
+            fallback.baseRate = settings.hourlyRate;
+            fallback.overtimeHourlyRate = settings.hourlyRate;
+          }
+          updates[key] = fallback;
+        }
+        return updates;
+      },
+      {} as Record<string, unknown>,
+    );
+    if (!settings.rescheduleNoticeHours) {
+      Object.assign(missingPlans, { rescheduleNoticeHours: 24 });
+    }
+    if (settings.termsVersion !== DRIVER_HIRE_TERMS_VERSION) {
+      Object.assign(missingPlans, {
+        termsVersion: DRIVER_HIRE_TERMS_VERSION,
+      });
+    }
+    if (!Object.keys(missingPlans).length) return settings;
+    return this.db.driverHireSettings.findOneAndUpdate(
+      { _id: settings.id },
+      { $set: missingPlans },
+      { new: true },
     );
   }
 
@@ -147,9 +243,11 @@ export class DriverHireService {
 
   async createBooking(user: UserDocument, payload: CreateDriverHireBookingDTO) {
     const settings = await this.getSettings();
-    if (!settings.active || settings.hourlyRate <= 0) {
+    const planType = payload.planType || DriverHirePlanType.Hourly;
+    const plan = settings[planKey(planType)] || DEFAULT_PLANS[planType];
+    if (!settings.active || !plan.enabled || plan.baseRate <= 0) {
       throw new BadRequestException(
-        'Hire a Driver is not accepting requests at this time',
+        'This Hire a Driver plan is not accepting requests at this time',
       );
     }
 
@@ -182,18 +280,45 @@ export class DriverHireService {
       );
     }
 
+    const isHourly = planType === DriverHirePlanType.Hourly;
     const expectedEndAt = new Date(
-      scheduledAt.getTime() + payload.estimatedHours * 60 * 60 * 1000,
+      scheduledAt.getTime() +
+        (isHourly ? payload.estimatedHours / 24 : plan.validityDays) *
+          24 *
+          60 *
+          60 *
+          1000,
+    );
+    const effectiveRate = DriverHireService.discountedRate(
+      plan.baseRate,
+      plan.discountPercent,
     );
     const pricing = {
-      hourlyRate: settings.hourlyRate,
+      planType,
+      baseRate: plan.baseRate,
+      discountPercent: plan.discountPercent,
+      includedDays: plan.includedDays,
+      hoursPerDay: plan.hoursPerDay,
+      validityDays: plan.validityDays,
+      overtimeHourlyRate: plan.overtimeHourlyRate,
+      overtimeBillingIncrementMinutes: plan.overtimeBillingIncrementMinutes,
+      hourlyRate: isHourly ? effectiveRate : plan.overtimeHourlyRate,
       minimumHours: settings.minimumHours,
       billingIncrementMinutes: settings.billingIncrementMinutes,
-      logisticsFee: settings.logisticsFee,
+      logisticsFee: 0,
     };
+
+    const estimatedAmount = isHourly
+      ? DriverHireService.calculateAmount(payload.estimatedHours, pricing)
+      : effectiveRate;
+    const defaultWorkingDays =
+      planType === DriverHirePlanType.PremiumMonthly
+        ? [1, 2, 3, 4, 5, 6]
+        : [1, 2, 3, 4, 5];
 
     return this.db.driverHireBookings.create({
       ...payload,
+      planType,
       user: user.id,
       status: DriverHireBookingStatus.PendingReview,
       paymentStatus: DriverHirePaymentStatus.Pending,
@@ -214,10 +339,20 @@ export class DriverHireService {
       },
       additionalStops: payload.additionalStops || [],
       pricing,
-      estimatedAmount: DriverHireService.calculateAmount(
-        payload.estimatedHours,
-        pricing,
-      ),
+      estimatedHours: isHourly ? payload.estimatedHours : plan.hoursPerDay,
+      estimatedAmount,
+      ...(isHourly
+        ? {}
+        : {
+            packageSchedule: {
+              startDate: scheduledAt,
+              endDate: expectedEndAt,
+              workingDays: payload.workingDays || defaultWorkingDays,
+              dailyStartTime:
+                payload.dailyStartTime ||
+                scheduledAt.toISOString().slice(11, 16),
+            },
+          }),
       termsVersion: settings.termsVersion,
       termsAcceptedAt: acceptance.acceptedAt,
     });
@@ -284,6 +419,159 @@ export class DriverHireService {
         data: { type: 'DriverHireCancelled', bookingId: String(booking.id) },
       });
     }
+    return booking;
+  }
+
+  async rescheduleBooking(
+    user: UserDocument,
+    bookingId: string,
+    payload: RescheduleDriverHireDTO,
+  ) {
+    const settings = await this.getSettings();
+    const booking = await this.getMyBooking(user, bookingId);
+    if (!CUSTOMER_CANCELLABLE_STATUSES.includes(booking.status)) {
+      throw new ConflictException('This service can no longer be rescheduled');
+    }
+    const scheduledAt = new Date(payload.scheduledAt);
+    const minimum =
+      Date.now() + settings.rescheduleNoticeHours * 60 * 60 * 1000;
+    if (scheduledAt.getTime() < minimum) {
+      throw new BadRequestException(
+        `Rescheduling requires at least ${settings.rescheduleNoticeHours} hours notice`,
+      );
+    }
+    const duration =
+      new Date(booking.expectedEndAt).getTime() -
+      new Date(booking.scheduledAt).getTime();
+    const expectedEndAt = new Date(scheduledAt.getTime() + duration);
+    const updated = await this.db.driverHireBookings
+      .findOneAndUpdate(
+        { _id: booking.id, user: user.id, status: booking.status },
+        {
+          $set: {
+            scheduledAt,
+            expectedEndAt,
+            rescheduledAt: new Date(),
+            ...(booking.packageSchedule
+              ? {
+                  'packageSchedule.startDate': scheduledAt,
+                  'packageSchedule.endDate': expectedEndAt,
+                }
+              : {}),
+          },
+        },
+        { new: true },
+      )
+      .populate('assignedDriver', 'firstName lastName phoneNumber avatar');
+    if (!updated) throw new ConflictException('The booking changed elsewhere');
+    if (updated.assignedDriver) {
+      this.push.sendToUser(updated.assignedDriver as UserDocument, {
+        title: 'Assignment rescheduled',
+        body: `The service now starts ${scheduledAt.toLocaleString()}`,
+        app: 'driver',
+        data: { type: 'DriverHireRescheduled', bookingId: String(updated.id) },
+      });
+    }
+    return updated;
+  }
+
+  async requestDriverChange(
+    user: UserDocument,
+    bookingId: string,
+    payload: RequestDriverChangeDTO,
+  ) {
+    const booking = await this.db.driverHireBookings.findOneAndUpdate(
+      {
+        _id: bookingId,
+        user: user.id,
+        assignedDriver: { $exists: true },
+        status: { $in: ACTIVE_ASSIGNMENT_STATUSES },
+        'driverChangeRequest.status': {
+          $ne: DriverChangeRequestStatus.Pending,
+        },
+        deleted: { $ne: true },
+      },
+      {
+        $set: {
+          driverChangeRequest: {
+            reason: payload.reason.trim(),
+            note: payload.note?.trim(),
+            status: DriverChangeRequestStatus.Pending,
+            requestedAt: new Date(),
+          },
+        },
+      },
+      { new: true },
+    );
+    if (!booking) {
+      throw new ConflictException(
+        'A driver change cannot be requested for this booking',
+      );
+    }
+    return booking;
+  }
+
+  async resolveDriverChange(
+    admin: UserDocument,
+    bookingId: string,
+    payload: ResolveDriverChangeDTO,
+  ) {
+    const existing = await this.db.driverHireBookings.findOne({
+      _id: bookingId,
+      'driverChangeRequest.status': DriverChangeRequestStatus.Pending,
+      deleted: { $ne: true },
+    });
+    if (!existing)
+      throw new NotFoundException('pending change request not found');
+    if (payload.approved) {
+      if (!payload.driverId) {
+        throw new BadRequestException('Select a replacement driver');
+      }
+      await this.assignDriver(admin, bookingId, {
+        driverId: payload.driverId,
+        adminNotes: payload.note,
+      });
+    }
+    const status = payload.approved
+      ? DriverChangeRequestStatus.Approved
+      : DriverChangeRequestStatus.Rejected;
+    const booking = await this.db.driverHireBookings
+      .findOneAndUpdate(
+        {
+          _id: bookingId,
+          'driverChangeRequest.status': DriverChangeRequestStatus.Pending,
+        },
+        {
+          $set: {
+            'driverChangeRequest.status': status,
+            'driverChangeRequest.resolvedAt': new Date(),
+            'driverChangeRequest.resolvedBy': admin.id,
+            'driverChangeRequest.resolutionNote': payload.note?.trim(),
+          },
+        },
+        { new: true },
+      )
+      .populate('user', 'firstName lastName email phoneNumber avatar')
+      .populate(
+        'assignedDriver',
+        'firstName lastName email phoneNumber avatar',
+      );
+    if (!booking) throw new ConflictException('The request changed elsewhere');
+    this.push.sendToUser(booking.user as UserDocument, {
+      title: payload.approved
+        ? 'Driver change approved'
+        : 'Driver change request reviewed',
+      body:
+        payload.note?.trim() ||
+        (payload.approved
+          ? 'A replacement driver has been assigned'
+          : 'Your current driver remains assigned'),
+      app: 'rider',
+      data: {
+        type: 'DriverHireDriverChangeResolved',
+        bookingId: String(booking.id),
+      },
+    });
     return booking;
   }
 
@@ -372,6 +660,9 @@ export class DriverHireService {
           $in: [
             DriverHireBookingStatus.PendingReview,
             DriverHireBookingStatus.Assigned,
+            DriverHireBookingStatus.DriverEnRoute,
+            DriverHireBookingStatus.DriverArrived,
+            DriverHireBookingStatus.InProgress,
           ],
         },
         deleted: { $ne: true },
@@ -414,7 +705,10 @@ export class DriverHireService {
             assignedDriver: driver.id,
             assignedBy: admin.id,
             assignedAt: new Date(),
-            status: DriverHireBookingStatus.Assigned,
+            status:
+              booking.status === DriverHireBookingStatus.PendingReview
+                ? DriverHireBookingStatus.Assigned
+                : booking.status,
             ...(payload.adminNotes
               ? { adminNotes: payload.adminNotes.trim() }
               : {}),
@@ -486,9 +780,18 @@ export class DriverHireService {
     admin: UserDocument,
     payload: UpdateDriverHireSettingsDTO,
   ) {
-    if (payload.active && payload.hourlyRate <= 0) {
+    const plans = [
+      payload.hourlyPlan,
+      payload.weeklyPlan,
+      payload.monthlyPlan,
+      payload.premiumMonthlyPlan,
+    ];
+    if (
+      payload.active &&
+      !plans.some((plan) => plan.enabled && plan.baseRate > 0)
+    ) {
       throw new BadRequestException(
-        'Set an hourly rate before activating Hire a Driver',
+        'Enable at least one plan with a valid price before activating Hire a Driver',
       );
     }
     return this.db.driverHireSettings.findOneAndUpdate(
@@ -496,11 +799,63 @@ export class DriverHireService {
       {
         $set: {
           ...payload,
+          hourlyRate: payload.hourlyPlan.baseRate,
+          logisticsFee: 0,
           termsVersion: DRIVER_HIRE_TERMS_VERSION,
           updatedBy: admin.id,
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+  }
+
+  async updateOvertime(
+    admin: UserDocument,
+    bookingId: string,
+    overtimeMinutes: number,
+  ) {
+    const booking = await this.db.driverHireBookings.findOne({
+      _id: bookingId,
+      deleted: { $ne: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.planType === DriverHirePlanType.Hourly) {
+      throw new BadRequestException(
+        'Hourly bookings are billed from their actual service duration',
+      );
+    }
+    if (
+      booking.status === DriverHireBookingStatus.Completed ||
+      booking.status === DriverHireBookingStatus.Cancelled ||
+      booking.status === DriverHireBookingStatus.Rejected
+    ) {
+      throw new ConflictException(
+        'Overtime cannot be changed for this booking',
+      );
+    }
+
+    const increment = Math.max(
+      booking.pricing.overtimeBillingIncrementMinutes || 30,
+      1,
+    );
+    const billableMinutes = Math.ceil(overtimeMinutes / increment) * increment;
+    const overtimeAmount =
+      Math.round(
+        (billableMinutes / 60) *
+          (booking.pricing.overtimeHourlyRate || booking.pricing.hourlyRate) *
+          100,
+      ) / 100;
+
+    return this.db.driverHireBookings.findOneAndUpdate(
+      { _id: booking.id },
+      {
+        $set: {
+          overtimeMinutes,
+          overtimeAmount,
+          updatedBy: admin.id,
+        },
+      },
+      { new: true },
     );
   }
 
@@ -716,15 +1071,24 @@ export class DriverHireService {
 
     let finalAmount: number | undefined;
     if (nextStatus === DriverHireBookingStatus.Completed) {
-      const startedAt = existing.startedAt ? new Date(existing.startedAt) : now;
-      const actualHours = Math.max(
-        0,
-        (now.getTime() - startedAt.getTime()) / (60 * 60 * 1000),
-      );
-      finalAmount = DriverHireService.calculateAmount(
-        actualHours,
-        existing.pricing,
-      );
+      if (
+        (existing.planType || existing.pricing.planType) ===
+        DriverHirePlanType.Hourly
+      ) {
+        const startedAt = existing.startedAt
+          ? new Date(existing.startedAt)
+          : now;
+        const actualHours = Math.max(
+          0,
+          (now.getTime() - startedAt.getTime()) / (60 * 60 * 1000),
+        );
+        finalAmount = DriverHireService.calculateAmount(
+          actualHours,
+          existing.pricing,
+        );
+      } else {
+        finalAmount = existing.estimatedAmount + (existing.overtimeAmount || 0);
+      }
     }
 
     const booking = await this.db.driverHireBookings
