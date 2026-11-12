@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
+  Equals,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -186,8 +187,8 @@ export class CreateDriverHireBookingDTO {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^(RULBalance|[a-fA-F0-9]{24})$/, {
-    message: 'paymentMethod must be Ritz Balance or a saved card',
+  @Equals('RULBalance', {
+    message: 'paymentMethod must be Ritz Balance',
   })
   paymentMethod: string;
 

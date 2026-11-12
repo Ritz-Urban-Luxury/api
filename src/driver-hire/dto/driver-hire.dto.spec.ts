@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
+  CreateDriverHireBookingDTO,
   DriverHireVehicleDTO,
   ListDriverHireBookingsDTO,
 } from './driver-hire.dto';
@@ -52,5 +53,24 @@ describe('ListDriverHireBookingsDTO', () => {
 
     await expect(validate(query)).resolves.toEqual([]);
     expect(query.status).toBeUndefined();
+  });
+});
+
+describe('CreateDriverHireBookingDTO payment method', () => {
+  const paymentError = async (paymentMethod: string) => {
+    const errors = await validate(
+      plainToInstance(CreateDriverHireBookingDTO, { paymentMethod }),
+    );
+    return errors.find((error) => error.property === 'paymentMethod');
+  };
+
+  it('accepts Ritz Balance', async () => {
+    await expect(paymentError('RULBalance')).resolves.toBeUndefined();
+  });
+
+  it('rejects saved cards', async () => {
+    await expect(
+      paymentError('507f1f77bcf86cd799439011'),
+    ).resolves.toBeDefined();
   });
 });
