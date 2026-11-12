@@ -51,8 +51,11 @@ export class AdminUserController {
   }
 
   @Post('/drivers')
-  async createDriver(@Body() payload: AdminCreateDriverDTO) {
-    const driver = await this.userService.createDriver(payload);
+  async createDriver(
+    @CurrentUser() admin: UserDocument,
+    @Body() payload: AdminCreateDriverDTO,
+  ) {
+    const driver = await this.userService.createDriver(payload, admin);
 
     return Response.json('driver created', driver);
   }

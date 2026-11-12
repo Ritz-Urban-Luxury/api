@@ -1149,6 +1149,41 @@ export class AuthenticationService {
     return this.authorizeUser(user);
   }
 
+  async changePassword(
+    currentUser: UserDocument,
+    payload: { currentPassword?: string; password: string },
+  ) {
+    const user = await this.db.users.findOne({
+      _id: currentUser.id,
+      deleted: { $ne: true },
+    });
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+
+    const hasPassword = Boolean(user.password);
+    if (!user.mustChangePassword && hasPassword) {
+      const isCurrentValid =
+        Boolean(payload.currentPassword) &&
+        (await user.isValidPassword(payload.currentPassword));
+      if (!isCurrentValid) {
+        throw new BadRequestException('current password is incorrect');
+      }
+    }
+
+    if (hasPassword && (await user.isValidPassword(payload.password))) {
+      throw new BadRequestException(
+        'choose a password different from your current one',
+      );
+    }
+
+    user.password = payload.password;
+    user.mustChangePassword = false;
+    await user.save();
+
+    return this.authorizeUser(user);
+  }
+
   async authorizeUser(user: UserDocument) {
     // Bind sessions to the password rather than mutable profile fields. OAuth
     // users receive their first token before adding a phone number, so tying

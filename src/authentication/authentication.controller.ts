@@ -12,6 +12,7 @@ import { UserDocument } from '../database/schemas/user.schema';
 import { CurrentUser } from '../shared/decorators/current-user.decorator';
 import { Response } from '../shared/response';
 import {
+  ChangePasswordDTO,
   LoginDTO,
   DriverSignupDTO,
   RequestEmailOTPDTO,
@@ -21,7 +22,7 @@ import {
   VerifyOtpDTO,
 } from './authentication.dto';
 import { AuthenticationService } from './authentication.service';
-import { AdminJwtGuard } from './guards/jwt.guard';
+import { AdminJwtGuard, JwtGuard } from './guards/jwt.guard';
 
 @Controller({ path: 'authentication' })
 export class AuthenticationController {
@@ -75,6 +76,19 @@ export class AuthenticationController {
   @Get('admin-session')
   adminSession(@CurrentUser() user: UserDocument) {
     return Response.json('admin session', user);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('change-password')
+  async changePassword(
+    @CurrentUser() user: UserDocument,
+    @Body() payload: ChangePasswordDTO,
+  ) {
+    const loggedInUser = await this.authenticationService.changePassword(
+      user,
+      payload,
+    );
+    return Response.json('password updated', loggedInUser);
   }
 
   @Post('reset-password')

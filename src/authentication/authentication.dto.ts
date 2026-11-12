@@ -142,6 +142,21 @@ export class VerifyOtpDTO {
   otp: string;
 }
 
+export const STRONG_PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+export class ChangePasswordDTO {
+  @IsString()
+  @IsOptional()
+  currentPassword?: string;
+
+  @IsString()
+  @Matches(STRONG_PASSWORD_PATTERN, {
+    message:
+      'password must be at least 8 characters with an uppercase letter, a lowercase letter and a number',
+  })
+  password: string;
+}
+
 export class ResetPasswordDTO {
   @IsEmail()
   @IsNotEmpty()

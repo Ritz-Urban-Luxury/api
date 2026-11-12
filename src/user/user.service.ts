@@ -423,7 +423,7 @@ export class UserService {
     });
   }
 
-  async createDriver(payload: AdminCreateDriverDTO) {
+  async createDriver(payload: AdminCreateDriverDTO, admin?: UserDocument) {
     const email = payload.email.trim().toLowerCase();
     const phoneNumber = Util.formatPhoneNumber(payload.phoneNumber, 'NG');
     const existing = await this.db.users.findOne({
@@ -447,6 +447,16 @@ export class UserService {
       isDriver: true,
       isVerified: false,
       billingType: 'individual',
+      mustChangePassword: true,
+      ...(payload.inHouse
+        ? {
+            isVerified: true,
+            isInHouseDriver: true,
+            driverReviewStatus: DriverReviewStatus.Approved,
+            driverReviewedAt: new Date(),
+            ...(admin?.id ? { driverReviewedBy: admin.id } : {}),
+          }
+        : {}),
     });
 
     return user;

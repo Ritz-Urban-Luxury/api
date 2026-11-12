@@ -195,6 +195,10 @@ export class User extends BaseSchema {
   @Prop({ default: false })
   isInHouseDriver?: boolean;
 
+  /** Set when an admin chose the password; cleared once the user sets their own. */
+  @Prop({ default: false })
+  mustChangePassword?: boolean;
+
   /** Unique driver invite / referral code (not company registration). */
   @Prop({ sparse: true, unique: true, uppercase: true, trim: true })
   inviteCode?: string;

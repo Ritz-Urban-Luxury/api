@@ -18,6 +18,10 @@ export class DriverOnboardingService {
       throw new BadRequestException('driver account required');
     }
 
+    if (!payload.vehicle && !user.isInHouseDriver) {
+      throw new BadRequestException('vehicle details are required');
+    }
+
     const isFleetOwner = Boolean(user.vehiclesInFleet?.trim());
     if (
       isFleetOwner &&
@@ -56,21 +60,23 @@ export class DriverOnboardingService {
         )
       : null;
 
-    const vehicle = await this.rides.createOnboardingRide(updatedUser, {
-      brand: payload.vehicle.brand,
-      claimedCategory: payload.vehicle.category,
-      color: payload.vehicle.color,
-      images: [
-        ...payload.vehicle.exteriorImages,
-        ...payload.vehicle.interiorImages,
-      ],
-      model: payload.vehicle.model,
-      registration: payload.vehicle.registration,
-      specs: {
-        seats: payload.vehicle.seats,
-        year: payload.vehicle.year,
-      },
-    });
+    const vehicle = payload.vehicle
+      ? await this.rides.createOnboardingRide(updatedUser, {
+          brand: payload.vehicle.brand,
+          claimedCategory: payload.vehicle.category,
+          color: payload.vehicle.color,
+          images: [
+            ...payload.vehicle.exteriorImages,
+            ...payload.vehicle.interiorImages,
+          ],
+          model: payload.vehicle.model,
+          registration: payload.vehicle.registration,
+          specs: {
+            seats: payload.vehicle.seats,
+            year: payload.vehicle.year,
+          },
+        })
+      : null;
 
     return { referral, user: updatedUser, vehicle };
   }

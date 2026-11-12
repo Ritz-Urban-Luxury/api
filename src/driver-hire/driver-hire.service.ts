@@ -671,7 +671,7 @@ export class DriverHireService {
   }
 
   async setInHouseDriver(userId: string, eligible: boolean) {
-    const driver = await this.db.users.findOneAndUpdate(
+    const previous = await this.db.users.findOneAndUpdate(
       {
         _id: userId,
         deleted: { $ne: true },
@@ -679,12 +679,23 @@ export class DriverHireService {
         isVerified: true,
       },
       { $set: { isInHouseDriver: eligible } },
-      { new: true },
+      { new: false },
     );
-    if (!driver) {
+    if (!previous) {
       throw new NotFoundException('verified driver not found');
     }
-    return driver;
+
+    if (eligible && !previous.isInHouseDriver) {
+      this.push.sendToUser(previous, {
+        title: "You're now an in-house driver",
+        body: "You can now receive Hire a Driver assignments. We'll notify you when you're assigned a job.",
+        app: 'driver',
+        data: { type: 'DriverHireEnabled' },
+      });
+    }
+
+    previous.isInHouseDriver = eligible;
+    return previous;
   }
 
   async assignDriver(

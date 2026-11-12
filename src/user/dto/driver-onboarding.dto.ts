@@ -119,7 +119,8 @@ export class CompleteDriverOnboardingDTO {
   @IsOptional()
   referralCode?: string;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => DriverOnboardingVehicleDTO)
-  vehicle: DriverOnboardingVehicleDTO;
+  vehicle?: DriverOnboardingVehicleDTO;
 }

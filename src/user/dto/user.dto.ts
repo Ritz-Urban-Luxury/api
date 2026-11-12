@@ -198,6 +198,10 @@ export class AdminCreateDriverDTO {
   @IsString()
   @MinLength(8)
   password: string;
+
+  @IsOptional()
+  @IsBoolean()
+  inHouse?: boolean;
 }
 
 export class PurgeTestAccountDTO {

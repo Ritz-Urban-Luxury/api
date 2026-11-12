@@ -359,4 +359,67 @@ describe('DriverHireService', () => {
       ),
     ).rejects.toThrow('expired');
   });
+
+  describe('setInHouseDriver', () => {
+    const setup = (previous: Record<string, unknown> | null) => {
+      const push = { sendToUser: jest.fn() };
+      const findOneAndUpdate = jest.fn(async () => previous);
+      const service = new DriverHireService(
+        { users: { findOneAndUpdate } } as never,
+        push as never,
+        {} as never,
+      );
+      return { findOneAndUpdate, push, service };
+    };
+
+    it('notifies a driver when they are first made in-house', async () => {
+      const { push, service } = setup({
+        id: 'driver-1',
+        isInHouseDriver: false,
+      });
+
+      const result = await service.setInHouseDriver('driver-1', true);
+
+      expect(result.isInHouseDriver).toBe(true);
+      expect(push.sendToUser).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'driver-1' }),
+        expect.objectContaining({
+          app: 'driver',
+          data: { type: 'DriverHireEnabled' },
+          title: "You're now an in-house driver",
+        }),
+      );
+    });
+
+    it('does not notify when the driver was already in-house', async () => {
+      const { push, service } = setup({
+        id: 'driver-1',
+        isInHouseDriver: true,
+      });
+
+      await service.setInHouseDriver('driver-1', true);
+
+      expect(push.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when in-house access is removed', async () => {
+      const { push, service } = setup({
+        id: 'driver-1',
+        isInHouseDriver: true,
+      });
+
+      const result = await service.setInHouseDriver('driver-1', false);
+
+      expect(result.isInHouseDriver).toBe(false);
+      expect(push.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects drivers who are not verified', async () => {
+      const { service } = setup(null);
+
+      await expect(service.setInHouseDriver('driver-1', true)).rejects.toThrow(
+        'verified driver not found',
+      );
+    });
+  });
 });
