@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your Ritz driver account is ready</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
+            <tr>
+              <td style="padding: 32px;">
+                <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Ritz Urban Luxury</div>
+                <h1 style="margin: 8px 0 16px; font-size: 22px; line-height: 28px; color: #43005d;">Welcome to Ritz{% if name %}, {{ name }}{% endif %}.</h1>
+                <p style="margin: 0 0 16px; font-size: 15px; line-height: 23px;">
+                  {% if inHouse %}
+                    We've set up your Ritz in-house driver account. Once you're signed in, you'll receive Hire a Driver jobs, where you drive customers' own cars.
+                  {% else %}
+                    We've set up your Ritz driver account.
+                  {% endif %}
+                </p>
+
+                <h2 style="margin: 24px 0 12px; font-size: 16px; line-height: 22px; color: #24212a;">How to sign in</h2>
+                <ol style="margin: 0 0 16px; padding-left: 20px; font-size: 15px; line-height: 23px;">
+                  <li style="margin-bottom: 8px;">
+                    Install the <strong>Ritz Driver</strong> app{% if appStoreUrl or playStoreUrl %} from
+                    {% if appStoreUrl %}<a href="{{ appStoreUrl }}" style="color: #43005d;">the App Store</a>{% endif %}{% if appStoreUrl and playStoreUrl %} or {% endif %}{% if playStoreUrl %}<a href="{{ playStoreUrl }}" style="color: #43005d;">Google Play</a>{% endif %}{% endif %}.
+                  </li>
+                  <li style="margin-bottom: 8px;">
+                    Tap <strong>Log in</strong>, then choose to continue with your email ({{ email }}){% if phoneNumber %} or phone number ({{ phoneNumber }}){% endif %}.
+                  </li>
+                  <li style="margin-bottom: 8px;">Enter the one-time code we send you.</li>
+                  <li style="margin-bottom: 8px;">
+                    Create your own password. You'll be asked to do this the first time you sign in.
+                  </li>
+                  <li>
+                    Finish your profile: photo, driver's licence, address and bank details{% if inHouse %}. You don't need to add a car{% endif %}.
+                  </li>
+                </ol>
+
+                <p style="margin: 0 0 16px; font-size: 15px; line-height: 23px;">
+                  We'll never ask for your password or sign-in code by email, text or phone call.
+                </p>
+                <p style="margin: 0; font-size: 15px; line-height: 23px;">
+                  Questions? Reply to this email or contact <a href="mailto:{{ supportEmail }}" style="color: #43005d;">{{ supportEmail }}</a>.
+                </p>
+                <p style="margin: 24px 0 0; font-size: 15px; line-height: 23px;">The Ritz team</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 16px 0 0; font-size: 12px; line-height: 18px; color: #716a77;">
+            You're getting this because a Ritz administrator created a driver account for this email address. If you weren't expecting it, contact <a href="mailto:{{ supportEmail }}" style="color: #716a77;">{{ supportEmail }}</a>.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

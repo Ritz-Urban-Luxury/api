@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -28,6 +30,7 @@ import { AdminAuditAction } from '../database/schemas/admin-audit-log.schema';
 import { InactiveTripStatuses } from '../database/schemas/trips.schema';
 import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
 import { PushNotificationService } from '../notification/push-notification.service';
+import { NotificationService } from '../notification/notification.service';
 import { Util } from '../shared/util';
 import config from '../shared/config';
 import { hashOtp } from '../authentication/otp';
@@ -54,8 +57,13 @@ export class UserService {
     private readonly db: DatabaseService,
     private readonly push: PushNotificationService,
     private readonly finance: FinanceService,
+    @Optional() private readonly notifications?: NotificationService,
     @Optional() private readonly websocket?: WebsocketGateway,
   ) {}
+
+  private readonly logger = new Logger(UserService.name);
+
+  private static readonly WELCOME_EMAIL_COOLDOWN_MS = 60_000;
 
   async updateUser(user: UserDocument, update: UpdateUserDTO) {
     if (
@@ -443,7 +451,7 @@ export class UserService {
       lastName: payload.lastName.trim(),
       email,
       phoneNumber,
-      password: payload.password,
+      password: payload.password || randomBytes(24).toString('base64url'),
       isDriver: true,
       isVerified: false,
       billingType: 'individual',
@@ -459,7 +467,115 @@ export class UserService {
         : {}),
     });
 
+    this.sendDriverWelcomeEmail(user, Boolean(payload.inHouse));
+
     return user;
+  }
+
+  private sendDriverWelcomeEmail(user: UserDocument, inHouse: boolean) {
+    if (!this.notifications || !user.email) return;
+
+    this.deliverDriverWelcomeEmail(user, inHouse).catch((error) => {
+      this.logger.warn(
+        `Unable to send driver welcome email to user ${user.id}: ${
+          error?.message ?? error
+        }`,
+      );
+    });
+  }
+
+  private async deliverDriverWelcomeEmail(
+    user: UserDocument,
+    inHouse: boolean,
+  ) {
+    const { contact, waitlist } = config();
+    const storeLink = (value: string | undefined, host: string) => {
+      try {
+        const url = value ? new URL(value) : null;
+        return url?.protocol === 'https:' && url.hostname === host
+          ? url.toString()
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+
+    await this.notifications.sendEmail({
+      template: 'driver-welcome.template.njk',
+      recipient: user.firstName
+        ? { name: user.firstName, email: user.email }
+        : user.email,
+      subject: 'Your Ritz driver account is ready',
+      context: {
+        appStoreUrl: storeLink(
+          waitlist.storeLinks.driver.apple,
+          'apps.apple.com',
+        ),
+        email: user.email,
+        inHouse,
+        name: user.firstName,
+        phoneNumber: user.phoneNumber,
+        playStoreUrl: storeLink(
+          waitlist.storeLinks.driver.google,
+          'play.google.com',
+        ),
+        supportEmail: contact.supportEmail,
+      },
+    });
+
+    const sentAt = new Date();
+    await this.db.users.updateOne(
+      { _id: user.id },
+      { $set: { driverWelcomeEmailSentAt: sentAt } },
+    );
+    return sentAt;
+  }
+
+  async resendDriverWelcomeEmail(userId: string) {
+    const user = await this.db.users.findOne({
+      _id: userId,
+      deleted: { $ne: true },
+      isDriver: true,
+    });
+    if (!user) {
+      throw new NotFoundException('driver not found');
+    }
+    if (!user.email) {
+      throw new BadRequestException('This driver has no email address.');
+    }
+    if (!user.mustChangePassword) {
+      throw new BadRequestException(
+        'This driver has already signed in and set their own password.',
+      );
+    }
+    const lastSentAt = user.driverWelcomeEmailSentAt?.getTime() ?? 0;
+    if (Date.now() - lastSentAt < UserService.WELCOME_EMAIL_COOLDOWN_MS) {
+      throw new BadRequestException(
+        'A welcome email was just sent. Please wait a minute before resending.',
+      );
+    }
+    if (!this.notifications) {
+      throw new ServiceUnavailableException(
+        'Email is not available right now.',
+      );
+    }
+
+    try {
+      const sentAt = await this.deliverDriverWelcomeEmail(
+        user,
+        Boolean(user.isInHouseDriver),
+      );
+      return { email: user.email, sentAt };
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resend driver welcome email to user ${user.id}: ${
+          error?.message ?? error
+        }`,
+      );
+      throw new ServiceUnavailableException(
+        "Couldn't send the email. Please try again shortly.",
+      );
+    }
   }
 
   async getDriverDetail(userId: string) {

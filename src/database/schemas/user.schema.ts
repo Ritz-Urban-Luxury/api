@@ -199,6 +199,9 @@ export class User extends BaseSchema {
   @Prop({ default: false })
   mustChangePassword?: boolean;
 
+  @Prop()
+  driverWelcomeEmailSentAt?: Date;
+
   /** Unique driver invite / referral code (not company registration). */
   @Prop({ sparse: true, unique: true, uppercase: true, trim: true })
   inviteCode?: string;

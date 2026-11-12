@@ -60,6 +60,14 @@ export class AdminUserController {
     return Response.json('driver created', driver);
   }
 
+  @Post('/drivers/:userId/welcome-email')
+  async resendDriverWelcomeEmail(@Param('userId') userId: string) {
+    return Response.json(
+      'welcome email sent',
+      await this.userService.resendDriverWelcomeEmail(userId),
+    );
+  }
+
   @Get('/drivers/:userId')
   async getDriver(@Param('userId') userId: string) {
     const detail = await this.userService.getDriverDetail(userId);

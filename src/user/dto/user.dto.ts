@@ -195,9 +195,10 @@ export class AdminCreateDriverDTO {
   @IsPhoneNumber('NG')
   phoneNumber: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   @IsOptional()
   @IsBoolean()
