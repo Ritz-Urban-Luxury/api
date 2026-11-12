@@ -61,10 +61,13 @@ export class WebsocketGateway {
 
       client.join(user.id);
     } catch (error) {
-      if (!['Unauthorized'].includes(error.message)) {
-        this.logger.error(
-          `error handling client connection - ${error.message}`,
+      const message = String(error?.message ?? error);
+      if (message.startsWith('Unauthorized')) {
+        this.logger.warn(
+          `websocket connection rejected (${message}) - socket ${client.id}`,
         );
+      } else {
+        this.logger.error(`error handling client connection - ${message}`);
       }
       client.disconnect();
     }

@@ -1223,11 +1223,21 @@ export class AuthenticationService {
       ...new Set(raw.map((auth) => auth.replace(/bearer /gi, '').trim())),
     ].filter(Boolean);
 
+    if (!tokens.length) {
+      throw new WsException('Unauthorized: no token in handshake');
+    }
+
+    const reasons: string[] = [];
     const results = await Promise.all(
       tokens.map(async (token) => {
         try {
-          return await this.getUserFromAuthToken(token);
-        } catch {
+          const user = await this.getUserFromAuthToken(token);
+          if (!user) {
+            reasons.push('user not found or session no longer valid');
+          }
+          return user;
+        } catch (error) {
+          reasons.push(error?.name || error?.message || 'invalid token');
           return null;
         }
       }),
@@ -1237,7 +1247,7 @@ export class AuthenticationService {
       return user;
     }
 
-    throw new WsException('Unauthorized');
+    throw new WsException(`Unauthorized: ${[...new Set(reasons)].join(', ')}`);
   }
 
   async validateJwtPayload({ id: _id, payloadId = '' }) {
