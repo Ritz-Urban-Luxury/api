@@ -23,6 +23,7 @@ import { WebsocketModule } from './websocket/websocket.module';
 import { FinanceModule } from './finance/finance.module';
 import { LocationsModule } from './locations/locations.module';
 import { DriverHireModule } from './driver-hire/driver-hire.module';
+import { CountriesModule } from './countries/countries.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { DriverHireModule } from './driver-hire/driver-hire.module';
     FinanceModule,
     LocationsModule,
     DriverHireModule,
+    CountriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
