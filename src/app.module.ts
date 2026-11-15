@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthenticationModule } from './authentication';
 import { ContactModule } from './contact/contact.module';
+import { SupportModule } from './support/support.module';
 import { DatabaseModule } from './database/database.module';
 import { FileModule } from './file/file.module';
 import { LoggerModule } from './logger/logger.module';
@@ -32,6 +33,7 @@ import { CountriesModule } from './countries/countries.module';
     NotificationModule,
     AuthenticationModule,
     ContactModule,
+    SupportModule,
     WaitlistModule,
     PricingModule,
     MongooseModule.forRoot(config().database.url, {

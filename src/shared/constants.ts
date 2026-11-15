@@ -25,6 +25,7 @@ export const DB_TABLES = {
   NEWS_READS: 'news_reads',
   USER_BLOCKS: 'user_blocks',
   USER_REPORTS: 'user_reports',
+  SUPPORT_COMPLAINTS: 'support_complaints',
   WAITLIST_ENTRIES: 'waitlist_entries',
   PRICING_SETTINGS: 'pricing_settings',
   PRICING_CHANGES: 'pricing_changes',

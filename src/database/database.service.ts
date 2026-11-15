@@ -36,6 +36,7 @@ import { DriverFinancialStateDocument } from './schemas/driver-financial-state.s
 import { PushCampaignDocument } from './schemas/push-campaign.schema';
 import { UserBlockDocument } from './schemas/user-block.schema';
 import { UserReportDocument } from './schemas/user-report.schema';
+import { SupportComplaintDocument } from './schemas/support-complaint.schema';
 import { NewsArticleDocument } from './schemas/news-article.schema';
 import { NewsReadDocument } from './schemas/news-read.schema';
 import { WaitlistEntryDocument } from './schemas/waitlist-entry.schema';
@@ -104,6 +105,8 @@ export class DatabaseService {
     public readonly userBlocks: Model<UserBlockDocument>,
     @InjectModel(DB_TABLES.USER_REPORTS)
     public readonly userReports: Model<UserReportDocument>,
+    @InjectModel(DB_TABLES.SUPPORT_COMPLAINTS)
+    public readonly supportComplaints: Model<SupportComplaintDocument>,
     @InjectModel(DB_TABLES.WAITLIST_ENTRIES)
     public readonly waitlistEntries: Model<WaitlistEntryDocument>,
     @InjectModel(DB_TABLES.PRICING_SETTINGS)

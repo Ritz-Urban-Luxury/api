@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New app complaint</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f1f6; color: #24212a; font-family: Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f4f1f6;">
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; max-width: 600px; background-color: #ffffff; border-radius: 12px;">
+            <tr>
+              <td style="padding: 32px;">
+                <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #716a77;">Rider app complaint · {{ source }}</div>
+                {% if safetyRelated %}<div style="margin-top: 12px; display: inline-block; padding: 4px 10px; border-radius: 999px; background-color: #fde8e8; color: #b42318; font-size: 12px; font-weight: bold;">Safety-related</div>{% endif %}
+                <h1 style="margin: 8px 0 24px; font-size: 22px; line-height: 28px; color: #43005d;">{{ heading }}</h1>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size: 15px; line-height: 22px;">
+                  <tr>
+                    <td style="padding: 6px 0; width: 90px; color: #716a77;">From</td>
+                    <td style="padding: 6px 0;">{{ name }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 6px 0; color: #716a77;">Email</td>
+                    <td style="padding: 6px 0;"><a href="mailto:{{ email }}" style="color: #43005d;">{{ email }}</a></td>
+                  </tr>
+                  {% if tripReference %}<tr>
+                    <td style="padding: 6px 0; color: #716a77;">Trip</td>
+                    <td style="padding: 6px 0;">{{ tripReference }}{% if not tripLinked %} (not linked to this rider){% endif %}</td>
+                  </tr>{% endif %}
+                  <tr>
+                    <td style="padding: 6px 0; color: #716a77;">Sent</td>
+                    <td style="padding: 6px 0;">{{ sentAt }}</td>
+                  </tr>
+                </table>
+
+                <div style="margin-top: 24px; padding: 20px; border-radius: 8px; background-color: #f4ecf7; font-size: 15px; line-height: 23px; white-space: pre-wrap;">{{ message }}</div>
+
+                {% if adminUrl %}<p style="margin: 24px 0 0;"><a href="{{ adminUrl }}" style="display: inline-block; padding: 10px 18px; border-radius: 999px; background-color: #43005d; color: #ffffff; font-size: 14px; text-decoration: none;">Open in admin</a></p>{% endif %}
+                <p style="margin: 24px 0 0; font-size: 13px; line-height: 20px; color: #716a77;">Reply to this email to answer {{ name }} directly. Update the status in the admin app under Complaints &amp; reports.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

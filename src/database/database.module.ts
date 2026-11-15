@@ -29,6 +29,7 @@ import { DriverFinancialStateSchema } from './schemas/driver-financial-state.sch
 import { PushCampaignSchema } from './schemas/push-campaign.schema';
 import { UserBlockSchema } from './schemas/user-block.schema';
 import { UserReportSchema } from './schemas/user-report.schema';
+import { SupportComplaintSchema } from './schemas/support-complaint.schema';
 import { NewsArticleSchema } from './schemas/news-article.schema';
 import { NewsReadSchema } from './schemas/news-read.schema';
 import { WaitlistEntrySchema } from './schemas/waitlist-entry.schema';
@@ -83,6 +84,7 @@ import { DriverHireTermsAcceptanceSchema } from './schemas/driver-hire-terms-acc
       { name: DB_TABLES.NEWS_READS, schema: NewsReadSchema },
       { name: DB_TABLES.USER_BLOCKS, schema: UserBlockSchema },
       { name: DB_TABLES.USER_REPORTS, schema: UserReportSchema },
+      { name: DB_TABLES.SUPPORT_COMPLAINTS, schema: SupportComplaintSchema },
       { name: DB_TABLES.WAITLIST_ENTRIES, schema: WaitlistEntrySchema },
       { name: DB_TABLES.PRICING_SETTINGS, schema: PricingSettingsSchema },
       { name: DB_TABLES.PRICING_CHANGES, schema: PricingChangeSchema },

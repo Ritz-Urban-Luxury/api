@@ -38,6 +38,8 @@ const config = () => {
     contact: {
       supportEmail:
         process.env.CONTACT_SUPPORT_EMAIL || 'support@ritzurbanluxury.com',
+      // Optional: lets support emails link straight to the admin complaints page.
+      adminAppUrl: process.env.ADMIN_APP_URL?.trim().replace(/\/+$/, ''),
     },
     waitlist: {
       // Public address of this API, used for unsubscribe links in emails.

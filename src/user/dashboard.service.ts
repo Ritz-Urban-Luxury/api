@@ -7,6 +7,7 @@ import { PayoutRequestStatus } from '../database/schemas/payout-request.schema';
 import { RentalStatus } from '../database/schemas/rentals.schema';
 import { RideApprovalStatus, RideType } from '../database/schemas/rides.schema';
 import { UserReportStatus } from '../database/schemas/user-report.schema';
+import { SupportComplaintStatus } from '../database/schemas/support-complaint.schema';
 import { TripDocument, TripStatus } from '../database/schemas/trips.schema';
 import { UserDocument } from '../database/schemas/user.schema';
 import { DriverHireBookingStatus } from '../database/schemas/driver-hire-booking.schema';
@@ -41,6 +42,7 @@ export type DashboardAttention = {
   pendingRentals: number;
   pendingTripVehicles: number;
   openReports: number;
+  openSupportComplaints: number;
   pendingPayouts: number;
   pendingDriverHire: number;
 };
@@ -122,6 +124,7 @@ export class DashboardService {
       pendingRentals,
       pendingTripVehicles,
       openReports,
+      openSupportComplaints,
       pendingPayouts,
       pendingDriverHire,
     ] = await Promise.all([
@@ -151,6 +154,11 @@ export class DashboardService {
         reportedUser: { $nin: testUserIds },
         status: UserReportStatus.Open,
       }),
+      this.db.supportComplaints.countDocuments({
+        ...notDeleted,
+        user: { $nin: testUserIds },
+        status: SupportComplaintStatus.Open,
+      }),
       this.db.payoutRequests.countDocuments({
         ...notDeleted,
         user: { $nin: testUserIds },
@@ -168,6 +176,7 @@ export class DashboardService {
       pendingRentals,
       pendingTripVehicles,
       openReports,
+      openSupportComplaints,
       pendingPayouts,
       pendingDriverHire,
     };
